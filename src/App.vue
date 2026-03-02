@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
 import P5Canvas from './components/P5Canvas.vue'
 import ConsoleOutput from './components/ConsoleOutput.vue'
+import ExamplesPanel from './components/ExamplesPanel.vue'
 import { saveAs } from 'file-saver'
 
 const code = ref(`function setup() {
@@ -20,6 +21,9 @@ const originalCode = ref(code.value)
 const messages = ref<string[]>([])
 const canvasRef = ref<InstanceType<typeof P5Canvas> | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// Управление видимостью панели с примерами
+const showExamples = ref(false)
 
 // Параметры шрифта
 const fontSize = ref(15)
@@ -177,6 +181,25 @@ function showShortcuts() {
   addMessage('⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор')
 }
 
+// Функция для показа/скрытия примеров
+function toggleExamples() {
+  showExamples.value = !showExamples.value
+  if (showExamples.value) {
+    addMessage('📚 Открыта галерея примеров')
+  } else {
+    addMessage('📚 Галерея примеров закрыта')
+  }
+}
+
+// Функция для загрузки примера в редактор
+function loadExample(exampleCode: string) {
+  saveToHistory()
+  code.value = exampleCode
+  addMessage('📋 Пример загружен в редактор')
+  // Можно сразу запустить пример
+  startSketch()
+}
+
 // Обработчик клавиш для всего приложения
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
@@ -246,6 +269,11 @@ function handleKeyDown(e: KeyboardEvent) {
         <button @click="loadSketch" class="action-btn load-btn" title="Загрузить скетч">
           <span class="btn-icon">📂</span>
           <span class="btn-text">Загрузить</span>
+        </button>
+        <!-- Новая кнопка для примеров графики -->
+        <button @click="toggleExamples" class="action-btn examples-btn" :class="{ 'active': showExamples }" title="Примеры графики">
+          <span class="btn-icon">🎨</span>
+          <span class="btn-text">Примеры</span>
         </button>
       </div>
       
@@ -358,6 +386,14 @@ function handleKeyDown(e: KeyboardEvent) {
     </div>
 
     <div class="main">
+      <!-- Новая панель с примерами (показывается только когда showExamples = true) -->
+      <ExamplesPanel 
+        v-if="showExamples" 
+        :theme="theme"
+        @load-example="loadExample"
+        @close="toggleExamples"
+      />
+      
       <div class="editor-container" :class="`theme-${theme}`">
         <div class="editor-header">
           <div class="window-controls">
@@ -577,6 +613,18 @@ function handleKeyDown(e: KeyboardEvent) {
 
 .load-btn {
   background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+/* Стили для кнопки примеров */
+.examples-btn {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+}
+
+/* Стиль для активной кнопки примеров (когда панель открыта) */
+.examples-btn.active {
+  background: linear-gradient(135deg, #7b1fa2, #6a1b9a);
+  box-shadow: 0 0 15px rgba(156, 39, 176, 0.5);
+  transform: scale(0.95);
 }
 
 .clear-btn {
@@ -847,6 +895,13 @@ function handleKeyDown(e: KeyboardEvent) {
   flex: 1;
   border: 1px solid transparent;
   transition: border-color 0.3s;
+}
+
+.editor-container, .canvas-container {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Анимации */
