@@ -3210,6 +3210,7 @@ function closePanel() {
   transition: all 0.3s;
   animation: slideIn 0.3s ease;
   z-index: 20;
+  margin-left: 0;
 }
 
 /* Стили для светлой темы */
@@ -3480,4 +3481,11 @@ function closePanel() {
 .examples-list::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 108, 255, 0.5);
 }
+
+/* Убедитесь, что панель правильно позиционируется */
+.main .examples-panel {
+  position: relative;
+  z-index: 15;
+}
+
 </style>

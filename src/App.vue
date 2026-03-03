@@ -28,12 +28,6 @@ const showExamples = ref(false)
 // Параметры шрифта
 const fontSize = ref(15)
 const fontFamily = ref('Consolas, Monaco, monospace')
-const availableFonts = [
-  { name: 'Consolas', value: 'Consolas, Monaco, monospace' },
-  { name: 'Monaco', value: 'Monaco, Consolas, monospace' },
-  { name: 'Courier New', value: '"Courier New", Courier, monospace' },
-  { name: 'Fira Code', value: '"Fira Code", Consolas, monospace' }
-]
 
 // Параметры темы
 type Theme = 'dark' | 'light'
@@ -43,10 +37,131 @@ const theme = ref<Theme>('dark')
 const history = ref<string[]>([])
 const historyIndex = ref(-1)
 
+// Управление консолью
+const consoleHeight = ref(150)
+const isConsoleVisible = ref(true)
+const isDragging = ref(false)
+const startY = ref(0)
+const startHeight = ref(150)
+
+// Управление шириной блока редактора
+const editorWidth = ref(50) // в процентах
+const isResizing = ref(false)
+
+// Управление боковым меню
+const isMenuExpanded = ref(false)
+const activeMenuItem = ref<string | null>(null)
+
+// Обработчики для изменения размера консоли
+function startResize(e: MouseEvent) {
+  isDragging.value = true
+  startY.value = e.clientY
+  startHeight.value = consoleHeight.value
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function onResize(e: MouseEvent) {
+  if (!isDragging.value) return
+  
+  const deltaY = startY.value - e.clientY
+  const newHeight = Math.min(
+    Math.max(50, startHeight.value + deltaY),
+    window.innerHeight * 0.5
+  )
+  consoleHeight.value = newHeight
+}
+
+function stopResize() {
+  isDragging.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+// Обработчики для изменения ширины редактора - ОПТИМИЗИРОВАНО
+function startHorizontalResize(e: MouseEvent) {
+  isResizing.value = true
+  startX = e.clientX
+  startWidth = editorWidth.value
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  
+  // Добавляем класс для отключения transition во время перетаскивания
+  const editorPanel = document.querySelector('.editor-panel') as HTMLElement
+  const canvasPanel = document.querySelector('.canvas-panel') as HTMLElement
+  if (editorPanel) editorPanel.style.transition = 'none'
+  if (canvasPanel) canvasPanel.style.transition = 'none'
+}
+
+// Используем обычные переменные для более быстрого обновления
+let startX = 0
+let startWidth = 50
+
+function onHorizontalResize(e: MouseEvent) {
+  if (!isResizing.value) return
+  
+  const mainContent = document.querySelector('.main-content') as HTMLElement
+  if (!mainContent) return
+  
+  // Прямое обновление DOM для плавности
+  const deltaX = e.clientX - startX
+  const containerWidth = mainContent.clientWidth
+  const newWidth = Math.min(
+    Math.max(30, startWidth + (deltaX / containerWidth) * 100),
+    70
+  )
+  
+  // Обновляем CSS переменную напрямую
+  document.documentElement.style.setProperty('--editor-width', newWidth + '%')
+  
+  // Обновляем ref только после окончания перетаскивания
+  editorWidth.value = newWidth
+}
+
+function stopHorizontalResize() {
+  isResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  
+  // Возвращаем transition
+  const editorPanel = document.querySelector('.editor-panel') as HTMLElement
+  const canvasPanel = document.querySelector('.canvas-panel') as HTMLElement
+  if (editorPanel) editorPanel.style.transition = ''
+  if (canvasPanel) canvasPanel.style.transition = ''
+}
+
+function toggleConsole() {
+  isConsoleVisible.value = !isConsoleVisible.value
+  if (isConsoleVisible.value) {
+    addMessage('📋 Консоль показана')
+  } else {
+    addMessage('📋 Консоль скрыта')
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', onResize)
+  window.addEventListener('mouseup', stopResize)
+  window.addEventListener('mousemove', onHorizontalResize)
+  window.addEventListener('mouseup', stopHorizontalResize)
+  window.addEventListener('keydown', handleKeyDown)
+  
+  // Устанавливаем начальное значение CSS переменной
+  document.documentElement.style.setProperty('--editor-width', editorWidth.value + '%')
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onResize)
+  window.removeEventListener('mouseup', stopResize)
+  window.removeEventListener('mousemove', onHorizontalResize)
+  window.removeEventListener('mouseup', stopHorizontalResize)
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
 function addMessage(msg: string) {
   messages.value.push(msg)
   setTimeout(() => {
-    const console = document.querySelector('.console')
+    const console = document.querySelector('.console-content')
     if (console) {
       console.scrollTop = console.scrollHeight
     }
@@ -106,14 +221,6 @@ function decreaseFontSize() {
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
   addMessage(`🎨 Тема изменена на ${theme.value === 'dark' ? 'тёмную' : 'светлую'}`)
-}
-
-function clearEditor() {
-  if (confirm('Очистить редактор кода? Все изменения будут потеряны.')) {
-    saveToHistory()
-    code.value = ''
-    addMessage('🧹 Редактор очищен')
-  }
 }
 
 function resetToExample() {
@@ -178,10 +285,9 @@ function redo() {
 }
 
 function showShortcuts() {
-  addMessage('⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор')
+  addMessage('⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор, Ctrl+` - консоль')
 }
 
-// Функция для показа/скрытия примеров
 function toggleExamples() {
   showExamples.value = !showExamples.value
   if (showExamples.value) {
@@ -191,23 +297,12 @@ function toggleExamples() {
   }
 }
 
-// Функция для загрузки примера в редактор
 function loadExample(exampleCode: string) {
   saveToHistory()
   code.value = exampleCode
   addMessage('📋 Пример загружен в редактор')
-  // Можно сразу запустить пример
   startSketch()
 }
-
-// Обработчик клавиш для всего приложения
-onMounted(() => {
-  window.addEventListener('keydown', handleKeyDown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyDown)
-})
 
 function handleKeyDown(e: KeyboardEvent) {
   if (e.ctrlKey && e.key === 'Enter') {
@@ -229,6 +324,20 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault()
     redo()
   }
+  
+  if (e.ctrlKey && e.key === '`') {
+    e.preventDefault()
+    toggleConsole()
+  }
+}
+
+// Функции для бокового меню
+function toggleMenuExpand() {
+  isMenuExpanded.value = !isMenuExpanded.value
+}
+
+function setActiveMenuItem(item: string | null) {
+  activeMenuItem.value = item
 }
 </script>
 
@@ -242,189 +351,228 @@ function handleKeyDown(e: KeyboardEvent) {
       <div class="bg-grid"></div>
     </div>
 
-    <div class="toolbar">
-      <!-- Логотип с иконкой -->
-      <div class="logo">
-        <svg class="logo-icon" viewBox="0 0 24 24" width="24" height="24">
+    <!-- Боковое меню -->
+    <div class="side-menu" 
+         :class="{ 'expanded': isMenuExpanded }"
+         @mouseenter="toggleMenuExpand"
+         @mouseleave="toggleMenuExpand">
+      
+      <!-- Логотип (уменьшенный) -->
+      <div class="menu-logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
           <path d="M12 2L2 7v10l10 5 10-5V7l-10-5z" fill="#646cff" stroke="currentColor" stroke-width="1"/>
           <path d="M12 12l4-2v4l-4 2-4-2v-4l4 2z" fill="#ffffff" opacity="0.8"/>
           <circle cx="12" cy="12" r="2" fill="#ff6b6b"/>
         </svg>
-        <span class="logo-text">p5.js Playground</span>
+        <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
       </div>
 
-      <div class="toolbar-buttons">
-        <button @click="startSketch" class="action-btn start-btn" title="Запустить скетч (Ctrl+Enter)">
-          <span class="btn-icon">▶</span>
-          <span class="btn-text">Старт</span>
-        </button>
-        <button @click="stopSketch" class="action-btn stop-btn" title="Остановить скетч">
-          <span class="btn-icon">■</span>
-          <span class="btn-text">Стоп</span>
-        </button>
-        <button @click="saveSketch" class="action-btn save-btn" title="Сохранить скетч (Ctrl+S)">
-          <span class="btn-icon">💾</span>
-          <span class="btn-text">Сохранить</span>
-        </button>
-        <button @click="loadSketch" class="action-btn load-btn" title="Загрузить скетч">
-          <span class="btn-icon">📂</span>
-          <span class="btn-text">Загрузить</span>
-        </button>
-        <!-- Новая кнопка для примеров графики -->
-        <button @click="toggleExamples" class="action-btn examples-btn" :class="{ 'active': showExamples }" title="Примеры графики">
-          <span class="btn-icon">🎨</span>
-          <span class="btn-text">Примеры</span>
-        </button>
-      </div>
-      
-      <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
-      
-      <div class="toolbar-divider"></div>
-      
-      <div class="toolbar-buttons">
-        <button @click="clearEditor" class="action-btn clear-btn" title="Очистить редактор">
-          <span class="btn-icon">🗑️</span>
-          <span class="btn-text">Очистить</span>
-        </button>
-        <button @click="resetToExample" class="action-btn example-btn" title="Восстановить пример">
-          <span class="btn-icon">🔄</span>
-          <span class="btn-text">Пример</span>
-        </button>
-        <button @click="copyToClipboard" class="action-btn copy-btn" title="Копировать код">
-          <span class="btn-icon">📋</span>
-          <span class="btn-text">Копировать</span>
-        </button>
-        <button @click="formatCode" class="action-btn format-btn" title="Форматировать код">
-          <span class="btn-icon">✨</span>
-          <span class="btn-text">Формат</span>
-        </button>
-      </div>
-      
-      <div class="toolbar-divider"></div>
-      
-      <div class="toolbar-buttons">
-        <button @click="undo" class="action-btn undo-btn" title="Отмена (Ctrl+Z)">
-          <span class="btn-icon">↩️</span>
-          <span class="btn-text">Отмена</span>
-        </button>
-        <button @click="redo" class="action-btn redo-btn" title="Повтор (Ctrl+Y)">
-          <span class="btn-icon">↪️</span>
-          <span class="btn-text">Повтор</span>
-        </button>
-        <button @click="clearConsole" class="action-btn console-clear-btn" title="Очистить консоль">
-          <span class="btn-icon">🧹</span>
-          <span class="btn-text">Консоль</span>
-        </button>
-        <button @click="showShortcuts" class="action-btn shortcuts-btn" title="Горячие клавиши">
-          <span class="btn-icon">⌨️</span>
-          <span class="btn-text">Клавиши</span>
-        </button>
-      </div>
-      
-      <button @click="toggleTheme" class="theme-btn" :title="`Переключить на ${theme === 'dark' ? 'светлую' : 'тёмную'} тему`">
-        <div class="theme-icon-container">
-          <span class="theme-icon" :class="{ 'rotate': theme === 'light' }">
-            <span v-if="theme === 'dark'">🌙</span>
-            <span v-else>☀️</span>
-          </span>
-        </div>
+      <!-- Основные кнопки в нужном порядке -->
+      <button @click="startSketch" class="menu-item" title="Запустить скетч (Ctrl+Enter)"
+              @mouseenter="setActiveMenuItem('start')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">▶</span>
+        <span class="menu-text" v-show="isMenuExpanded">Старт</span>
       </button>
       
-      <div class="font-controls">
-        <div class="font-control-group">
-          <span class="font-label">
-            <svg viewBox="0 0 24 24" width="14" height="14" class="control-icon">
-              <path d="M4 6h16v2H4V6zm2 4h12v2H6v-2zm3 4h6v2H9v-2z" fill="currentColor"/>
-            </svg>
-            Шрифт:
-          </span>
-          <select v-model="fontFamily" class="font-select">
-            <option v-for="font in availableFonts" :key="font.value" :value="font.value">
-              {{ font.name }}
-            </option>
-          </select>
-        </div>
-        
-        <div class="font-control-group">
-          <span class="font-label">
-            <svg viewBox="0 0 24 24" width="14" height="14" class="control-icon">
-              <path d="M12 6v12M8 8v8M16 8v8M4 10v4M20 10v4" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            Размер:
-          </span>
-          <div class="font-size-controls">
-            <button @click="decreaseFontSize" class="font-btn" title="Уменьшить шрифт">
-              <span class="font-btn-icon">−</span>
-            </button>
-            <span class="font-size">{{ fontSize }}px</span>
-            <button @click="increaseFontSize" class="font-btn" title="Увеличить шрифт">
-              <span class="font-btn-icon">+</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Статус бар -->
-    <div class="status-bar" :class="`theme-${theme}`">
-      <div class="status-item">
-        <span class="status-dot"></span>
-        <span>Готов к работе</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">📊</span>
-        <span>Сообщений: {{ messages.length }}</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">📝</span>
-        <span>Символов: {{ code.length }}</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">⚡</span>
-        <span>p5.js v1.9.4</span>
-      </div>
-    </div>
-
-    <div class="main">
-      <!-- Новая панель с примерами (показывается только когда showExamples = true) -->
-      <ExamplesPanel 
-        v-if="showExamples" 
-        :theme="theme"
-        @load-example="loadExample"
-        @close="toggleExamples"
-      />
+      <button @click="stopSketch" class="menu-item" title="Остановить скетч"
+              @mouseenter="setActiveMenuItem('stop')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">■</span>
+        <span class="menu-text" v-show="isMenuExpanded">Стоп</span>
+      </button>
       
-      <div class="editor-container" :class="`theme-${theme}`">
-        <div class="editor-header">
-          <div class="window-controls">
-            <span class="window-control red"></span>
-            <span class="window-control yellow"></span>
-            <span class="window-control green"></span>
-          </div>
-          <span class="editor-title">sketch.js</span>
-          <div class="editor-badge" v-if="history.length > 0">
-            {{ historyIndex + 1 }}/{{ history.length }}
-          </div>
-        </div>
-        <CodeEditor 
-          v-model="code" 
-          :font-size="fontSize"
-          :font-family="fontFamily"
-          :theme="theme"
-          @update:model-value="saveToHistory"
-        />
-      </div>
-      <div class="canvas-container">
-        <div class="canvas-header">
-          <span class="canvas-title">Холст p5.js</span>
-          <div class="canvas-indicator"></div>
-        </div>
-        <P5Canvas ref="canvasRef" :add-message="addMessage" />
+      <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
+              @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">💾</span>
+        <span class="menu-text" v-show="isMenuExpanded">Сохранить</span>
+      </button>
+      
+      <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
+              @mouseenter="setActiveMenuItem('load')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">📂</span>
+        <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
+      </button>
+      
+      <button @click="formatCode" class="menu-item" title="Форматировать код"
+              @mouseenter="setActiveMenuItem('format')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">✨</span>
+        <span class="menu-text" v-show="isMenuExpanded">Формат</span>
+      </button>
+      
+      <!-- Кнопки изменения шрифта -->
+      <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
+              @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">+</span>
+        <span class="menu-text" v-show="isMenuExpanded">Увеличить</span>
+      </button>
+      
+      <button @click="decreaseFontSize" class="menu-item" title="Уменьшить шрифт"
+              @mouseenter="setActiveMenuItem('font-down')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">−</span>
+        <span class="menu-text" v-show="isMenuExpanded">Уменьшить</span>
+      </button>
+
+      <!-- Остальные кнопки -->
+      <button @click="undo" class="menu-item" title="Отмена (Ctrl+Z)"
+              @mouseenter="setActiveMenuItem('undo')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">↩️</span>
+        <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
+      </button>
+      
+      <button @click="redo" class="menu-item" title="Повтор (Ctrl+Y)"
+              @mouseenter="setActiveMenuItem('redo')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">↪️</span>
+        <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
+      </button>
+      
+      <button @click="copyToClipboard" class="menu-item" title="Копировать код"
+              @mouseenter="setActiveMenuItem('copy')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">📋</span>
+        <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
+      </button>
+      
+      <button @click="resetToExample" class="menu-item" title="Восстановить пример"
+              @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">🔄</span>
+        <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
+      </button>
+      
+      <button @click="toggleExamples" class="menu-item" :class="{ 'active': showExamples }" title="Примеры графики"
+              @mouseenter="setActiveMenuItem('examples')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">🎨</span>
+        <span class="menu-text" v-show="isMenuExpanded">Примеры</span>
+      </button>
+      
+      <button @click="clearConsole" class="menu-item" title="Очистить консоль"
+              @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">🧹</span>
+        <span class="menu-text" v-show="isMenuExpanded">Очистить консоль</span>
+      </button>
+      
+      <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
+              @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">{{ isConsoleVisible ? '📋' : '📭' }}</span>
+        <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
+      </button>
+      
+      <button @click="toggleTheme" class="menu-item" :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
+              @mouseenter="setActiveMenuItem('theme')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
+        <span class="menu-text" v-show="isMenuExpanded">{{ theme === 'dark' ? 'Тёмная' : 'Светлая' }}</span>
+      </button>
+      
+      <button @click="showShortcuts" class="menu-item" title="Горячие клавиши"
+              @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
+        <span class="menu-icon">⌨️</span>
+        <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
+      </button>
+
+      <!-- Всплывающая подсказка для узкого меню -->
+      <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
+        {{ getTooltipText(activeMenuItem) }}
       </div>
     </div>
-    <ConsoleOutput :messages="messages" :theme="theme" />
+
+    <!-- Основной контент -->
+    <div class="main-content">
+      <div class="main">
+        <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
+        
+        <!-- Панель с примерами -->
+        <ExamplesPanel 
+          v-if="showExamples" 
+          :theme="theme"
+          @load-example="loadExample"
+          @close="toggleExamples"
+        />
+        
+        <!-- Левая панель: редактор + консоль -->
+        <div class="editor-panel">
+          <div class="editor-container" :class="`theme-${theme}`">
+            <div class="editor-header">
+              <div class="window-controls">
+                <span class="window-control red"></span>
+                <span class="window-control yellow"></span>
+                <span class="window-control green"></span>
+              </div>
+              <span class="editor-title">sketch.js</span>
+              <div class="editor-badge" v-if="history.length > 0">
+                {{ historyIndex + 1 }}/{{ history.length }}
+              </div>
+            </div>
+            <div class="editor-content">
+              <CodeEditor 
+                v-model="code" 
+                :font-size="fontSize"
+                :font-family="fontFamily"
+                :theme="theme"
+                @update:model-value="saveToHistory"
+              />
+            </div>
+          </div>
+          
+          <!-- Консоль под редактором -->
+          <div class="console-wrapper" :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }">
+            <div 
+              class="console-resize-handle" 
+              @mousedown="startResize"
+              :class="{ 'dragging': isDragging }"
+            >
+              <div class="handle-line"></div>
+              <div class="handle-line"></div>
+              <div class="handle-line"></div>
+            </div>
+            <ConsoleOutput :messages="messages" :theme="theme" />
+          </div>
+        </div>
+
+        <!-- Разделитель для изменения ширины -->
+        <div 
+          class="resize-handle-vertical"
+          @mousedown="startHorizontalResize"
+          :class="{ 'resizing': isResizing }"
+        ></div>
+
+        <!-- Правая панель: холст -->
+        <div class="canvas-panel">
+          <div class="canvas-container">
+            <div class="canvas-header">
+              <span class="canvas-title">Холст p5.js</span>
+              <div class="canvas-indicator"></div>
+            </div>
+            <div class="canvas-content">
+              <P5Canvas ref="canvasRef" :add-message="addMessage" :theme="theme" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
+<script lang="ts">
+// Функция для получения текста подсказки
+function getTooltipText(item: string): string {
+  const tooltips: Record<string, string> = {
+    'start': 'Запустить скетч (Ctrl+Enter)',
+    'stop': 'Остановить скетч',
+    'save': 'Сохранить скетч (Ctrl+S)',
+    'load': 'Загрузить скетч',
+    'format': 'Форматировать код',
+    'font-up': 'Увеличить шрифт',
+    'font-down': 'Уменьшить шрифт',
+    'undo': 'Отмена (Ctrl+Z)',
+    'redo': 'Повтор (Ctrl+Y)',
+    'copy': 'Копировать код',
+    'reset': 'Восстановить пример',
+    'examples': 'Примеры графики',
+    'console-clear': 'Очистить консоль',
+    'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
+    'theme': 'Сменить тему',
+    'shortcuts': 'Горячие клавиши'
+  }
+  return tooltips[item] || item
+}
+</script>
 
 <style>
 * {
@@ -435,7 +583,6 @@ function handleKeyDown(e: KeyboardEvent) {
 
 .app {
   display: flex;
-  flex-direction: column;
   height: 100vh;
   transition: background-color 0.3s, color 0.3s;
   position: relative;
@@ -508,307 +655,198 @@ function handleKeyDown(e: KeyboardEvent) {
   color: #ffffff;
 }
 
-.app.theme-dark .toolbar {
-  background: rgba(45, 45, 45, 0.8);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid #404040;
-}
-
 /* Светлая тема */
 .app.theme-light {
   background-color: #f8f9fa;
   color: #2c3e50;
 }
 
-.app.theme-light .toolbar {
-  background: rgba(255, 255, 255, 0.9);
+/* Боковое меню */
+.side-menu {
+  width: 60px;
+  height: 100vh;
+  background: rgba(30, 30, 30, 0.95);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e9ecef;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-}
-
-.toolbar {
+  border-right: 1px solid #404040;
   display: flex;
-  gap: 20px;
-  padding: 12px 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  transition: all 0.3s;
-  z-index: 10;
+  padding: 12px 0;
+  gap: 2px;
+  transition: width 0.3s ease;
+  z-index: 100;
   position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* Логотип */
-.logo {
+.side-menu.expanded {
+  width: 180px;
+}
+
+.app.theme-light .side-menu {
+  background: rgba(255, 255, 255, 0.95);
+  border-right-color: #e0e0e0;
+}
+
+.menu-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-right: 20px;
-  border-right: 2px solid rgba(100, 108, 255, 0.3);
+  gap: 8px;
+  padding: 0 8px;
+  width: 100%;
+  margin-bottom: 8px;
 }
 
 .logo-icon {
-  animation: pulse 2s infinite;
+  flex-shrink: 0;
 }
 
 .logo-text {
   font-weight: bold;
-  font-size: 16px;
+  font-size: 13px;
+  white-space: nowrap;
   background: linear-gradient(135deg, #646cff, #9089fc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.toolbar-buttons {
-  display: flex;
-  gap: 8px;
+/* Убираем все разделители */
+.menu-divider {
+  display: none;
 }
 
-/* Кнопки действий */
-.action-btn {
+/* Уменьшенные кнопки */
+.menu-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.2s;
-  position: relative;
-  overflow: hidden;
+  gap: 8px;
+  padding: 8px 8px;
   border: none;
-  color: white;
-  cursor: pointer;
-}
-
-.action-btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
-
-.action-btn:hover::before {
-  width: 200px;
-  height: 200px;
-}
-
-.start-btn {
-  background: linear-gradient(135deg, #4caf50, #45a049);
-}
-
-.stop-btn {
-  background: linear-gradient(135deg, #f44336, #d32f2f);
-}
-
-.save-btn {
-  background: linear-gradient(135deg, #2196f3, #1976d2);
-}
-
-.load-btn {
-  background: linear-gradient(135deg, #ff9800, #f57c00);
-}
-
-/* Стили для кнопки примеров */
-.examples-btn {
-  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
-}
-
-/* Стиль для активной кнопки примеров (когда панель открыта) */
-.examples-btn.active {
-  background: linear-gradient(135deg, #7b1fa2, #6a1b9a);
-  box-shadow: 0 0 15px rgba(156, 39, 176, 0.5);
-  transform: scale(0.95);
-}
-
-.clear-btn {
-  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
-}
-
-.example-btn {
-  background: linear-gradient(135deg, #00bcd4, #0097a7);
-}
-
-.copy-btn {
-  background: linear-gradient(135deg, #8bc34a, #689f38);
-}
-
-.format-btn {
-  background: linear-gradient(135deg, #ffc107, #ff8f00);
-}
-
-.undo-btn {
-  background: linear-gradient(135deg, #607d8b, #455a64);
-}
-
-.redo-btn {
-  background: linear-gradient(135deg, #607d8b, #455a64);
-}
-
-.console-clear-btn {
-  background: linear-gradient(135deg, #795548, #5d4037);
-}
-
-.shortcuts-btn {
-  background: linear-gradient(135deg, #9e9e9e, #616161);
-}
-
-.btn-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-
-/* Кнопка темы */
-.theme-btn {
   background: transparent;
-  border: 2px solid currentColor;
-  padding: 6px;
-  border-radius: 50%;
-  width: 38px;
-  height: 38px;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  width: 100%;
+  position: relative;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.menu-item:hover {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+.menu-item.active {
+  background: rgba(100, 108, 255, 0.3);
+  border-left: 2px solid #646cff;
+}
+
+.menu-icon {
+  font-size: 18px;
+  min-width: 26px;
+  text-align: center;
+}
+
+.menu-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Всплывающая подсказка */
+.menu-tooltip {
+  position: fixed;
+  left: 70px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  animation: fadeIn 0.2s;
+  border: 1px solid #646cff;
+}
+
+.app.theme-light .menu-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  border: 1px solid #646cff;
+}
+
+/* Основной контент */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+/* Левая панель (редактор + консоль) - используем CSS переменную */
+.editor-panel {
+  width: var(--editor-width, 50%);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  transition: width 0.1s ease;
+}
+
+/* Правая панель (холст) - используем calc */
+.canvas-panel {
+  width: calc(100% - var(--editor-width, 50%));
+  height: 100%;
+  overflow: hidden;
+  transition: width 0.1s ease;
+}
+
+/* Вертикальный разделитель */
+.resize-handle-vertical {
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
-  cursor: pointer;
-  color: inherit;
-}
-
-.theme-btn:hover {
-  transform: rotate(180deg);
-  background: rgba(100, 108, 255, 0.1);
-}
-
-.theme-icon {
-  display: inline-block;
-  font-size: 20px;
-  transition: transform 0.5s;
-}
-
-.theme-icon.rotate {
-  animation: spin 0.5s ease;
-}
-
-/* Настройки шрифта */
-.font-controls {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-left: auto;
-  padding-left: 20px;
-  border-left: 2px solid rgba(100, 108, 255, 0.3);
-}
-
-.font-control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.font-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: inherit;
-  opacity: 0.8;
-}
-
-.control-icon {
-  opacity: 0.6;
-}
-
-.font-select {
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.1);
-  color: inherit;
-  border: 1px solid rgba(100, 108, 255, 0.3);
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-.font-select:hover {
-  border-color: #646cff;
-  background: rgba(100, 108, 255, 0.1);
-}
-
-.font-size-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  padding: 2px;
-}
-
-.font-btn {
-  background: transparent;
-  border: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: inherit;
-  transition: all 0.2s;
-}
-
-.font-btn:hover {
-  background: rgba(100, 108, 255, 0.3);
-}
-
-.font-btn-icon {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.font-size {
-  min-width: 45px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-/* Статус бар */
-.status-bar {
-  display: flex;
-  gap: 20px;
-  padding: 6px 20px;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 5;
+  z-index: 15;
   position: relative;
+  flex-shrink: 0;
 }
 
-.app.theme-light .status-bar {
-  background: rgba(0, 0, 0, 0.03);
-  border-bottom-color: rgba(0, 0, 0, 0.05);
+.resize-handle-vertical:hover,
+.resize-handle-vertical.resizing {
+  background: rgba(100, 108, 255, 0.2);
 }
 
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.resize-handle-vertical::after {
+  content: '';
+  width: 2px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  transition: background-color 0.2s;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4caf50;
-  animation: blink 2s infinite;
+.resize-handle-vertical:hover::after,
+.resize-handle-vertical.resizing::after {
+  background: #646cff;
 }
 
-.status-icon {
-  font-size: 14px;
-  opacity: 0.7;
+.app.theme-light .resize-handle-vertical::after {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Заголовки редактора и холста */
@@ -816,7 +854,7 @@ function handleKeyDown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -833,8 +871,8 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 .window-control {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
 }
 
@@ -851,13 +889,13 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 .editor-title, .canvas-title {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.7;
 }
 
 .canvas-indicator {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #4caf50;
   animation: pulse 1.5s infinite;
@@ -865,36 +903,11 @@ function handleKeyDown(e: KeyboardEvent) {
 
 .editor-badge {
   margin-left: auto;
-  font-size: 11px;
-  padding: 2px 6px;
+  font-size: 10px;
+  padding: 2px 4px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 8px;
   color: #888;
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 5px;
-}
-
-.app.theme-light .toolbar-divider {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-}
-
-.main > * {
-  flex: 1;
-  border: 1px solid transparent;
-  transition: border-color 0.3s;
 }
 
 .editor-container, .canvas-container {
@@ -904,74 +917,83 @@ function handleKeyDown(e: KeyboardEvent) {
   flex-direction: column;
 }
 
+.editor-content, .canvas-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Консоль и её разделитель */
+.console-wrapper {
+  position: relative;
+  z-index: 10;
+  transition: height 0.2s ease;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app.theme-light .console-wrapper {
+  border-top-color: rgba(0, 0, 0, 0.1);
+}
+
+.console-resize-handle {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  z-index: 20;
+  background: transparent;
+  transition: background-color 0.2s;
+}
+
+.console-resize-handle:hover,
+.console-resize-handle.dragging {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+.handle-line {
+  width: 25px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  transition: background-color 0.2s;
+}
+
+.console-resize-handle:hover .handle-line,
+.console-resize-handle.dragging .handle-line {
+  background: #646cff;
+}
+
 /* Анимации */
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes blink {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-.action-btn {
+.menu-item {
   animation: slideIn 0.3s ease;
-}
-
-/* Улучшенные подсказки */
-.action-btn[title] {
-  position: relative;
-}
-
-.action-btn[title]:hover::after {
-  content: attr(title);
-  position: absolute;
-  bottom: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  white-space: nowrap;
-  z-index: 1000;
-  pointer-events: none;
 }
 
 /* Скроллбары */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -980,10 +1002,19 @@ function handleKeyDown(e: KeyboardEvent) {
 
 ::-webkit-scrollbar-thumb {
   background: rgba(100, 108, 255, 0.3);
-  border-radius: 5px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 108, 255, 0.5);
+}
+
+/* Стили для скроллбара в боковом меню */
+.side-menu::-webkit-scrollbar {
+  width: 2px;
+}
+
+.side-menu::-webkit-scrollbar-thumb {
+  background: rgba(100, 108, 255, 0.3);
 }
 </style>
