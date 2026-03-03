@@ -11,3 +11,5 @@ project/
 ├── vite.config.ts
 └── tsconfig.json
 
+npm install --save-dev js-beautify
+

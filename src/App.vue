@@ -5,6 +5,7 @@ import P5Canvas from './components/P5Canvas.vue'
 import ConsoleOutput from './components/ConsoleOutput.vue'
 import ExamplesPanel from './components/ExamplesPanel.vue'
 import { saveAs } from 'file-saver'
+import beautify from 'js-beautify'
 
 const code = ref(`function setup() {
   createCanvas(400, 400);
@@ -242,16 +243,31 @@ function copyToClipboard() {
 function formatCode() {
   try {
     saveToHistory()
-    let formatted = code.value
-      .replace(/\s*{\s*/g, ' {\n  ')
-      .replace(/\s*}\s*/g, '\n}\n\n')
-      .replace(/;\s*/g, ';\n  ')
-      .replace(/\n\s*\n\s*\n/g, '\n\n')
-      .replace(/{\n  \n/g, '{\n')
+    
+    const formatted = beautify(code.value, {
+      indent_size: 2,
+      indent_char: ' ',
+      max_preserve_newlines: 2,
+      preserve_newlines: true,
+      keep_array_indentation: false,
+      break_chained_methods: false,
+      indent_scripts: 'normal',
+      brace_style: 'collapse',
+      space_before_conditional: true,
+      unescape_strings: false,
+      jslint_happy: false,
+      end_with_newline: true,
+      wrap_line_length: 80,
+      indent_inner_html: false,
+      comma_first: false,
+      e4x: false,
+      indent_empty_lines: false
+    })
     
     code.value = formatted
     addMessage('✨ Код отформатирован')
   } catch (e) {
+    console.error('Ошибка форматирования:', e)
     addMessage('❌ Ошибка форматирования')
   }
 }
@@ -479,11 +495,11 @@ function setActiveMenuItem(item: string | null) {
         
         <!-- Панель с примерами -->
         <ExamplesPanel 
-          v-if="showExamples" 
-          :theme="theme"
-          @load-example="loadExample"
-          @close="toggleExamples"
-        />
+  v-if="showExamples" 
+  :theme="theme"
+  @load-example="loadExample"
+  @close="toggleExamples"
+/>
         
         <!-- Левая панель: редактор + консоль -->
         <div class="editor-panel">
