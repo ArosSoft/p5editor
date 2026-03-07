@@ -1,85 +1,68 @@
 // 🎄 НОВОГОДНЯЯ ЁЛКА
-// Попробуй изменить цвета игрушек или скорость мигания!
+// Попробуй добавить игрушки мышкой. Как исправить баг?
+
 
 function setup() {
-    createCanvas(400, 400);
+  createCanvas(400, 400);
+  background(25, 25, 70);
+  // Белая поверхность под ёлкой
+  fill(255);
+  noStroke();
+  ellipse(200, 333, 1000, 200);
+
+  // Ёлка
+  fill(0, 100, 0);
+  triangle(50, 250, 350, 250, 200, 120); // низ
+  fill(0, 120, 0);
+  triangle(80, 190, 320, 190, 200, 80); // середина
+  fill(0, 140, 0);
+  triangle(110, 140, 290, 140, 200, 40); // верх
+
+  // Ствол
+  fill(101, 67, 33);
+  rect(180, 240, 40, 80);
+
+  // Рубиновая звезда на вершине
+  fill(200, 0, 0); // Красный цвет
+  stroke(255, 215, 0); // Золотой контур
+  strokeWeight(2);
+
+  // Рисуем звезду
+  push();
+  translate(200, 30);
+  beginShape();
+  for (let i = 0; i < 5; i++) {
+    let angle = TWO_PI * i / 5 - HALF_PI;
+    let x = cos(angle) * 15;
+    let y = sin(angle) * 15;
+    vertex(x, y);
+
+    let innerAngle = angle + TWO_PI / 10;
+    let innerX = cos(innerAngle) * 7;
+    let innerY = sin(innerAngle) * 7;
+    vertex(innerX, innerY);
   }
-  
-  function draw() {
-    // Тёмно-синее небо
-    background(25, 25, 112);
-    
-    // Снег внизу
-    fill(255);
+  endShape(CLOSE);
+  pop();
+}
+
+function draw() {
+
+}
+
+function mousePressed() {
+  // Проверяем, является ли пиксель под мышкой зеленым
+  let c = get(mouseX, mouseY);
+
+  // Зеленый оттенок: много зеленого (G > 100) и мало красного и синего
+  if (c[1] > 100 && c[0] < 100 && c[2] < 100) {
+    // Добавляем игрушку
+    fill(random(200, 255), random(0, 100), random(0, 100));
     noStroke();
-    rect(0, 300, 400, 100);
-    
-    // Ствол ёлки
-    fill(139, 69, 19);
-    rect(180, 240, 40, 80);
-    
-    // Ярусы ёлки
-    fill(34, 139, 34);
-    triangle(50, 250, 350, 250, 200, 120);  // нижний
-    triangle(80, 190, 320, 190, 200, 80);    // средний
-    triangle(110, 140, 290, 140, 200, 40);   // верхний
-    
-    // Звезда
-    fill(255, 215, 0);
-    drawStar(200, 30, 15, 30, 5);
-    
-    // Игрушки
-    // Красные
-    fill(255, 0, 0);
-    ellipse(150, 220, 15, 15);
-    ellipse(250, 180, 15, 15);
-    
-    // Синие
-    fill(0, 0, 255);
-    ellipse(230, 230, 15, 15);
-    ellipse(170, 150, 15, 15);
-    
-    // Жёлтые
-    fill(255, 255, 0);
-    ellipse(200, 200, 15, 15);
-    ellipse(120, 170, 15, 15);
-    
-    // Мигающая гирлянда
-    for (let i = 0; i < 8; i++) {
-      if ((frameCount + i) % 30 < 15) {
-        fill(255, 0, 0); // красный
-      } else {
-        fill(0, 0, 255); // синий
-      }
-      
-      let x = 200 + 80 * cos(i * 0.8 + frameCount * 0.05);
-      let y = 150 + 60 * sin(i * 0.8 + frameCount * 0.05);
-      ellipse(x, y, 10, 10);
-    }
-    
-    // Падающий снег
-    fill(255);
-    for (let i = 0; i < 20; i++) {
-      let x = (i * 37 + frameCount) % 400;
-      let y = (i * 23 + frameCount * 2) % 400;
-      ellipse(x, y, 3, 3);
-    }
+    circle(mouseX, mouseY, 15);
+
+    // Маленький блик на игрушке
+    fill(255, 255, 255, 150);
+    circle(mouseX - 3, mouseY - 3, 4);
   }
-  
-  // Функция для рисования звезды
-  function drawStar(x, y, radius1, radius2, npoints) {
-    let angle = TWO_PI / npoints;
-    let halfAngle = angle / 2.0;
-    
-    beginShape();
-    for (let a = 0; a < TWO_PI; a += angle) {
-      let sx = x + cos(a) * radius2;
-      let sy = y + sin(a) * radius2;
-      vertex(sx, sy);
-      
-      sx = x + cos(a + halfAngle) * radius1;
-      sy = y + sin(a + halfAngle) * radius1;
-      vertex(sx, sy);
-    }
-    endShape(CLOSE);
-  }
+}
