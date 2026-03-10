@@ -6,7 +6,6 @@ import ConsoleOutput from './components/ConsoleOutput.vue'
 import ExamplesPanel from './components/ExamplesPanel.vue'
 import { saveAs } from 'file-saver'
 import beautify from 'js-beautify'
-import AIChat from './components/AIChat.vue'
 
 const code = ref(`function setup() {
   createCanvas(400, 400);
@@ -53,16 +52,6 @@ const isResizing = ref(false)
 // Управление боковым меню
 const isMenuExpanded = ref(false)
 const activeMenuItem = ref<string | null>(null)
-
-// AI chat
-  const showAIChat = ref(false)
-
-// Добавить функцию для обработки сообщений от AI
-function handleAIMessage(message: string) {
-  addMessage(`🤖 AI запрос: ${message}`)
-  // Здесь можно добавить логику для влияния на скетч через AI
-  // Например, модификация кода на основе сообщения
-}
 
 // Обработчики для изменения размера консоли
 function startResize(e: MouseEvent) {
@@ -425,12 +414,6 @@ function setActiveMenuItem(item: string | null) {
         <span class="menu-text" v-show="isMenuExpanded">Формат</span>
       </button>
       
-      <button @click="showAIChat = true" class="menu-item" title="Deepseek AI помощник"
-              @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">🤖</span>
-        <span class="menu-text" v-show="isMenuExpanded">AI помощник</span>
-      </button>
-
       <!-- Кнопки изменения шрифта -->
       <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
               @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
@@ -577,14 +560,6 @@ function setActiveMenuItem(item: string | null) {
             </div>
           </div>
         </div>
-
-        <!-- Добавить компонент AI чата -->
-        <AIChat 
-          v-model:is-visible="showAIChat"
-          :theme="theme"
-          @send-message="handleAIMessage"
-        />
-
       </div>
     </div>
   </div>
@@ -609,8 +584,7 @@ function getTooltipText(item: string): string {
     'console-clear': 'Очистить консоль',
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
     'theme': 'Сменить тему',
-    'shortcuts': 'Горячие клавиши',
-    'ai': 'Deepseek AI помощник'
+    'shortcuts': 'Горячие клавиши'
   }
   return tooltips[item] || item
 }
