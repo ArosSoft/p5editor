@@ -55,7 +55,20 @@ const isMenuExpanded = ref(false)
 const activeMenuItem = ref<string | null>(null)
 
 // AI chat
-  const showAIChat = ref(false)
+const showAIChat = ref(false)
+
+// Название скетча
+const sketchName = ref('Мой первый скетч')
+
+// Координаты мыши
+const mouseX = ref(0)
+const mouseY = ref(0)
+
+// Функция для обновления координат мыши
+function updateMouseCoordinates(x: number, y: number) {
+  mouseX.value = Math.round(x)
+  mouseY.value = Math.round(y)
+}
 
 // Добавить функцию для обработки сообщений от AI
 function handleAIMessage(message: string) {
@@ -199,10 +212,19 @@ function stopSketch() {
   canvasRef.value?.stop()
 }
 
+// ОБНОВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ
 function saveSketch() {
+  // Очищаем название от недопустимых символов для имени файла
+  const cleanName = sketchName.value
+    .replace(/[^a-zа-яё0-9\s_-]/gi, '') // Удаляем спецсимволы
+    .replace(/\s+/g, '_') // Заменяем пробелы на подчеркивания
+    .toLowerCase() || 'sketch' // Если имя пустое, используем 'sketch'
+  
+  const fileName = `${cleanName}.js`
+  
   const blob = new Blob([code.value], { type: 'text/javascript;charset=utf-8' })
-  saveAs(blob, `sketch_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.js`)
-  addMessage('💾 Скетч сохранён')
+  saveAs(blob, fileName)
+  addMessage(`💾 Скетч сохранён как "${fileName}"`)
 }
 
 function loadSketch() {
@@ -212,13 +234,17 @@ function loadSketch() {
 function handleFileUpload(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) {
+    const file = target.files[0]
     const reader = new FileReader()
     reader.onload = (e) => {
       saveToHistory()
       code.value = e.target?.result as string
-      addMessage(`📂 Скетч загружен: ${target.files?.[0].name}`)
+      // Извлекаем имя файла без расширения для поля названия
+      const fileName = file.name.replace('.js', '').replace(/_/g, ' ')
+      sketchName.value = fileName
+      addMessage(`📂 Скетч загружен: ${file.name}`)
     }
-    reader.readAsText(target.files[0])
+    reader.readAsText(file)
   }
 }
 
@@ -378,145 +404,164 @@ function setActiveMenuItem(item: string | null) {
       <div class="bg-grid"></div>
     </div>
 
-    <!-- Боковое меню -->
-    <div class="side-menu" 
-         :class="{ 'expanded': isMenuExpanded }"
-         @mouseenter="toggleMenuExpand"
-         @mouseleave="toggleMenuExpand">
-      
-      <!-- Логотип (уменьшенный) -->
-      <div class="menu-logo">
-        <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
-          <path d="M12 2L2 7v10l10 5 10-5V7l-10-5z" fill="#646cff" stroke="currentColor" stroke-width="1"/>
-          <path d="M12 12l4-2v4l-4 2-4-2v-4l4 2z" fill="#ffffff" opacity="0.8"/>
-          <circle cx="12" cy="12" r="2" fill="#ff6b6b"/>
-        </svg>
-        <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
+    <!-- Верхняя панель (шапка сайта) -->
+    <header class="top-bar" :class="`theme-${theme}`">
+      <div class="top-bar-left">
+        <button @click="startSketch" class="top-btn" title="Запустить скетч (Ctrl+Enter)">
+          <span class="btn-icon">▶</span>
+          <span class="btn-text">Старт</span>
+        </button>
+        <button @click="stopSketch" class="top-btn" title="Остановить скетч">
+          <span class="btn-icon">■</span>
+          <span class="btn-text">Стоп</span>
+        </button>
+        <button @click="formatCode" class="top-btn" title="Форматировать код">
+          <span class="btn-icon">✨</span>
+          <span class="btn-text">Форматировать</span>
+        </button>
+        
+        <div class="sketch-name-wrapper">
+          <input 
+            type="text" 
+            class="sketch-name-input" 
+            placeholder="Название скетча" 
+            v-model="sketchName"
+          />
+        </div>
+
+        <button @click="toggleExamples" class="top-btn examples-btn" :class="{ 'active': showExamples }" title="Учебник по примерам">
+          <span class="btn-icon">📚</span>
+          <span class="btn-text">Учебник по примерам</span>
+        </button>
       </div>
 
-      <!-- Основные кнопки в нужном порядке -->
-      <button @click="startSketch" class="menu-item" title="Запустить скетч (Ctrl+Enter)"
-              @mouseenter="setActiveMenuItem('start')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">▶</span>
-        <span class="menu-text" v-show="isMenuExpanded">Старт</span>
-      </button>
-      
-      <button @click="stopSketch" class="menu-item" title="Остановить скетч"
-              @mouseenter="setActiveMenuItem('stop')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">■</span>
-        <span class="menu-text" v-show="isMenuExpanded">Стоп</span>
-      </button>
-      
-      <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
-              @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">💾</span>
-        <span class="menu-text" v-show="isMenuExpanded">Сохранить</span>
-      </button>
-      
-      <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
-              @mouseenter="setActiveMenuItem('load')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">📂</span>
-        <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
-      </button>
-      
-      <button @click="formatCode" class="menu-item" title="Форматировать код"
-              @mouseenter="setActiveMenuItem('format')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">✨</span>
-        <span class="menu-text" v-show="isMenuExpanded">Формат</span>
-      </button>
-      
-      <button @click="showAIChat = true" class="menu-item" title="Deepseek AI помощник"
-              @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">🤖</span>
-        <span class="menu-text" v-show="isMenuExpanded">AI помощник</span>
-      </button>
-
-      <!-- Кнопки изменения шрифта -->
-      <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
-              @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">+</span>
-        <span class="menu-text" v-show="isMenuExpanded">Увеличить</span>
-      </button>
-      
-      <button @click="decreaseFontSize" class="menu-item" title="Уменьшить шрифт"
-              @mouseenter="setActiveMenuItem('font-down')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">−</span>
-        <span class="menu-text" v-show="isMenuExpanded">Уменьшить</span>
-      </button>
-
-      <!-- Остальные кнопки -->
-      <button @click="undo" class="menu-item" title="Отмена (Ctrl+Z)"
-              @mouseenter="setActiveMenuItem('undo')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">↩️</span>
-        <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
-      </button>
-      
-      <button @click="redo" class="menu-item" title="Повтор (Ctrl+Y)"
-              @mouseenter="setActiveMenuItem('redo')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">↪️</span>
-        <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
-      </button>
-      
-      <button @click="copyToClipboard" class="menu-item" title="Копировать код"
-              @mouseenter="setActiveMenuItem('copy')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">📋</span>
-        <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
-      </button>
-      
-      <button @click="resetToExample" class="menu-item" title="Восстановить пример"
-              @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">🔄</span>
-        <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
-      </button>
-      
-      <button @click="toggleExamples" class="menu-item" :class="{ 'active': showExamples }" title="Примеры графики"
-              @mouseenter="setActiveMenuItem('examples')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">🎨</span>
-        <span class="menu-text" v-show="isMenuExpanded">Примеры</span>
-      </button>
-      
-      <button @click="clearConsole" class="menu-item" title="Очистить консоль"
-              @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">🧹</span>
-        <span class="menu-text" v-show="isMenuExpanded">Очистить консоль</span>
-      </button>
-      
-      <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
-              @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">{{ isConsoleVisible ? '📋' : '📭' }}</span>
-        <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
-      </button>
-      
-      <button @click="toggleTheme" class="menu-item" :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
-              @mouseenter="setActiveMenuItem('theme')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
-        <span class="menu-text" v-show="isMenuExpanded">{{ theme === 'dark' ? 'Тёмная' : 'Светлая' }}</span>
-      </button>
-      
-      <button @click="showShortcuts" class="menu-item" title="Горячие клавиши"
-              @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
-        <span class="menu-icon">⌨️</span>
-        <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
-      </button>
-
-      <!-- Всплывающая подсказка для узкого меню -->
-      <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
-        {{ getTooltipText(activeMenuItem) }}
+      <div class="top-bar-right">
+        <button class="top-btn auth-btn" title="Войти">
+          <span class="btn-icon">🔑</span>
+          <span class="btn-text">Войти</span>
+        </button>
+        <button class="top-btn auth-btn register-btn" title="Регистрация">
+          <span class="btn-icon">📝</span>
+          <span class="btn-text">Регистрация</span>
+        </button>
       </div>
-    </div>
+    </header>
 
-    <!-- Основной контент -->
+    <!-- Основной контент (под верхней панелью) -->
     <div class="main-content">
+      <!-- Боковое меню -->
+      <div class="side-menu" 
+           :class="{ 'expanded': isMenuExpanded }"
+           @mouseenter="toggleMenuExpand"
+           @mouseleave="toggleMenuExpand">
+        
+        <!-- Логотип -->
+        <div class="menu-logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
+            <path d="M12 2L2 7v10l10 5 10-5V7l-10-5z" fill="#646cff" stroke="currentColor" stroke-width="1"/>
+            <path d="M12 12l4-2v4l-4 2-4-2v-4l4 2z" fill="#ffffff" opacity="0.8"/>
+            <circle cx="12" cy="12" r="2" fill="#ff6b6b"/>
+          </svg>
+          <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
+        </div>
+
+        <!-- Основные кнопки бокового меню -->
+        <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
+                @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">💾</span>
+          <span class="menu-text" v-show="isMenuExpanded">Сохранить</span>
+        </button>
+        
+        <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
+                @mouseenter="setActiveMenuItem('load')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">📂</span>
+          <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
+        </button>
+        
+        <button @click="showAIChat = true" class="menu-item" title="Deepseek AI помощник"
+                @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">🤖</span>
+          <span class="menu-text" v-show="isMenuExpanded">AI помощник</span>
+        </button>
+
+        <!-- Кнопки изменения шрифта -->
+        <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
+                @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">+</span>
+          <span class="menu-text" v-show="isMenuExpanded">Увеличить</span>
+        </button>
+        
+        <button @click="decreaseFontSize" class="menu-item" title="Уменьшить шрифт"
+                @mouseenter="setActiveMenuItem('font-down')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">−</span>
+          <span class="menu-text" v-show="isMenuExpanded">Уменьшить</span>
+        </button>
+
+        <!-- Остальные кнопки -->
+        <button @click="undo" class="menu-item" title="Отмена (Ctrl+Z)"
+                @mouseenter="setActiveMenuItem('undo')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">↩️</span>
+          <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
+        </button>
+        
+        <button @click="redo" class="menu-item" title="Повтор (Ctrl+Y)"
+                @mouseenter="setActiveMenuItem('redo')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">↪️</span>
+          <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
+        </button>
+        
+        <button @click="copyToClipboard" class="menu-item" title="Копировать код"
+                @mouseenter="setActiveMenuItem('copy')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">📋</span>
+          <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
+        </button>
+        
+        <button @click="resetToExample" class="menu-item" title="Восстановить пример"
+                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">🔄</span>
+          <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
+        </button>
+        
+        <button @click="clearConsole" class="menu-item" title="Очистить консоль"
+                @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">🧹</span>
+          <span class="menu-text" v-show="isMenuExpanded">Очистить консоль</span>
+        </button>
+        
+        <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
+                @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">{{ isConsoleVisible ? '📋' : '📭' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
+        </button>
+        
+        <button @click="toggleTheme" class="menu-item" :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
+                @mouseenter="setActiveMenuItem('theme')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{ theme === 'dark' ? 'Тёмная' : 'Светлая' }}</span>
+        </button>
+        
+        <button @click="showShortcuts" class="menu-item" title="Горячие клавиши"
+                @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">⌨️</span>
+          <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
+        </button>
+
+        <!-- Всплывающая подсказка для узкого меню -->
+        <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
+          {{ getTooltipText(activeMenuItem) }}
+        </div>
+      </div>
+
       <div class="main">
         <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
         
         <!-- Панель с примерами -->
         <ExamplesPanel 
-  v-if="showExamples" 
-  :theme="theme"
-  @load-example="loadExample"
-  @close="toggleExamples"
-/>
+          v-if="showExamples" 
+          :theme="theme"
+          @load-example="loadExample"
+          @close="toggleExamples"
+        />
         
         <!-- Левая панель: редактор + консоль -->
         <div class="editor-panel">
@@ -569,22 +614,33 @@ function setActiveMenuItem(item: string | null) {
         <div class="canvas-panel">
           <div class="canvas-container">
             <div class="canvas-header">
-              <span class="canvas-title">Холст p5.js</span>
-              <div class="canvas-indicator"></div>
-            </div>
+                <span class="canvas-title">Холст p5.js</span>
+                <div class="mouse-coordinates">
+                  <span class="coord-item">X = {{ mouseX }}</span>
+                  <span class="coord-separator">/</span>
+                  <span class="coord-item">Y = {{ mouseY }}</span>
+                </div>
+                <div class="canvas-indicator"></div>
+              </div>
             <div class="canvas-content">
-              <P5Canvas ref="canvasRef" :add-message="addMessage" :theme="theme" />
+              <P5Canvas 
+                ref="canvasRef" 
+                :add-message="addMessage" 
+                :theme="theme"
+                @mouse-move="updateMouseCoordinates"
+              />
             </div>
           </div>
         </div>
 
-        <!-- Добавить компонент AI чата -->
+        <!-- Компонент AI чата -->
         <AIChat 
           v-model:is-visible="showAIChat"
           :theme="theme"
+          :code="code"
           @send-message="handleAIMessage"
+          @suggest-code="(newCode) => { code = newCode; addMessage('🤖 AI предложил код'); }"
         />
-
       </div>
     </div>
   </div>
@@ -594,23 +650,19 @@ function setActiveMenuItem(item: string | null) {
 // Функция для получения текста подсказки
 function getTooltipText(item: string): string {
   const tooltips: Record<string, string> = {
-    'start': 'Запустить скетч (Ctrl+Enter)',
-    'stop': 'Остановить скетч',
     'save': 'Сохранить скетч (Ctrl+S)',
     'load': 'Загрузить скетч',
-    'format': 'Форматировать код',
+    'ai': 'Deepseek AI помощник',
     'font-up': 'Увеличить шрифт',
     'font-down': 'Уменьшить шрифт',
     'undo': 'Отмена (Ctrl+Z)',
     'redo': 'Повтор (Ctrl+Y)',
     'copy': 'Копировать код',
     'reset': 'Восстановить пример',
-    'examples': 'Примеры графики',
     'console-clear': 'Очистить консоль',
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
     'theme': 'Сменить тему',
-    'shortcuts': 'Горячие клавиши',
-    'ai': 'Deepseek AI помощник'
+    'shortcuts': 'Горячие клавиши'
   }
   return tooltips[item] || item
 }
@@ -625,6 +677,7 @@ function getTooltipText(item: string): string {
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   transition: background-color 0.3s, color 0.3s;
   position: relative;
@@ -703,10 +756,138 @@ function getTooltipText(item: string): string {
   color: #2c3e50;
 }
 
-/* Боковое меню */
+/* Верхняя панель */
+.top-bar {
+  height: 60px;
+  background: rgba(30, 30, 30, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #404040;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 100;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.top-bar.theme-light {
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom-color: #e0e0e0;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  cursor: pointer;
+  border-radius: 20px;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.top-btn:hover {
+  background: rgba(100, 108, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.top-btn.active {
+  background: rgba(100, 108, 255, 0.4);
+  border-left: 2px solid #646cff;
+}
+
+.top-btn .btn-icon {
+  font-size: 16px;
+}
+
+.top-btn .btn-text {
+  font-size: 13px;
+}
+
+.theme-light .top-btn {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.theme-light .top-btn:hover {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+/* Поле для названия скетча */
+.sketch-name-wrapper {
+  margin: 0 10px;
+}
+
+.sketch-name-input {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  font-size: 14px;
+  min-width: 200px;
+  transition: all 0.2s;
+}
+
+.sketch-name-input:focus {
+  outline: none;
+  border-color: #646cff;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.theme-light .sketch-name-input {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #333;
+}
+
+.theme-light .sketch-name-input:focus {
+  background: white;
+  border-color: #646cff;
+}
+
+/* Кнопки авторизации */
+.auth-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.auth-btn.register-btn {
+  background: linear-gradient(135deg, #646cff, #9089fc);
+  color: white;
+  border: none;
+}
+
+.theme-light .auth-btn {
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.theme-light .auth-btn.register-btn {
+  color: white;
+}
+
+/* Боковое меню (ВОССТАНОВЛЕНО) */
 .side-menu {
   width: 60px;
-  height: 100vh;
+  height: 100%;
   background: rgba(30, 30, 30, 0.95);
   backdrop-filter: blur(10px);
   border-right: 1px solid #404040;
@@ -716,10 +897,11 @@ function getTooltipText(item: string): string {
   padding: 12px 0;
   gap: 2px;
   transition: width 0.3s ease;
-  z-index: 100;
+  z-index: 90;
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
+  flex-shrink: 0;
 }
 
 .side-menu.expanded {
@@ -754,12 +936,6 @@ function getTooltipText(item: string): string {
   background-clip: text;
 }
 
-/* Убираем все разделители */
-.menu-divider {
-  display: none;
-}
-
-/* Уменьшенные кнопки */
 .menu-item {
   display: flex;
   align-items: center;
@@ -823,8 +999,9 @@ function getTooltipText(item: string): string {
 .main-content {
   flex: 1;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .main {
@@ -832,7 +1009,6 @@ function getTooltipText(item: string): string {
   flex: 1;
   overflow: hidden;
   position: relative;
-  z-index: 1;
 }
 
 /* Левая панель (редактор + консоль) - используем CSS переменную */
@@ -1028,10 +1204,6 @@ function getTooltipText(item: string): string {
   to { opacity: 1; transform: translateX(0); }
 }
 
-.menu-item {
-  animation: slideIn 0.3s ease;
-}
-
 /* Скроллбары */
 ::-webkit-scrollbar {
   width: 6px;
@@ -1059,4 +1231,35 @@ function getTooltipText(item: string): string {
 .side-menu::-webkit-scrollbar-thumb {
   background: rgba(100, 108, 255, 0.3);
 }
+
+/* Координаты мыши */
+.mouse-coordinates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 10px;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app.theme-light .mouse-coordinates {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.coord-item {
+  color: #646cff;
+  font-weight: 600;
+}
+
+.coord-separator {
+  opacity: 0.5;
+  font-size: 14px;
+}
+
 </style>

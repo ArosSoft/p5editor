@@ -6,6 +6,11 @@ const props = defineProps<{
   theme?: 'dark' | 'light'
 }>()
 
+// Добавляем emit для передачи координат мыши
+const emit = defineEmits<{
+  (e: 'mouseMove', x: number, y: number): void
+}>()
+
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 let currentIframeSrc: string | null = null
 let currentCode: string = ''
@@ -32,13 +37,69 @@ function start(userCode: string) {
   const textColor = isDark ? '#ffffff' : '#333333'
   const gridColor = isDark ? 'rgba(100, 108, 255, 0.1)' : 'rgba(100, 108, 255, 0.05)'
 
+  // Код для отслеживания мыши через события DOM (3-й вариант)
+  const mouseTrackerCode = `
+    // Функция для отправки координат мыши
+    function sendMouseCoordinates(x, y) {
+      window.parent.postMessage({
+        type: 'mouseMove',
+        x: Math.round(x),
+        y: Math.round(y)
+      }, '*');
+    }
+
+    // Добавляем слушатель событий мыши на canvas после его создания
+    function setupMouseTracking() {
+      // Ищем canvas на странице
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        // Удаляем старый слушатель, если был
+        canvas.removeEventListener('mousemove', window._mouseMoveHandler);
+        
+        // Создаем новый обработчик
+        window._mouseMoveHandler = function(e) {
+          const rect = canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          
+          // Проверяем, что координаты в пределах canvas
+          if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+            sendMouseCoordinates(x, y);
+          }
+        };
+        
+        // Добавляем слушатель
+        canvas.addEventListener('mousemove', window._mouseMoveHandler);
+      }
+    }
+
+    // Запускаем отслеживание после загрузки страницы
+    window.addEventListener('load', function() {
+      // Ждем немного, чтобы canvas точно создался
+      setTimeout(setupMouseTracking, 100);
+    });
+
+    // Также запускаем отслеживание при каждом вызове draw (если p5.js пересоздает canvas)
+    const originalDraw = window.draw;
+    window.draw = function() {
+      if (originalDraw) {
+        originalDraw();
+      }
+      // Проверяем, есть ли canvas и слушатель
+      const canvas = document.querySelector('canvas');
+      if (canvas && !window._mouseMoveHandler) {
+        setupMouseTracking();
+      }
+    };
+  `
+
   const htmlContent = [
     '<!DOCTYPE html>',
     '<html lang="ru">',
     '<head>',
     '  <meta charset="utf-8" />',
     '  <title>p5.js Sketch</title>',
-    '  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>',
+    '  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js"><\/script>',
     '  <style>',
     '    body {',
     '      margin: 0;',
@@ -85,6 +146,9 @@ function start(userCode: string) {
     '      return true;',
     '    };',
     '',
+    '    // Добавляем код отслеживания мыши',
+    '    ' + mouseTrackerCode,
+    '',
     '    try {',
     userCode,
     '    } catch (e) {',
@@ -128,12 +192,18 @@ onMounted(() => {
         props.addMessage(data.message)
       } else if (data.type === 'warn') {
         props.addMessage(`Предупреждение: ${data.message}`)
+      } else if (data.type === 'mouseMove') {
+        // Передаём координаты мыши в родительский компонент
+        emit('mouseMove', data.x, data.y)
       }
     }
   }
 
   window.addEventListener('message', handler)
-  onUnmounted(() => window.removeEventListener('message', handler))
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', handler)
 })
 </script>
 
