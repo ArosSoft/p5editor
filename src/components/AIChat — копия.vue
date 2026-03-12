@@ -178,13 +178,6 @@ function handleKeyDown(e: KeyboardEvent) {
     sendMessage()
   }
 }
-
-function onDrop(event: DragEvent) {
-  event.preventDefault()
-  const text = event.dataTransfer?.getData('text/plain')
-  if (text) inputMessage.value = text
-}
-
 </script>
 
 <template>
@@ -269,7 +262,7 @@ function onDrop(event: DragEvent) {
           </div>
 
           <!-- Поле ввода (без кнопок под ним) -->
-          <div class="chat-input-area" @dragover.prevent @drop="onDrop">
+          <div class="chat-input-area">
             <textarea
               v-model="inputMessage"
               @keydown="handleKeyDown"

@@ -80,13 +80,6 @@ async function loadSteps(example: Example) {
         { title: 'Шаг 3: Код', file: 'step3.txt' }
       ]
     }
-    
-    // Добавляем шаг "Демо" в конец списка
-    steps.value.push({
-      title: 'Демо',
-      file: 'sketch.js'
-    })
-    
     // Preload descriptions for drag & drop
     await Promise.all(steps.value.map(step => loadStepDescription(step, false)))
   } catch (e) {
@@ -98,32 +91,6 @@ async function loadSteps(example: Example) {
 // Load a single step's description, optionally switch view
 async function loadStepDescription(step: Step, show = true) {
   if (!selectedExample.value) return
-  
-  // Если это шаг "Демо", загружаем код и эмитим событие
-  if (step.title === 'Демо' && step.file === 'sketch.js') {
-    try {
-      const response = await fetch(`/examples/${selectedExample.value.id}/${step.file}`)
-      const code = await response.text()
-      
-      // Кэшируем содержимое
-      stepContentsMap.value.set(step.file, code)
-      
-      if (show) {
-        // Показываем описание шага
-        currentStep.value = step
-        stepContent.value = code
-        view.value = 'description'
-        
-        // Также загружаем код в редактор
-        emit('loadExample', code)
-      }
-      return code
-    } catch (e) {
-      console.error('Failed to load demo code', e)
-      return 'Не удалось загрузить демо-код.'
-    }
-  }
-  
   // If already cached, use it
   if (stepContentsMap.value.has(step.file)) {
     if (show) {
@@ -133,7 +100,6 @@ async function loadStepDescription(step: Step, show = true) {
     }
     return stepContentsMap.value.get(step.file)
   }
-  
   try {
     const response = await fetch(`/examples/${selectedExample.value.id}/${step.file}`)
     const text = await response.text()
@@ -268,16 +234,15 @@ function closePanel() {
       </div>
       <div v-else v-for="step in steps" :key="step.file" class="step-item">
         <div class="step-content" @click="loadStepDescription(step)">
-          <span class="step-icon">{{ step.title === 'Демо' ? '🎮' : '📘' }}</span>
+          <span class="step-icon">📘</span>
           <span class="step-title">{{ step.title }}</span>
-          <span v-if="step.title === 'Демо'" class="demo-badge">загрузит код</span>
         </div>
         <!-- Draggable icon -->
         <span 
           class="step-drag-icon" 
           draggable="true"
           @dragstart="onDragStart($event, step)"
-          :title="step.title === 'Демо' ? 'Перетащи код в AI чат' : 'Перетащи описание в AI чат'"
+          title="Перетащи в AI чат"
         >📄</span>
       </div>
     </div>
@@ -291,8 +256,8 @@ function closePanel() {
           class="drag-description-icon" 
           draggable="true"
           @dragstart="onDragStart($event, currentStep!)"
-          :title="currentStep?.title === 'Демо' ? 'Перетащи код в AI чат' : 'Перетащи описание в AI чат'"
-        >{{ currentStep?.title === 'Демо' ? '🎮 Перетащи код в AI чат' : '📄 Перетащи описание в AI чат' }}</span>
+          title="Перетащи в AI чат"
+        >📄 Перетащи описание в AI чат</span>
       </div>
     </div>
 
@@ -313,7 +278,7 @@ function closePanel() {
   border-right: 1px solid #404040;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: hidden; /* Важно: скрываем переполнение на уровне панели */
   animation: slideIn 0.3s ease;
 }
 
@@ -328,7 +293,7 @@ function closePanel() {
   justify-content: space-between;
   padding: 15px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
+  flex-shrink: 0; /* Запрещаем сжиматься */
 }
 
 .theme-light .panel-header {
@@ -410,7 +375,7 @@ function closePanel() {
   display: flex;
   gap: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
+  flex-shrink: 0; /* Запрещаем сжиматься */
 }
 
 .search-input {
@@ -483,12 +448,13 @@ function closePanel() {
   margin-top: 10px;
 }
 
+/* Основные контейнеры для скролла */
 .examples-list,
 .steps-list,
 .step-description {
   flex: 1;
   overflow-y: auto;
-  min-height: 0;
+  min-height: 0; /* Критически важно для flex-контейнера */
   height: 100%;
   position: relative;
 }
@@ -514,6 +480,7 @@ function closePanel() {
   gap: 25px;
 }
 
+/* Контейнер для контента описания */
 .description-content {
   font-size: 15px;
   line-height: 1.7;
@@ -529,6 +496,7 @@ function closePanel() {
   color: #333;
 }
 
+/* Фикс для footer в описании */
 .description-footer {
   border-top: 1px solid rgba(255,255,255,0.1);
   padding-top: 20px;
@@ -540,6 +508,7 @@ function closePanel() {
   border-top-color: rgba(0,0,0,0.1);
 }
 
+/* Карточки примеров */
 .example-card {
   display: flex;
   gap: 16px;
@@ -659,6 +628,7 @@ function closePanel() {
   color: rgba(0, 0, 0, 0.7);
 }
 
+/* Элементы шагов */
 .step-item {
   display: flex;
   align-items: center;
@@ -703,16 +673,6 @@ function closePanel() {
 
 .theme-light .step-title {
   color: #333;
-}
-
-.demo-badge {
-  font-size: 10px;
-  padding: 2px 8px;
-  background: #646cff;
-  color: white;
-  border-radius: 12px;
-  text-transform: uppercase;
-  margin-left: 8px;
 }
 
 .step-drag-icon {
@@ -769,7 +729,7 @@ function closePanel() {
   gap: 10px;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
-  flex-shrink: 0;
+  flex-shrink: 0; /* Запрещаем сжиматься */
 }
 
 .theme-light .panel-footer {
@@ -785,6 +745,7 @@ function closePanel() {
   flex: 1;
 }
 
+/* Анимации */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -800,6 +761,7 @@ function closePanel() {
   }
 }
 
+/* Скроллбары - единые правила */
 .examples-list::-webkit-scrollbar,
 .steps-list::-webkit-scrollbar,
 .step-description::-webkit-scrollbar,
