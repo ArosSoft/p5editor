@@ -498,8 +498,7 @@ function goToNextStep() {
 
 <style scoped>
 .panel {
-  /* Убрана фиксированная ширина — теперь растягивается по родителю */
-  width: 100%;
+  width: 420px;
   height: 100%;
   background: #1a1a2e;
   color: #e0e0e0;
@@ -509,6 +508,7 @@ function goToNextStep() {
   font-size: 14px;
   position: relative;
   z-index: 100;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
 }
 .panel.light { background: #f5f5f7; color: #1a1a2e; }
 

@@ -40,20 +40,11 @@ const isDragging = ref(false)
 const startY = ref(0)
 const startHeight = ref(150)
 
-// Минимальные ширины панелей (в пикселях)
-const MIN_EXAMPLES_WIDTH = 250
-const MIN_EDITOR_WIDTH = 300
-const MIN_CANVAS_WIDTH = 410
+// Ширина холста фиксирована минимум 410px
+const canvasMinWidth = 410
 
-// Ширины панелей в пикселях (будут рассчитаны при монтировании)
-const examplesWidth = ref(350)
-const canvasWidth = ref(MIN_CANVAS_WIDTH)
-
-// Состояние перетаскивания разделителей
-const draggingDivider = ref<'examples-editor' | 'editor-canvas' | null>(null)
-let dragStartX = 0
-let dragStartExamplesWidth = 0
-let dragStartCanvasWidth = 0
+// Управление шириной разделителя между примерами и редактором
+const editorExamplesDividerDragging = ref(false)
 
 // Управление боковым меню
 const isMenuExpanded = ref(false)
@@ -66,9 +57,6 @@ const sketchName = ref('Мой первый скетч')
 const mouseX = ref(0)
 const mouseY = ref(0)
 
-// Ref на main контейнер для расчётов
-const mainRef = ref<HTMLElement | null>(null)
-
 function updateMouseCoordinates(x: number, y: number) {
   mouseX.value = Math.round(x)
   mouseY.value = Math.round(y)
@@ -78,8 +66,8 @@ function handleAIMessage(message: string) {
   addMessage(`🤖 AI запрос: ${message}`)
 }
 
-// === Обработчики для изменения размера консоли ===
-function startConsoleResize(e: MouseEvent) {
+// Обработчики для изменения размера консоли
+function startResize(e: MouseEvent) {
   isDragging.value = true
   startY.value = e.clientY
   startHeight.value = consoleHeight.value
@@ -87,7 +75,7 @@ function startConsoleResize(e: MouseEvent) {
   document.body.style.userSelect = 'none'
 }
 
-function onConsoleResize(e: MouseEvent) {
+function onResize(e: MouseEvent) {
   if (!isDragging.value) return
   const deltaY = startY.value - e.clientY
   const newHeight = Math.min(
@@ -97,63 +85,10 @@ function onConsoleResize(e: MouseEvent) {
   consoleHeight.value = newHeight
 }
 
-function stopConsoleResize() {
-  if (!isDragging.value) return
+function stopResize() {
   isDragging.value = false
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-}
-
-// === Обработчики для перетаскивания вертикальных разделителей ===
-function startDividerDrag(divider: 'examples-editor' | 'editor-canvas', e: MouseEvent) {
-  draggingDivider.value = divider
-  dragStartX = e.clientX
-  dragStartExamplesWidth = examplesWidth.value
-  dragStartCanvasWidth = canvasWidth.value
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-
-  // Отключаем transition во время перетаскивания
-  document.documentElement.classList.add('resizing-panels')
-}
-
-function onDividerDrag(e: MouseEvent) {
-  if (!draggingDivider.value || !mainRef.value) return
-
-  const deltaX = e.clientX - dragStartX
-  const totalWidth = mainRef.value.clientWidth
-  // Учитываем ширину разделителей (8px каждый)
-  const dividerCount = showExamples.value ? 2 : 1
-  const availableWidth = totalWidth - dividerCount * 8
-
-  if (draggingDivider.value === 'examples-editor') {
-    // Двигаем разделитель между примерами и редактором
-    const newExamplesWidth = dragStartExamplesWidth + deltaX
-    const editorWidth = availableWidth - newExamplesWidth - canvasWidth.value
-
-    // Проверяем ограничения
-    if (newExamplesWidth >= MIN_EXAMPLES_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      examplesWidth.value = newExamplesWidth
-    }
-  } else if (draggingDivider.value === 'editor-canvas') {
-    // Двигаем разделитель между редактором и холстом
-    const newCanvasWidth = dragStartCanvasWidth - deltaX
-    const exW = showExamples.value ? examplesWidth.value : 0
-    const editorWidth = availableWidth - exW - newCanvasWidth
-
-    // Проверяем ограничения
-    if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      canvasWidth.value = newCanvasWidth
-    }
-  }
-}
-
-function stopDividerDrag() {
-  if (!draggingDivider.value) return
-  draggingDivider.value = null
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  document.documentElement.classList.remove('resizing-panels')
 }
 
 function toggleConsole() {
@@ -165,42 +100,24 @@ function toggleConsole() {
   }
 }
 
-// Вычисляемая ширина редактора
-const editorFlexStyle = computed(() => {
-  // Редактор занимает всё оставшееся пространство
-  return { flex: '1', minWidth: MIN_EDITOR_WIDTH + 'px' }
-})
-
 onMounted(() => {
-  window.addEventListener('mousemove', onGlobalMouseMove)
-  window.addEventListener('mouseup', onGlobalMouseUp)
+  window.addEventListener('mousemove', onResize)
+  window.addEventListener('mouseup', stopResize)
   window.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onGlobalMouseMove)
-  window.removeEventListener('mouseup', onGlobalMouseUp)
+  window.removeEventListener('mousemove', onResize)
+  window.removeEventListener('mouseup', stopResize)
   window.removeEventListener('keydown', handleKeyDown)
 })
-
-// Единый обработчик mousemove
-function onGlobalMouseMove(e: MouseEvent) {
-  onConsoleResize(e)
-  onDividerDrag(e)
-}
-
-// Единый обработчик mouseup
-function onGlobalMouseUp() {
-  stopConsoleResize()
-  stopDividerDrag()
-}
 
 function addMessage(msg: string) {
   messages.value.push(msg)
   setTimeout(() => {
-    const consoleEl = document.querySelector('.console-content')
-    if (consoleEl) {
-      consoleEl.scrollTop = consoleEl.scrollHeight
+    const console = document.querySelector('.console-content')
+    if (console) {
+      console.scrollTop = console.scrollHeight
     }
   }, 100)
 }
@@ -547,90 +464,66 @@ function setActiveMenuItem(item: string | null) {
         </div>
       </div>
 
-      <!-- Рабочая область -->
-      <div class="main" ref="mainRef">
+      <div class="main">
         <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
 
-        <!-- Панель примеров -->
-        <div
-          v-if="showExamples"
-          class="examples-panel-wrapper"
-          :style="{ width: examplesWidth + 'px' }"
-        >
-          <ExamplesPanel
-            :theme="theme"
-            @load-example="loadExample"
-            @close="toggleExamples"
-          />
-        </div>
-
-        <!-- Разделитель: примеры ↔ редактор -->
-        <div
-          v-if="showExamples"
-          class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'examples-editor' }"
-          @mousedown.prevent="startDividerDrag('examples-editor', $event)"
-        >
-          <div class="resize-handle-grip"></div>
-        </div>
-
-        <!-- Редактор + консоль -->
-        <div class="editor-panel" :style="editorFlexStyle">
-          <div class="editor-container" :class="`theme-${theme}`">
-            <div class="editor-header">
-              <div class="window-controls">
-                <span class="window-control red"></span>
-                <span class="window-control yellow"></span>
-                <span class="window-control green"></span>
-              </div>
-              <span class="editor-title">sketch.js</span>
-              <div class="editor-badge" v-if="history.length > 0">
-                {{ historyIndex + 1 }}/{{ history.length }}
-              </div>
-            </div>
-            <div class="editor-content">
-              <CodeEditor
-                v-model="code"
-                :font-size="fontSize"
-                :font-family="fontFamily"
-                :theme="theme"
-                @update:model-value="saveToHistory"
-              />
-            </div>
+        <!-- Левая зона: примеры + редактор (занимает всё кроме холста) -->
+        <div class="left-zone">
+          <!-- Панель примеров (встроена в левую зону) -->
+          <div class="examples-panel-wrapper" v-if="showExamples">
+            <ExamplesPanel
+              :theme="theme"
+              @load-example="loadExample"
+              @close="toggleExamples"
+            />
           </div>
 
-          <!-- Консоль под редактором -->
-          <div class="console-wrapper" :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }">
-            <div
-              class="console-resize-handle"
-              @mousedown.prevent="startConsoleResize"
-              :class="{ 'dragging': isDragging }"
-            >
-              <div class="handle-line"></div>
-              <div class="handle-line"></div>
-              <div class="handle-line"></div>
+          <!-- Редактор + консоль -->
+          <div class="editor-panel">
+            <div class="editor-container" :class="`theme-${theme}`">
+              <div class="editor-header">
+                <div class="window-controls">
+                  <span class="window-control red"></span>
+                  <span class="window-control yellow"></span>
+                  <span class="window-control green"></span>
+                </div>
+                <span class="editor-title">sketch.js</span>
+                <div class="editor-badge" v-if="history.length > 0">
+                  {{ historyIndex + 1 }}/{{ history.length }}
+                </div>
+              </div>
+              <div class="editor-content">
+                <CodeEditor
+                  v-model="code"
+                  :font-size="fontSize"
+                  :font-family="fontFamily"
+                  :theme="theme"
+                  @update:model-value="saveToHistory"
+                />
+              </div>
             </div>
-            <ConsoleOutput :messages="messages" :theme="theme" />
+
+            <!-- Консоль под редактором -->
+            <div class="console-wrapper" :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }">
+              <div
+                class="console-resize-handle"
+                @mousedown="startResize"
+                :class="{ 'dragging': isDragging }"
+              >
+                <div class="handle-line"></div>
+                <div class="handle-line"></div>
+                <div class="handle-line"></div>
+              </div>
+              <ConsoleOutput :messages="messages" :theme="theme" />
+            </div>
           </div>
         </div>
 
-        <!-- Разделитель: редактор ↔ холст -->
-        <div
-          class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'editor-canvas' }"
-          @mousedown.prevent="startDividerDrag('editor-canvas', $event)"
-        >
-          <div class="resize-handle-grip"></div>
-        </div>
-
-        <!-- Панель холста -->
-        <div
-          class="canvas-panel"
-          :style="{ width: canvasWidth + 'px' }"
-        >
+        <!-- Правая панель: холст (фиксированная минимальная ширина) -->
+        <div class="canvas-panel">
           <div class="canvas-container">
             <div class="canvas-header">
-              <span class="canvas-title">Холст p5.js</span>
+              <span class="canvas-title">��олст p5.js</span>
               <div class="mouse-coordinates">
                 <span class="coord-item">X = {{ mouseX }}</span>
                 <span class="coord-separator">/</span>
@@ -649,7 +542,7 @@ function setActiveMenuItem(item: string | null) {
           </div>
         </div>
 
-        <!-- AI чат -->
+        <!-- Компонент AI чата -->
         <AIChat
           v-model:is-visible="showAIChat"
           :theme="theme"
@@ -697,13 +590,6 @@ function getTooltipText(item: string): string {
   transition: background-color 0.3s, color 0.3s;
   position: relative;
   overflow: hidden;
-}
-
-/* Класс для отключения transition при перетаскивании */
-.resizing-panels .examples-panel-wrapper,
-.resizing-panels .editor-panel,
-.resizing-panels .canvas-panel {
-  transition: none !important;
 }
 
 /* Декоративные элементы фона */
@@ -1034,80 +920,59 @@ function getTooltipText(item: string): string {
 }
 
 /* ============================================
-   Панели с изменяемой шириной
+   НОВАЯ РАСКЛАДКА: left-zone + canvas-panel
+   Холст — минимум 410px, остальное — left-zone.
+   Внутри left-zone: примеры (50%) + редактор (50%)
    ============================================ */
 
-/* Панель примеров */
+.left-zone {
+  /* Занимает всё, что осталось за вычетом холста */
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Панель примеров — встроенная в left-zone */
 .examples-panel-wrapper {
-  height: 100%;
-  overflow: hidden;
-  flex-shrink: 0;
+  flex: 1;
   min-width: 250px;
+  max-width: 50%;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
 }
 
-/* Редактор занимает всё оставшееся пространство */
+.app.theme-light .examples-panel-wrapper {
+  border-right-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Редактор занимает оставшееся место в left-zone */
 .editor-panel {
+  flex: 1;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-/* Панель холста — фиксированная ширина, задаётся через style */
+/* Правая панель (холст) — фиксированная минимальная ширина 410px */
 .canvas-panel {
+  width: 410px;
+  min-width: 410px;
+  flex-shrink: 0;
   height: 100%;
   overflow: hidden;
-  flex-shrink: 0;
-  min-width: 410px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ============================================
-   Вертикальный разделитель (перетаскиваемый)
-   ============================================ */
-.resize-handle-vertical {
-  width: 8px;
-  height: 100%;
-  cursor: col-resize;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 15;
-  position: relative;
-  flex-shrink: 0;
-  transition: background-color 0.15s;
-}
-
-.resize-handle-vertical:hover,
-.resize-handle-vertical.resizing {
-  background: rgba(100, 108, 255, 0.15);
-}
-
-.resize-handle-grip {
-  width: 3px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-  transition: all 0.15s;
-}
-
-.resize-handle-vertical:hover .resize-handle-grip,
-.resize-handle-vertical.resizing .resize-handle-grip {
-  background: #646cff;
-  height: 60px;
-  width: 4px;
-  box-shadow: 0 0 8px rgba(100, 108, 255, 0.4);
-}
-
-.app.theme-light .resize-handle-grip {
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.app.theme-light .resize-handle-vertical:hover .resize-handle-grip,
-.app.theme-light .resize-handle-vertical.resizing .resize-handle-grip {
-  background: #646cff;
+.app.theme-light .canvas-panel {
+  border-left-color: rgba(0, 0, 0, 0.1);
 }
 
 /* Заголовки редактора и холста */

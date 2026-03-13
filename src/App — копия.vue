@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
 import P5Canvas from './components/P5Canvas.vue'
 import ConsoleOutput from './components/ConsoleOutput.vue'
@@ -17,69 +17,68 @@ function draw() {
   ellipse(mouseX, mouseY, 50, 50);
 }`)
 
+// Сохраняем оригинальный код для сброса
 const originalCode = ref(code.value)
 
 const messages = ref<string[]>([])
 const canvasRef = ref<InstanceType<typeof P5Canvas> | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
+// Управление видимостью панели с примерами
 const showExamples = ref(false)
 
+// Параметры шрифта
 const fontSize = ref(15)
 const fontFamily = ref('Consolas, Monaco, monospace')
 
+// Параметры темы
 type Theme = 'dark' | 'light'
 const theme = ref<Theme>('dark')
 
+// История изменений для Undo/Redo
 const history = ref<string[]>([])
 const historyIndex = ref(-1)
 
+// Управление консолью
 const consoleHeight = ref(150)
 const isConsoleVisible = ref(true)
 const isDragging = ref(false)
 const startY = ref(0)
 const startHeight = ref(150)
 
-// Минимальные ширины панелей (в пикселях)
-const MIN_EXAMPLES_WIDTH = 250
-const MIN_EDITOR_WIDTH = 300
-const MIN_CANVAS_WIDTH = 410
-
-// Ширины панелей в пикселях (будут рассчитаны при монтировании)
-const examplesWidth = ref(350)
-const canvasWidth = ref(MIN_CANVAS_WIDTH)
-
-// Состояние перетаскивания разделителей
-const draggingDivider = ref<'examples-editor' | 'editor-canvas' | null>(null)
-let dragStartX = 0
-let dragStartExamplesWidth = 0
-let dragStartCanvasWidth = 0
+// Управление шириной блока редактора
+const editorWidth = ref(50) // в процентах
+const isResizing = ref(false)
 
 // Управление боковым меню
 const isMenuExpanded = ref(false)
 const activeMenuItem = ref<string | null>(null)
 
+// AI chat
 const showAIChat = ref(false)
 
+// Название скетча
 const sketchName = ref('Мой первый скетч')
 
+// Координаты мыши
 const mouseX = ref(0)
 const mouseY = ref(0)
 
-// Ref на main контейнер для расчётов
-const mainRef = ref<HTMLElement | null>(null)
-
+// Функция для обновления координат мыши
 function updateMouseCoordinates(x: number, y: number) {
   mouseX.value = Math.round(x)
   mouseY.value = Math.round(y)
 }
 
+// Добавить функцию для обработки сообщений от AI
 function handleAIMessage(message: string) {
   addMessage(`🤖 AI запрос: ${message}`)
+  // Здесь можно добавить логику для влияния на скетч через AI
+  // Например, модификация кода на основе сообщения
 }
 
-// === Обработчики для изменения размера консоли ===
-function startConsoleResize(e: MouseEvent) {
+// Обработчики для изменения размера консоли
+function startResize(e: MouseEvent) {
   isDragging.value = true
   startY.value = e.clientY
   startHeight.value = consoleHeight.value
@@ -87,8 +86,9 @@ function startConsoleResize(e: MouseEvent) {
   document.body.style.userSelect = 'none'
 }
 
-function onConsoleResize(e: MouseEvent) {
+function onResize(e: MouseEvent) {
   if (!isDragging.value) return
+  
   const deltaY = startY.value - e.clientY
   const newHeight = Math.min(
     Math.max(50, startHeight.value + deltaY),
@@ -97,63 +97,62 @@ function onConsoleResize(e: MouseEvent) {
   consoleHeight.value = newHeight
 }
 
-function stopConsoleResize() {
-  if (!isDragging.value) return
+function stopResize() {
   isDragging.value = false
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }
 
-// === Обработчики для перетаскивания вертикальных разделителей ===
-function startDividerDrag(divider: 'examples-editor' | 'editor-canvas', e: MouseEvent) {
-  draggingDivider.value = divider
-  dragStartX = e.clientX
-  dragStartExamplesWidth = examplesWidth.value
-  dragStartCanvasWidth = canvasWidth.value
+// Обработчики для изменения ширины редактора - ОПТИМИЗИРОВАНО
+function startHorizontalResize(e: MouseEvent) {
+  isResizing.value = true
+  startX = e.clientX
+  startWidth = editorWidth.value
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
-
-  // Отключаем transition во время перетаскивания
-  document.documentElement.classList.add('resizing-panels')
+  
+  // Добавляем класс для отключения transition во время перетаскивания
+  const editorPanel = document.querySelector('.editor-panel') as HTMLElement
+  const canvasPanel = document.querySelector('.canvas-panel') as HTMLElement
+  if (editorPanel) editorPanel.style.transition = 'none'
+  if (canvasPanel) canvasPanel.style.transition = 'none'
 }
 
-function onDividerDrag(e: MouseEvent) {
-  if (!draggingDivider.value || !mainRef.value) return
+// Используем обычные переменные для более быстрого обновления
+let startX = 0
+let startWidth = 50
 
-  const deltaX = e.clientX - dragStartX
-  const totalWidth = mainRef.value.clientWidth
-  // Учитываем ширину разделителей (8px каждый)
-  const dividerCount = showExamples.value ? 2 : 1
-  const availableWidth = totalWidth - dividerCount * 8
-
-  if (draggingDivider.value === 'examples-editor') {
-    // Двигаем разделитель между примерами и редактором
-    const newExamplesWidth = dragStartExamplesWidth + deltaX
-    const editorWidth = availableWidth - newExamplesWidth - canvasWidth.value
-
-    // Проверяем ограничения
-    if (newExamplesWidth >= MIN_EXAMPLES_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      examplesWidth.value = newExamplesWidth
-    }
-  } else if (draggingDivider.value === 'editor-canvas') {
-    // Двигаем разделитель между редактором и холстом
-    const newCanvasWidth = dragStartCanvasWidth - deltaX
-    const exW = showExamples.value ? examplesWidth.value : 0
-    const editorWidth = availableWidth - exW - newCanvasWidth
-
-    // Проверяем ограничения
-    if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      canvasWidth.value = newCanvasWidth
-    }
-  }
+function onHorizontalResize(e: MouseEvent) {
+  if (!isResizing.value) return
+  
+  const mainContent = document.querySelector('.main-content') as HTMLElement
+  if (!mainContent) return
+  
+  // Прямое обновление DOM для плавности
+  const deltaX = e.clientX - startX
+  const containerWidth = mainContent.clientWidth
+  const newWidth = Math.min(
+    Math.max(30, startWidth + (deltaX / containerWidth) * 100),
+    70
+  )
+  
+  // Обновляем CSS переменную напрямую
+  document.documentElement.style.setProperty('--editor-width', newWidth + '%')
+  
+  // Обновляем ref только после окончания перетаскивания
+  editorWidth.value = newWidth
 }
 
-function stopDividerDrag() {
-  if (!draggingDivider.value) return
-  draggingDivider.value = null
+function stopHorizontalResize() {
+  isResizing.value = false
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-  document.documentElement.classList.remove('resizing-panels')
+  
+  // Возвращаем transition
+  const editorPanel = document.querySelector('.editor-panel') as HTMLElement
+  const canvasPanel = document.querySelector('.canvas-panel') as HTMLElement
+  if (editorPanel) editorPanel.style.transition = ''
+  if (canvasPanel) canvasPanel.style.transition = ''
 }
 
 function toggleConsole() {
@@ -165,42 +164,31 @@ function toggleConsole() {
   }
 }
 
-// Вычисляемая ширина редактора
-const editorFlexStyle = computed(() => {
-  // Редактор занимает всё оставшееся пространство
-  return { flex: '1', minWidth: MIN_EDITOR_WIDTH + 'px' }
-})
-
 onMounted(() => {
-  window.addEventListener('mousemove', onGlobalMouseMove)
-  window.addEventListener('mouseup', onGlobalMouseUp)
+  window.addEventListener('mousemove', onResize)
+  window.addEventListener('mouseup', stopResize)
+  window.addEventListener('mousemove', onHorizontalResize)
+  window.addEventListener('mouseup', stopHorizontalResize)
   window.addEventListener('keydown', handleKeyDown)
+  
+  // Устанавливаем начальное значение CSS переменной
+  document.documentElement.style.setProperty('--editor-width', editorWidth.value + '%')
 })
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onGlobalMouseMove)
-  window.removeEventListener('mouseup', onGlobalMouseUp)
+  window.removeEventListener('mousemove', onResize)
+  window.removeEventListener('mouseup', stopResize)
+  window.removeEventListener('mousemove', onHorizontalResize)
+  window.removeEventListener('mouseup', stopHorizontalResize)
   window.removeEventListener('keydown', handleKeyDown)
 })
-
-// Единый обработчик mousemove
-function onGlobalMouseMove(e: MouseEvent) {
-  onConsoleResize(e)
-  onDividerDrag(e)
-}
-
-// Единый обработчик mouseup
-function onGlobalMouseUp() {
-  stopConsoleResize()
-  stopDividerDrag()
-}
 
 function addMessage(msg: string) {
   messages.value.push(msg)
   setTimeout(() => {
-    const consoleEl = document.querySelector('.console-content')
-    if (consoleEl) {
-      consoleEl.scrollTop = consoleEl.scrollHeight
+    const console = document.querySelector('.console-content')
+    if (console) {
+      console.scrollTop = console.scrollHeight
     }
   }, 100)
 }
@@ -224,12 +212,16 @@ function stopSketch() {
   canvasRef.value?.stop()
 }
 
+// ОБНОВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ
 function saveSketch() {
+  // Очищаем название от недопустимых символов для имени файла
   const cleanName = sketchName.value
-    .replace(/[^a-zа-яё0-9\s_-]/gi, '')
-    .replace(/\s+/g, '_')
-    .toLowerCase() || 'sketch'
+    .replace(/[^a-zа-яё0-9\s_-]/gi, '') // Удаляем спецсимволы
+    .replace(/\s+/g, '_') // Заменяем пробелы на подчеркивания
+    .toLowerCase() || 'sketch' // Если имя пустое, используем 'sketch'
+  
   const fileName = `${cleanName}.js`
+  
   const blob = new Blob([code.value], { type: 'text/javascript;charset=utf-8' })
   saveAs(blob, fileName)
   addMessage(`💾 Скетч сохранён как "${fileName}"`)
@@ -247,6 +239,7 @@ function handleFileUpload(event: Event) {
     reader.onload = (e) => {
       saveToHistory()
       code.value = e.target?.result as string
+      // Извлекаем имя файла без расширения для поля названия
       const fileName = file.name.replace('.js', '').replace(/_/g, ' ')
       sketchName.value = fileName
       addMessage(`📂 Скетч загружен: ${file.name}`)
@@ -287,6 +280,7 @@ function copyToClipboard() {
 function formatCode() {
   try {
     saveToHistory()
+    
     const formatted = beautify(code.value, {
       indent_size: 2,
       indent_char: ' ',
@@ -306,6 +300,7 @@ function formatCode() {
       e4x: false,
       indent_empty_lines: false
     })
+    
     code.value = formatted
     addMessage('✨ Код отформатирован')
   } catch (e) {
@@ -367,24 +362,29 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault()
     startSketch()
   }
+  
   if (e.ctrlKey && e.key === 's') {
     e.preventDefault()
     saveSketch()
   }
+  
   if (e.ctrlKey && e.key === 'z' && !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')) {
     e.preventDefault()
     undo()
   }
+  
   if (e.ctrlKey && e.key === 'y' && !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')) {
     e.preventDefault()
     redo()
   }
+  
   if (e.ctrlKey && e.key === '`') {
     e.preventDefault()
     toggleConsole()
   }
 }
 
+// Функции для бокового меню
 function toggleMenuExpand() {
   isMenuExpanded.value = !isMenuExpanded.value
 }
@@ -404,7 +404,7 @@ function setActiveMenuItem(item: string | null) {
       <div class="bg-grid"></div>
     </div>
 
-    <!-- Верхняя панель -->
+    <!-- Верхняя панель (шапка сайта) -->
     <header class="top-bar" :class="`theme-${theme}`">
       <div class="top-bar-left">
         <button @click="startSketch" class="top-btn" title="Запустить скетч (Ctrl+Enter)">
@@ -419,12 +419,12 @@ function setActiveMenuItem(item: string | null) {
           <span class="btn-icon">✨</span>
           <span class="btn-text">Форматировать</span>
         </button>
-
+        
         <div class="sketch-name-wrapper">
-          <input
-            type="text"
-            class="sketch-name-input"
-            placeholder="Название скетча"
+          <input 
+            type="text" 
+            class="sketch-name-input" 
+            placeholder="Название скетча" 
             v-model="sketchName"
           />
         </div>
@@ -447,14 +447,15 @@ function setActiveMenuItem(item: string | null) {
       </div>
     </header>
 
-    <!-- Основной контент -->
+    <!-- Основной контент (под верхней панелью) -->
     <div class="main-content">
       <!-- Боковое меню -->
-      <div class="side-menu"
+      <div class="side-menu" 
            :class="{ 'expanded': isMenuExpanded }"
            @mouseenter="toggleMenuExpand"
            @mouseleave="toggleMenuExpand">
-
+        
+        <!-- Логотип -->
         <div class="menu-logo">
           <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
             <path d="M12 2L2 7v10l10 5 10-5V7l-10-5z" fill="#646cff" stroke="currentColor" stroke-width="1"/>
@@ -464,118 +465,106 @@ function setActiveMenuItem(item: string | null) {
           <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
         </div>
 
+        <!-- Основные кнопки бокового меню -->
         <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
                 @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">💾</span>
           <span class="menu-text" v-show="isMenuExpanded">Сохранить</span>
         </button>
-
+        
         <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
                 @mouseenter="setActiveMenuItem('load')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">📂</span>
           <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
         </button>
-
+        
         <button @click="showAIChat = true" class="menu-item" title="Deepseek AI помощник"
                 @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">🤖</span>
           <span class="menu-text" v-show="isMenuExpanded">AI помощник</span>
         </button>
 
+        <!-- Кнопки изменения шрифта -->
         <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
                 @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">+</span>
           <span class="menu-text" v-show="isMenuExpanded">Увеличить</span>
         </button>
-
+        
         <button @click="decreaseFontSize" class="menu-item" title="Уменьшить шрифт"
                 @mouseenter="setActiveMenuItem('font-down')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">−</span>
           <span class="menu-text" v-show="isMenuExpanded">Уменьшить</span>
         </button>
 
+        <!-- Остальные кнопки -->
         <button @click="undo" class="menu-item" title="Отмена (Ctrl+Z)"
                 @mouseenter="setActiveMenuItem('undo')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">↩️</span>
           <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
         </button>
-
+        
         <button @click="redo" class="menu-item" title="Повтор (Ctrl+Y)"
                 @mouseenter="setActiveMenuItem('redo')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">↪️</span>
           <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
         </button>
-
+        
         <button @click="copyToClipboard" class="menu-item" title="Копировать код"
                 @mouseenter="setActiveMenuItem('copy')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">📋</span>
           <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
         </button>
-
+        
         <button @click="resetToExample" class="menu-item" title="Восстановить пример"
                 @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">🔄</span>
           <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
         </button>
-
+        
         <button @click="clearConsole" class="menu-item" title="Очистить консоль"
                 @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">🧹</span>
           <span class="menu-text" v-show="isMenuExpanded">Очистить консоль</span>
         </button>
-
+        
         <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
                 @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">{{ isConsoleVisible ? '📋' : '📭' }}</span>
           <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
         </button>
-
+        
         <button @click="toggleTheme" class="menu-item" :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
                 @mouseenter="setActiveMenuItem('theme')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
           <span class="menu-text" v-show="isMenuExpanded">{{ theme === 'dark' ? 'Тёмная' : 'Светлая' }}</span>
         </button>
-
+        
         <button @click="showShortcuts" class="menu-item" title="Горячие клавиши"
                 @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">⌨️</span>
           <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
         </button>
 
+        <!-- Всплывающая подсказка для узкого меню -->
         <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
           {{ getTooltipText(activeMenuItem) }}
         </div>
       </div>
 
-      <!-- Рабочая область -->
-      <div class="main" ref="mainRef">
+      <div class="main">
         <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
-
-        <!-- Панель примеров -->
-        <div
-          v-if="showExamples"
-          class="examples-panel-wrapper"
-          :style="{ width: examplesWidth + 'px' }"
-        >
-          <ExamplesPanel
-            :theme="theme"
-            @load-example="loadExample"
-            @close="toggleExamples"
-          />
-        </div>
-
-        <!-- Разделитель: примеры ↔ редактор -->
-        <div
-          v-if="showExamples"
-          class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'examples-editor' }"
-          @mousedown.prevent="startDividerDrag('examples-editor', $event)"
-        >
-          <div class="resize-handle-grip"></div>
-        </div>
-
-        <!-- Редактор + консоль -->
-        <div class="editor-panel" :style="editorFlexStyle">
+        
+        <!-- Панель с примерами -->
+        <ExamplesPanel 
+          v-if="showExamples" 
+          :theme="theme"
+          @load-example="loadExample"
+          @close="toggleExamples"
+        />
+        
+        <!-- Левая панель: редактор + консоль -->
+        <div class="editor-panel">
           <div class="editor-container" :class="`theme-${theme}`">
             <div class="editor-header">
               <div class="window-controls">
@@ -589,8 +578,8 @@ function setActiveMenuItem(item: string | null) {
               </div>
             </div>
             <div class="editor-content">
-              <CodeEditor
-                v-model="code"
+              <CodeEditor 
+                v-model="code" 
                 :font-size="fontSize"
                 :font-family="fontFamily"
                 :theme="theme"
@@ -598,12 +587,12 @@ function setActiveMenuItem(item: string | null) {
               />
             </div>
           </div>
-
+          
           <!-- Консоль под редактором -->
           <div class="console-wrapper" :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }">
-            <div
-              class="console-resize-handle"
-              @mousedown.prevent="startConsoleResize"
+            <div 
+              class="console-resize-handle" 
+              @mousedown="startResize"
               :class="{ 'dragging': isDragging }"
             >
               <div class="handle-line"></div>
@@ -614,34 +603,29 @@ function setActiveMenuItem(item: string | null) {
           </div>
         </div>
 
-        <!-- Разделитель: редактор ↔ холст -->
-        <div
+        <!-- Разделитель для изменения ширины -->
+        <div 
           class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'editor-canvas' }"
-          @mousedown.prevent="startDividerDrag('editor-canvas', $event)"
-        >
-          <div class="resize-handle-grip"></div>
-        </div>
+          @mousedown="startHorizontalResize"
+          :class="{ 'resizing': isResizing }"
+        ></div>
 
-        <!-- Панель холста -->
-        <div
-          class="canvas-panel"
-          :style="{ width: canvasWidth + 'px' }"
-        >
+        <!-- Правая панель: холст -->
+        <div class="canvas-panel">
           <div class="canvas-container">
             <div class="canvas-header">
-              <span class="canvas-title">Холст p5.js</span>
-              <div class="mouse-coordinates">
-                <span class="coord-item">X = {{ mouseX }}</span>
-                <span class="coord-separator">/</span>
-                <span class="coord-item">Y = {{ mouseY }}</span>
+                <span class="canvas-title">Холст p5.js</span>
+                <div class="mouse-coordinates">
+                  <span class="coord-item">X = {{ mouseX }}</span>
+                  <span class="coord-separator">/</span>
+                  <span class="coord-item">Y = {{ mouseY }}</span>
+                </div>
+                <div class="canvas-indicator"></div>
               </div>
-              <div class="canvas-indicator"></div>
-            </div>
             <div class="canvas-content">
-              <P5Canvas
-                ref="canvasRef"
-                :add-message="addMessage"
+              <P5Canvas 
+                ref="canvasRef" 
+                :add-message="addMessage" 
                 :theme="theme"
                 @mouse-move="updateMouseCoordinates"
               />
@@ -649,8 +633,8 @@ function setActiveMenuItem(item: string | null) {
           </div>
         </div>
 
-        <!-- AI чат -->
-        <AIChat
+        <!-- Компонент AI чата -->
+        <AIChat 
           v-model:is-visible="showAIChat"
           :theme="theme"
           :code="code"
@@ -663,6 +647,7 @@ function setActiveMenuItem(item: string | null) {
 </template>
 
 <script lang="ts">
+// Функция для получения текста подсказки
 function getTooltipText(item: string): string {
   const tooltips: Record<string, string> = {
     'save': 'Сохранить скетч (Ctrl+S)',
@@ -697,13 +682,6 @@ function getTooltipText(item: string): string {
   transition: background-color 0.3s, color 0.3s;
   position: relative;
   overflow: hidden;
-}
-
-/* Класс для отключения transition при перетаскивании */
-.resizing-panels .examples-panel-wrapper,
-.resizing-panels .editor-panel,
-.resizing-panels .canvas-panel {
-  transition: none !important;
 }
 
 /* Декоративные элементы фона */
@@ -760,7 +738,7 @@ function getTooltipText(item: string): string {
   left: 0;
   right: 0;
   bottom: 0;
-  background-image:
+  background-image: 
     linear-gradient(rgba(100, 108, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(100, 108, 255, 0.05) 1px, transparent 1px);
   background-size: 50px 50px;
@@ -906,7 +884,7 @@ function getTooltipText(item: string): string {
   color: white;
 }
 
-/* Боковое меню */
+/* Боковое меню (ВОССТАНОВЛЕНО) */
 .side-menu {
   width: 60px;
   height: 100%;
@@ -1033,81 +1011,60 @@ function getTooltipText(item: string): string {
   position: relative;
 }
 
-/* ============================================
-   Панели с изменяемой шириной
-   ============================================ */
-
-/* Панель примеров */
-.examples-panel-wrapper {
-  height: 100%;
-  overflow: hidden;
-  flex-shrink: 0;
-  min-width: 250px;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Редактор занимает всё оставшееся пространство */
+/* Левая панель (редактор + консоль) - используем CSS переменную */
 .editor-panel {
+  width: var(--editor-width, 50%);
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  transition: width 0.1s ease;
 }
 
-/* Панель холста — фиксированная ширина, задаётся через style */
+/* Правая панель (холст) - используем calc */
 .canvas-panel {
+  width: calc(100% - var(--editor-width, 50%));
   height: 100%;
   overflow: hidden;
-  flex-shrink: 0;
-  min-width: 410px;
+  transition: width 0.1s ease;
 }
 
-/* ============================================
-   Вертикальный разделитель (перетаскиваемый)
-   ============================================ */
+/* Вертикальный разделитель */
 .resize-handle-vertical {
   width: 8px;
   height: 100%;
   cursor: col-resize;
   background: transparent;
+  transition: background-color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 15;
   position: relative;
   flex-shrink: 0;
-  transition: background-color 0.15s;
 }
 
 .resize-handle-vertical:hover,
 .resize-handle-vertical.resizing {
-  background: rgba(100, 108, 255, 0.15);
+  background: rgba(100, 108, 255, 0.2);
 }
 
-.resize-handle-grip {
-  width: 3px;
+.resize-handle-vertical::after {
+  content: '';
+  width: 2px;
   height: 40px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
-  transition: all 0.15s;
+  transition: background-color 0.2s;
 }
 
-.resize-handle-vertical:hover .resize-handle-grip,
-.resize-handle-vertical.resizing .resize-handle-grip {
+.resize-handle-vertical:hover::after,
+.resize-handle-vertical.resizing::after {
   background: #646cff;
-  height: 60px;
-  width: 4px;
-  box-shadow: 0 0 8px rgba(100, 108, 255, 0.4);
 }
 
-.app.theme-light .resize-handle-grip {
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.app.theme-light .resize-handle-vertical:hover .resize-handle-grip,
-.app.theme-light .resize-handle-vertical.resizing .resize-handle-grip {
-  background: #646cff;
+.app.theme-light .resize-handle-vertical::after {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Заголовки редактора и холста */
@@ -1118,7 +1075,6 @@ function getTooltipText(item: string): string {
   padding: 6px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
 }
 
 .app.theme-light .editor-header,
@@ -1192,7 +1148,6 @@ function getTooltipText(item: string): string {
   transition: height 0.2s ease;
   overflow: hidden;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
 }
 
 .app.theme-light .console-wrapper {
@@ -1233,36 +1188,6 @@ function getTooltipText(item: string): string {
   background: #646cff;
 }
 
-/* Координаты мыши */
-.mouse-coordinates {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  margin-right: 10px;
-  font-family: 'Consolas', monospace;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.app.theme-light .mouse-coordinates {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-.coord-item {
-  color: #646cff;
-  font-weight: 600;
-}
-
-.coord-separator {
-  opacity: 0.5;
-  font-size: 14px;
-}
-
 /* Анимации */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -1298,6 +1223,7 @@ function getTooltipText(item: string): string {
   background: rgba(100, 108, 255, 0.5);
 }
 
+/* Стили для скроллбара в боковом меню */
 .side-menu::-webkit-scrollbar {
   width: 2px;
 }
@@ -1305,4 +1231,35 @@ function getTooltipText(item: string): string {
 .side-menu::-webkit-scrollbar-thumb {
   background: rgba(100, 108, 255, 0.3);
 }
+
+/* Координаты мыши */
+.mouse-coordinates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 10px;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app.theme-light .mouse-coordinates {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.coord-item {
+  color: #646cff;
+  font-weight: 600;
+}
+
+.coord-separator {
+  opacity: 0.5;
+  font-size: 14px;
+}
+
 </style>
