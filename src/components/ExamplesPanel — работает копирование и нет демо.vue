@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 interface Step {
   title: string
@@ -39,16 +39,8 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 
-// Ключи для localStorage
-const STORAGE_KEYS = {
-  SELECTED_EXAMPLE: 'p5js_selected_example',
-  CURRENT_STEP: 'p5js_current_step',
-  VIEW: 'p5js_view'
-}
-
 function buildSystemPrompt(stepTitle: string): string {
-  return `Твоя роль - ИИ ассистент, который помогает ученику изучать javascript с помощью P5.js для детей 6 класса
-  на основе текстового описания очередного шага занятия (текст ниже правил).
+  return `Инструкции для проведения занятия по изучению javascript с помощью P5.js для детей 6 класса на основе текстового описания очередного шага занятия (текст ниже правил).
 1. Структура шага (Жесткая последовательность):
 • Сначала я должен рассказать про цель шага.
 • Затем я должен кратко пересказать текст шага, останавливаясь на ключевых моментах и особенностях. Написать один-два абзаца и ждать пока ученик прочитает и поймет.
@@ -58,7 +50,7 @@ function buildSystemPrompt(stepTitle: string): string {
 • Спрашивать какие баги появились на экране и есть ли ошибки в консоли.
 • Поздравь ученика в конце шага и дай вдохновляющий совет.
 2. Моя роль и стиль общения:
-• Я — учитель, который направляет, но не пишет код за ученика.
+• Я — учитель, который направляет, а не пишет код за ученика.
 • Я должен поощрять и поддерживать ученика.
 • Я должен быть терпеливым и помогать ученику, если он этого попросит, пока не будет достигнуто полное понимание.
 3. Действия при непонимании ученика:
@@ -82,84 +74,11 @@ function showNotification(message: string) {
   notificationTimer = setTimeout(() => notification.value = null, 2500)
 }
 
-// Функции для сохранения и загрузки состояния
-function saveState() {
-  if (selectedExample.value) {
-    localStorage.setItem(STORAGE_KEYS.SELECTED_EXAMPLE, JSON.stringify({
-      id: selectedExample.value.id,
-      title: selectedExample.value.title
-    }))
-  }
-  
-  if (currentStep.value) {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_STEP, JSON.stringify({
-      title: currentStep.value.title,
-      file: currentStep.value.file
-    }))
-  }
-  
-  localStorage.setItem(STORAGE_KEYS.VIEW, view.value)
-}
-
-function loadSavedState() {
-  try {
-    // Загружаем сохраненный пример
-    const savedExample = localStorage.getItem(STORAGE_KEYS.SELECTED_EXAMPLE)
-    if (savedExample) {
-      const exampleData = JSON.parse(savedExample)
-      // Ищем пример в загруженном списке
-      const example = examples.value.find(e => e.id === exampleData.id)
-      if (example) {
-        // Восстанавливаем пример
-        setTimeout(() => {
-          loadSteps(example, false).then(() => {
-            // После загрузки шагов восстанавливаем текущий шаг
-            const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
-            if (savedStep) {
-              const stepData = JSON.parse(savedStep)
-              const step = steps.value.find(s => s.file === stepData.file)
-              if (step) {
-                loadStep(step, true)
-              }
-            }
-            
-            // Восстанавливаем view
-            const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as View
-            if (savedView && ['list', 'steps', 'detail'].includes(savedView)) {
-              view.value = savedView
-            }
-          })
-        }, 100)
-      }
-    }
-  } catch (e) {
-    console.error('Ошибка при загрузке сохраненного состояния:', e)
-    // Очищаем поврежденные данные
-    clearSavedState()
-  }
-}
-
-function clearSavedState() {
-  localStorage.removeItem(STORAGE_KEYS.SELECTED_EXAMPLE)
-  localStorage.removeItem(STORAGE_KEYS.CURRENT_STEP)
-  localStorage.removeItem(STORAGE_KEYS.VIEW)
-}
-
-// Следим за изменениями для автосохранения
-watch([selectedExample, currentStep, view], () => {
-  if (selectedExample.value || currentStep.value) {
-    saveState()
-  }
-}, { deep: true })
-
 onMounted(async () => {
   try {
     const response = await fetch('/examples/index.json')
     if (!response.ok) throw new Error('')
     examples.value = await response.json()
-    
-    // После загрузки примеров пытаемся восстановить сохраненное состояние
-    loadSavedState()
   } catch {
     error.value = 'Не удалось загрузить'
   } finally {
@@ -167,7 +86,7 @@ onMounted(async () => {
   }
 })
 
-async function loadSteps(example: Example, autoSelectStep = true) {
+async function loadSteps(example: Example) {
   selectedExample.value = example
   view.value = 'steps'
   steps.value = []
@@ -181,30 +100,11 @@ async function loadSteps(example: Example, autoSelectStep = true) {
       steps.value = [
         { title: 'Шаг 1: Введение', file: 'step1.txt' },
         { title: 'Шаг 2: Настройка', file: 'step2.txt' },
-        { title: 'Шаг 3: Код', file: 'step3.txt' }
+        { title: 'Шаг 3: Код', file: 'step3.txt' },
+        { title: 'Демо', file: 'sketch.js' }
       ]
     }
-    
-    // Добавляем шаг "Демо" в конец списка
-    steps.value.push({
-      title: 'Демо',
-      file: 'sketch.js'
-    })
-    
     await Promise.all(steps.value.map(s => loadStep(s, false)))
-    
-    // Если не нужно автоматически выбирать шаг, выходим
-    if (!autoSelectStep) return
-    
-    // Пытаемся восстановить последний открытый шаг для этого примера
-    const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
-    if (savedStep) {
-      const stepData = JSON.parse(savedStep)
-      const savedStepObj = steps.value.find(s => s.file === stepData.file)
-      if (savedStepObj) {
-        await loadStep(savedStepObj, true)
-      }
-    }
   } catch {
     steps.value = []
   }
@@ -212,28 +112,6 @@ async function loadSteps(example: Example, autoSelectStep = true) {
 
 async function loadStep(step: Step, show = true) {
   if (!selectedExample.value) return ''
-  
-  // Если это шаг "Демо", загружаем код и эмитим событие
-  if (step.title === 'Демо' && step.file === 'sketch.js') {
-    try {
-      const response = await fetch(`/examples/${selectedExample.value.id}/${step.file}`)
-      const code = await response.text()
-      
-      // Кэшируем содержимое
-      stepContentsMap.value.set(step.file, code)
-      
-      if (show) {
-        switchToStep(step)
-        // Загружаем код в редактор
-        emit('loadExample', code)
-      }
-      return code
-    } catch (e) {
-      console.error('Failed to load demo code', e)
-      return 'Не удалось загрузить демо-код.'
-    }
-  }
-  
   if (stepContentsMap.value.has(step.file)) {
     if (show) switchToStep(step)
     return stepContentsMap.value.get(step.file)
@@ -253,21 +131,11 @@ function switchToStep(step: Step) {
   currentStep.value = step
   stepContent.value = stepContentsMap.value.get(step.file) || ''
   view.value = 'detail'
-  
-  // Сохраняем состояние при переключении шага
-  saveState()
+  if (step.title === 'Демо') emit('loadExample', stepContent.value)
 }
 
 function goBack() {
-  if (view.value === 'detail') {
-    view.value = 'steps'
-  } else if (view.value === 'steps') {
-    view.value = 'list'
-    // Очищаем выбранный пример при возврате к списку
-    selectedExample.value = null
-    currentStep.value = null
-    clearSavedState()
-  }
+  view.value = view.value === 'detail' ? 'steps' : 'list'
 }
 
 function prepareContent(step: Step, body: string): string {
@@ -329,12 +197,6 @@ const filteredExamples = computed(() => {
     e.description.toLowerCase().includes(q)
   )
 })
-
-// Добавляем функцию для очистки при закрытии
-function handleClose() {
-  // Не очищаем состояние, чтобы сохранить его для следующего открытия
-  emit('close')
-}
 </script>
 
 <template>
@@ -350,7 +212,7 @@ function handleClose() {
         <template v-else-if="view === 'steps'">{{ selectedExample?.title }}</template>
         <template v-else>{{ currentStep?.title }}</template>
       </span>
-      <button class="btn-icon" @click="handleClose">×</button>
+      <button class="btn-icon" @click="emit('close')">×</button>
     </div>
 
     <div v-if="view === 'list'" class="search-wrap">
@@ -362,13 +224,7 @@ function handleClose() {
       <div v-else-if="error" class="empty">Ошибка</div>
       <div v-else-if="!filteredExamples.length" class="empty">Нет результатов</div>
       <div v-else class="grid">
-        <div 
-          v-for="ex in filteredExamples" 
-          :key="ex.id" 
-          class="card" 
-          :class="{ 'active': selectedExample?.id === ex.id }"
-          @click="loadSteps(ex)"
-        >
+        <div v-for="ex in filteredExamples" :key="ex.id" class="card" @click="loadSteps(ex)">
           <div class="card-top" :style="{ background: ex.color || '#5b5bd6' }" />
           <div class="card-body">
             <strong class="card-title">{{ ex.title }}</strong>
@@ -380,17 +236,8 @@ function handleClose() {
 
     <div v-else-if="view === 'steps'" class="scroll">
       <div v-if="!steps.length" class="empty">Нет шагов</div>
-      <div 
-        v-for="step in steps" 
-        :key="step.file" 
-        class="step-row"
-        :class="{ 'active-step': currentStep?.file === step.file }"
-        @click="loadStep(step)"
-      >
-        <span class="step-title">
-          {{ step.title }}
-          <span v-if="step.title === 'Демо'" class="demo-badge">загрузит код</span>
-        </span>
+      <div v-for="step in steps" :key="step.file" class="step-row" @click="loadStep(step)">
+        <span class="step-title">{{ step.title }}</span>
         <span class="step-actions">
           <button class="btn-s" @click.stop="copy(step)">📋</button>
           <button class="btn-s" @click.stop="download(step)">↓</button>
@@ -418,9 +265,6 @@ function handleClose() {
   flex-direction: column;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  position: relative;
-  z-index: 100;
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
 }
 .panel.light { background: #f5f5f7; color: #1a1a2e; }
 
@@ -486,15 +330,10 @@ function handleClose() {
   background: #222240;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
   overflow: hidden;
-  border: 1px solid transparent;
 }
 .card:hover { background: #2a2a50; }
-.card.active {
-  border-color: #5b5bd6;
-  box-shadow: 0 0 0 2px rgba(91, 91, 214, 0.3);
-}
 .panel.light .card { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 .panel.light .card:hover { background: #f0f0f5; }
 
@@ -518,20 +357,11 @@ function handleClose() {
   padding: 12px 14px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
   gap: 8px;
-  border: 1px solid transparent;
 }
 .step-row:hover { background: #2a2a50; }
-.step-row.active-step {
-  background: rgba(91, 91, 214, 0.2);
-  border-color: #5b5bd6;
-}
 .panel.light .step-row:hover { background: #f0f0f5; }
-.panel.light .step-row.active-step {
-  background: rgba(91, 91, 214, 0.1);
-  border-color: #5b5bd6;
-}
 
 .step-title {
   flex: 1;
@@ -539,16 +369,6 @@ function handleClose() {
   line-height: 1.4;
   word-break: break-word;
   overflow-wrap: break-word;
-}
-
-.demo-badge {
-  font-size: 10px;
-  padding: 2px 8px;
-  background: #5b5bd6;
-  color: white;
-  border-radius: 12px;
-  text-transform: uppercase;
-  margin-left: 8px;
 }
 
 .step-actions { display: flex; gap: 4px; flex-shrink: 0; }
