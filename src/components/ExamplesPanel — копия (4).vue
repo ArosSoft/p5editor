@@ -56,7 +56,7 @@ function showNotification(message: string, type: 'success' | 'info' | 'error' = 
 
 onMounted(async () => {
   try {
-    const response = await fetch('/examples/index.json')
+    const response = await fetch('examples/index.json')
     if (!response.ok) throw new Error('Не удалось загрузить примеры')
     const data = await response.json()
     examples.value = data

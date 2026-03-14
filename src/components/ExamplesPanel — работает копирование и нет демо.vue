@@ -76,7 +76,7 @@ function showNotification(message: string) {
 
 onMounted(async () => {
   try {
-    const response = await fetch('/examples/index.json')
+    const response = await fetch('examples/index.json')
     if (!response.ok) throw new Error('')
     examples.value = await response.json()
   } catch {

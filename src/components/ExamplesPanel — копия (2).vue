@@ -183,10 +183,10 @@ watch([selectedExample, currentStep, view], () => {
 
 onMounted(async () => {
   try {
-    const response = await fetch('/examples/index.json')
+    const response = await fetch('examples/index.json')
     if (!response.ok) throw new Error('')
     examples.value = await response.json()
-    
+
     loadSavedState()
   } catch {
     error.value = 'Не удалось загрузить'
