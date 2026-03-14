@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 
+process.env.NODE_ENV = 'production';
 process.env.VITE_BUILD = 'true';
 
 try {
