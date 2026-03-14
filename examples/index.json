@@ -1,0 +1,149 @@
+[
+  {
+    "id": "01-snowman",
+    "title": "☃️ Снеговик",
+    "description": "Весёлый снеговик со шляпой",
+    "theme": "Зима",
+    "difficulty": "Лёгкая",
+    "tags": [
+      "зима"
+    ],
+    "icon": "☃️",
+    "color": "#87CEEB",
+    "codePath": "/examples/01-snowman/sketch.js"
+  },
+  {
+    "id": "02-christmas-tree",
+    "title": "🎄 Новогодняя ёлка",
+    "description": "Нарядная ёлка с игрушками",
+    "theme": "Зима",
+    "difficulty": "ЛЁГКАЯ",
+    "tags": [
+      "зима",
+      "праздник"
+    ],
+    "icon": "🎄",
+    "color": "#2e8b57",
+    "codePath": "/examples/02-christmas-tree/sketch.js"
+  },
+  {
+    "id": "03-magic-forest",
+    "title": "🌳 Волшебный лес",
+    "description": "Лес с мерцающими светлячками и луной",
+    "theme": "Природа",
+    "difficulty": "Средняя",
+    "tags": [
+      "природа",
+      "светлячки",
+      "атмосфера"
+    ],
+    "icon": "🌳",
+    "color": "#228B22",
+    "codePath": "/examples/03-magic-forest/sketch.js"
+  },
+  {
+    "id": "04-underwater",
+    "title": "🌊 Подводный мир",
+    "description": "Рыбки и пузырьки в океане",
+    "theme": "Природа",
+    "difficulty": "Средняя",
+    "tags": [
+      "море",
+      "рыбки",
+      "анимация"
+    ],
+    "icon": "🌊",
+    "color": "#1E90FF",
+    "codePath": "/examples/04-underwater/sketch.js"
+  },
+  {
+    "id": "05-flower-garden",
+    "title": "🌸 Цветущий сад",
+    "description": "Цветы колышутся на ветру",
+    "theme": "Природа",
+    "difficulty": "Средняя",
+    "tags": [
+      "весна",
+      "цветы",
+      "бабочки"
+    ],
+    "icon": "🌸",
+    "color": "#FF69B4",
+    "codePath": "/examples/05-flower-garden/sketch.js"
+  },
+  {
+    "id": "06-storm",
+    "title": "⛈️ Гроза",
+    "description": "Дождь, молнии и тучи",
+    "theme": "Погода",
+    "difficulty": "Средняя",
+    "tags": [
+      "погода",
+      "дождь",
+      "молния"
+    ],
+    "icon": "⛈️",
+    "color": "#4682B4",
+    "codePath": "/examples/06-storm/sketch.js"
+  },
+  {
+    "id": "07-autumn-park",
+    "title": "🍂 Осенний парк",
+    "description": "Падающие листья и деревья",
+    "theme": "Времена года",
+    "difficulty": "Средняя",
+    "tags": [
+      "осень",
+      "листья",
+      "ветер"
+    ],
+    "icon": "🍂",
+    "color": "#D2691E",
+    "codePath": "/examples/07-autumn-park/sketch.js"
+  },
+  {
+    "id": "08-desert",
+    "title": "🏜️ Пустыня",
+    "description": "Кактусы, песок и миражи",
+    "theme": "Природа",
+    "difficulty": "Лёгкая",
+    "tags": [
+      "пустыня",
+      "кактусы",
+      "мираж"
+    ],
+    "icon": "🏜️",
+    "color": "#F4A460",
+    "codePath": "/examples/08-desert/sketch.js"
+  },
+  {
+    "id": "09-solar-system",
+    "title": "🪐 Солнечная система",
+    "description": "Планеты вращаются вокруг Солнца",
+    "theme": "Космос",
+    "difficulty": "Средняя",
+    "tags": [
+      "космос",
+      "планеты",
+      "орбиты"
+    ],
+    "icon": "🪐",
+    "color": "#483D8B",
+    "codePath": "/examples/09-solar-system/sketch.js"
+  },
+  {
+    "id": "10-starry-night",
+    "title": "⭐ Звёздное небо",
+    "description": "Мерцающие звёзды и созвездия",
+    "theme": "Космос",
+    "difficulty": "Лёгкая",
+    "tags": [
+      "звёзды",
+      "созвездия",
+      "мерцание"
+    ],
+    "icon": "⭐",
+    "color": "#191970",
+    "codePath": "/examples/10-starry-night/sketch.js"
+  }
+]

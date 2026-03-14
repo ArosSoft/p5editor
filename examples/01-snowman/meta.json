@@ -1,0 +1,10 @@
+{
+    "id": "01-snowman",
+    "title": "☃️ Снеговик",
+    "description": "Весёлый снеговик со шляпой",
+    "theme": "Зима",
+    "difficulty": "Лёгкая",
+    "tags": ["зима"],
+    "icon": "☃️",
+    "color": "#87CEEB"
+  }
