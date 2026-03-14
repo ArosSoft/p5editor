@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.4",
@@ -30,6 +31,7 @@
     "@types/prettier": "^2.7.3",
     "@vitejs/plugin-vue": "^6.0.3",
     "@vue/tsconfig": "^0.8.1",
+    "gh-pages": "^6.3.0",
     "js-beautify": "^1.15.4",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.8.1",
