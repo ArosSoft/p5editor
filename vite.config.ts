@@ -10,7 +10,7 @@ export default defineConfig({
     vue(),
     vueDevTools(),
   ],
-  base: process.env.NODE_ENV === 'production' ? '/p5editor/' : '/',
+  base: process.env.VITE_BUILD === 'true' ? '/p5editor/' : '/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

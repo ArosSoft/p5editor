@@ -6,9 +6,9 @@
   "scripts": {
     "generate-examples": "node scripts/generate-examples.js",
     "dev": "vite",
-    "build": "npm run generate-examples && run-p type-check \"build-only {@}\" --",
+    "build": "npm run generate-examples && npm run type-check && node scripts/build.js",
     "preview": "vite preview",
-    "build-only": "vite build",
+    "build-only": "node scripts/build.js",
     "type-check": "vue-tsc --build",
     "format": "prettier --write --experimental-cli src/",
     "deploy": "npm run build && npx gh-pages -d dist"
@@ -26,6 +26,8 @@
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
+    "@types/file-saver": "^2.0.7",
+    "@types/js-beautify": "^1.14.3",
     "@types/marked": "^5.0.2",
     "@types/node": "^24.10.9",
     "@types/prettier": "^2.7.3",
