@@ -15,6 +15,7 @@ interface Example {
   difficulty: string
   tags: string[]
   codePath: string
+  color?: string
   steps?: Step[]
 }
 
@@ -374,13 +375,19 @@ const hasNextStep = computed(() => currentStepIndex.value < steps.value.length -
 
 function goToPrevStep() {
   if (hasPrevStep.value) {
-    loadStep(steps.value[currentStepIndex.value - 1])
+    const prevStep = steps.value[currentStepIndex.value - 1]
+    if (prevStep) {
+      loadStep(prevStep)
+    }
   }
 }
 
 function goToNextStep() {
   if (hasNextStep.value) {
-    loadStep(steps.value[currentStepIndex.value + 1])
+    const nextStep = steps.value[currentStepIndex.value + 1]
+    if (nextStep) {
+      loadStep(nextStep)
+    }
   }
 }
 </script>

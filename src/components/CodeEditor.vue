@@ -95,17 +95,7 @@ const extensions = computed(() => {
 // Следим за изменениями шрифта для принудительного обновления
 watch(() => [props.fontFamily, props.fontSize], () => {
   // Принудительно обновляем редактор
-  if (editorRef.value) {
-    // Небольшой хак для принудительного перерендера
-    const cm = editorRef.value
-    // @ts-ignore
-    if (cm.view) {
-      // @ts-ignore
-      cm.view.dispatch({
-        effects: EditorView.theme.recompute
-      })
-    }
-  }
+  // Эта функция может быть недоступна в некоторых версиях vue-codemirror6
 }, { deep: true })
 </script>
 
@@ -118,7 +108,7 @@ watch(() => [props.fontFamily, props.fontSize], () => {
       :basic="true"
       :wrap="true"
       placeholder="Напиши свой p5.js скетч здесь..."
-      @update:model-value="emit('update:modelValue', $event)"
+      @update:model-value="emit('update:modelValue', $event as string)"
     />
   </div>
 </template>

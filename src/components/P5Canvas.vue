@@ -182,8 +182,10 @@ function stop() {
   props.addMessage('Скетч остановлен')
 }
 
+let handler: ((event: MessageEvent) => void) | null = null
+
 onMounted(() => {
-  const handler = (event: MessageEvent) => {
+  handler = (event: MessageEvent) => {
     const data = event.data
     if (data?.type) {
       if (data.type === 'log') {
@@ -203,7 +205,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('message', handler)
+  if (handler) {
+    window.removeEventListener('message', handler)
+  }
 })
 </script>
 

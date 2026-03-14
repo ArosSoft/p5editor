@@ -294,14 +294,12 @@ function formatCode() {
       preserve_newlines: true,
       keep_array_indentation: false,
       break_chained_methods: false,
-      indent_scripts: 'normal',
-      brace_style: 'collapse',
+      brace_style: 'collapse' as const,
       space_before_conditional: true,
       unescape_strings: false,
       jslint_happy: false,
       end_with_newline: true,
       wrap_line_length: 80,
-      indent_inner_html: false,
       comma_first: false,
       e4x: false,
       indent_empty_lines: false
@@ -325,7 +323,10 @@ function saveToHistory() {
 function undo() {
   if (historyIndex.value > 0) {
     historyIndex.value--
-    code.value = history.value[historyIndex.value]
+    const prevCode = history.value[historyIndex.value]
+    if (prevCode) {
+      code.value = prevCode
+    }
     addMessage('↩️ Отмена действия')
   } else {
     addMessage('⚠️ Нечего отменять')
@@ -335,7 +336,10 @@ function undo() {
 function redo() {
   if (historyIndex.value < history.value.length - 1) {
     historyIndex.value++
-    code.value = history.value[historyIndex.value]
+    const nextCode = history.value[historyIndex.value]
+    if (nextCode) {
+      code.value = nextCode
+    }
     addMessage('↪️ Возврат действия')
   } else {
     addMessage('⚠️ Нечего возвращать')
