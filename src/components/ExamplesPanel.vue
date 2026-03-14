@@ -184,7 +184,8 @@ watch([selectedExample, currentStep, view], () => {
 
 onMounted(async () => {
   try {
-    const response = await fetch('examples/index.json')
+    // Используем относительный путь для работы в dev и deploy
+    const response = await fetch('./examples/index.json')
     if (!response.ok) throw new Error('')
     examples.value = await response.json()
 
@@ -203,7 +204,7 @@ async function loadSteps(example: Example, autoSelectStep = true) {
   stepContentsMap.value.clear()
 
   try {
-    const response = await fetch(`/examples/${example.id}/steps.json`)
+    const response = await fetch(`./examples/${example.id}/steps.json`)
     if (response.ok) {
       steps.value = await response.json()
     } else {
@@ -213,17 +214,17 @@ async function loadSteps(example: Example, autoSelectStep = true) {
         { title: 'Шаг 3: Код', file: 'step3.md' }
       ]
     }
-    
+
     // Добавляем шаг "Демо" в конец списка
     steps.value.push({
       title: 'Демо',
       file: 'sketch.js'
     })
-    
+
     await Promise.all(steps.value.map(s => loadStep(s, false)))
-    
+
     if (!autoSelectStep) return
-    
+
     const savedStep = localStorage.getItem(STORAGE_KEYS.CURRENT_STEP)
     if (savedStep) {
       const stepData = JSON.parse(savedStep)
@@ -239,15 +240,15 @@ async function loadSteps(example: Example, autoSelectStep = true) {
 
 async function loadStep(step: Step, show = true) {
   if (!selectedExample.value) return ''
-  
+
   // Если это шаг "Демо", загружаем код и эмитим событие
   if (step.title === 'Демо' && step.file === 'sketch.js') {
     try {
-      const response = await fetch(`/examples/${selectedExample.value.id}/${step.file}`)
+      const response = await fetch(`./examples/${selectedExample.value.id}/${step.file}`)
       const code = await response.text()
-      
+
       stepContentsMap.value.set(step.file, code)
-      
+
       if (show) {
         switchToStep(step)
         emit('loadExample', code)
@@ -258,13 +259,13 @@ async function loadStep(step: Step, show = true) {
       return 'Не удалось загрузить демо-код.'
     }
   }
-  
+
   if (stepContentsMap.value.has(step.file)) {
     if (show) switchToStep(step)
     return stepContentsMap.value.get(step.file)
   }
   try {
-    const response = await fetch(`/examples/${selectedExample.value.id}/${step.file}`)
+    const response = await fetch(`./examples/${selectedExample.value.id}/${step.file}`)
     const text = await response.text()
     stepContentsMap.value.set(step.file, text)
     if (show) switchToStep(step)
