@@ -32,20 +32,19 @@ function start(userCode: string) {
   const textColor = isDark ? '#ffffff' : '#333333'
   const gridColor = isDark ? 'rgba(100, 108, 255, 0.1)' : 'rgba(100, 108, 255, 0.05)'
 
-  // ✅ ИСПРАВЛЕНО: используем BASE_URL из Vite
-  const basePath = import.meta.env.BASE_URL || '/'
-  const baseHref = window.location.origin + basePath
-
   const encodedCode = JSON.stringify(userCode)
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029')
     .replace(/<\//g, '\\u003c\\u002f')
 
+  // ⬇️ Получаем origin для base тега
+  const baseUrl = window.location.origin
+
   const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <base href="${baseHref}">
+  <base href="${baseUrl}/">
   <title>p5.js Sketch</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>
   <style>
@@ -71,7 +70,6 @@ function start(userCode: string) {
 </head>
 <body>
   <script>
-    // === Проксирование консоли ===
     (function() {
       var _log = console.log, _err = console.error, _warn = console.warn;
       function send(type, args) {
@@ -82,9 +80,9 @@ function start(userCode: string) {
           }, "*");
         } catch(e) {}
       }
-      console.log  = function() { _log.apply(console, arguments);  send("log", arguments); };
-      console.error = function() { _err.apply(console, arguments);  send("error", arguments); };
-      console.warn  = function() { _warn.apply(console, arguments); send("warn", arguments); };
+      console.log = function() { _log.apply(console, arguments); send("log", arguments); };
+      console.error = function() { _err.apply(console, arguments); send("error", arguments); };
+      console.warn = function() { _warn.apply(console, arguments); send("warn", arguments); };
     })();
 
     window.onerror = function(msg, url, line) {
@@ -95,7 +93,6 @@ function start(userCode: string) {
       return true;
     };
 
-    // === Координаты мыши ===
     document.addEventListener("mousemove", function(e) {
       var c = document.querySelector("canvas");
       if (c) {
@@ -111,43 +108,6 @@ function start(userCode: string) {
       }
     });
 
-    // ✅ НОВОЕ: Исправление путей к ресурсам
-    // /images/file.png → /p5editor/images/file.png
-    var APP_BASE = "${basePath}";
-
-    function fixResourcePath(path) {
-      if (typeof path !== 'string') return path;
-      // Пропускаем URL-ы с протоколом и data-URI
-      if (path.indexOf('://') !== -1 || path.indexOf('data:') === 0) return path;
-      // Абсолютный путь /... → добавляем базовый путь
-      if (path.charAt(0) === '/' && path.indexOf(APP_BASE) !== 0) {
-        return APP_BASE + path.substring(1);
-      }
-      return path;
-    }
-
-    // Патчим ВСЕ функции загрузки p5.js
-    if (typeof p5 !== 'undefined') {
-      var loadFunctions = [
-        'loadImage', 'loadFont', 'loadJSON',
-        'loadStrings', 'loadTable', 'loadXML',
-        'loadBytes', 'loadModel', 'loadShader'
-      ];
-      loadFunctions.forEach(function(fnName) {
-        if (p5.prototype[fnName]) {
-          var original = p5.prototype[fnName];
-          p5.prototype[fnName] = function() {
-            var args = Array.prototype.slice.call(arguments);
-            if (args.length > 0 && typeof args[0] === 'string') {
-              args[0] = fixResourcePath(args[0]);
-            }
-            return original.apply(this, args);
-          };
-        }
-      });
-    }
-
-    // === Выполнение пользовательского кода ===
     try {
       (0, eval)(${encodedCode});
     } catch(e) {
@@ -159,16 +119,12 @@ function start(userCode: string) {
 
   const blob = new Blob([htmlContent], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
-
   if (iframeRef.value) {
     iframeRef.value.src = url
     currentIframeSrc = url
   }
-
-  props.addMessage(`Скетч запущен (тема: \${isDark ? 'тёмная' : 'светлая'})`)
+  props.addMessage(`Скетч запущен (тема: ${isDark ? 'тёмная' : 'светлая'})`)
 }
-
-
 function stop() {
   if (iframeRef.value) {
     iframeRef.value.src = 'about:blank'
