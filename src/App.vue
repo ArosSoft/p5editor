@@ -69,6 +69,9 @@ const mouseY = ref(0)
 // Ref на main контейнер для расчётов
 const mainRef = ref<HTMLElement | null>(null)
 
+// Добавляем новые переменные для "призрачного" ресайза
+const ghostDividerX = ref<number | null>(null) // позиция призрачной линии
+
 function updateMouseCoordinates(x: number, y: number) {
   mouseX.value = Math.round(x)
   mouseY.value = Math.round(y)
@@ -119,37 +122,37 @@ function startDividerDrag(divider: 'examples-editor' | 'editor-canvas', e: Mouse
 
 function onDividerDrag(e: MouseEvent) {
   if (!draggingDivider.value || !mainRef.value) return
+  
+  // Вместо обновления реальных размеров — просто двигаем "призрачную линию"
+  ghostDividerX.value = e.clientX
+}
 
-  const deltaX = e.clientX - dragStartX
+function stopDividerDrag() {
+  if (!draggingDivider.value || !mainRef.value) return
+  
+  // Теперь применяем финальные размеры ОДИН раз
+  const deltaX = (ghostDividerX.value ?? dragStartX) - dragStartX
   const totalWidth = mainRef.value.clientWidth
-  // Учитываем ширину разделителей (8px каждый)
   const dividerCount = showExamples.value ? 2 : 1
   const availableWidth = totalWidth - dividerCount * 8
 
   if (draggingDivider.value === 'examples-editor') {
-    // Двигаем разделитель между примерами и редактором
     const newExamplesWidth = dragStartExamplesWidth + deltaX
     const editorWidth = availableWidth - newExamplesWidth - canvasWidth.value
-
-    // Проверяем ограничения
     if (newExamplesWidth >= MIN_EXAMPLES_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
       examplesWidth.value = newExamplesWidth
     }
   } else if (draggingDivider.value === 'editor-canvas') {
-    // Двигаем разделитель между редактором и холстом
     const newCanvasWidth = dragStartCanvasWidth - deltaX
     const exW = showExamples.value ? examplesWidth.value : 0
     const editorWidth = availableWidth - exW - newCanvasWidth
-
-    // Проверяем ограничения
     if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
       canvasWidth.value = newCanvasWidth
     }
   }
-}
 
-function stopDividerDrag() {
-  if (!draggingDivider.value) return
+  // Очищаем состояние
+  ghostDividerX.value = null
   draggingDivider.value = null
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
@@ -396,6 +399,33 @@ function toggleMenuExpand() {
 function setActiveMenuItem(item: string | null) {
   activeMenuItem.value = item
 }
+
+function getTooltipText(item: string): string {
+  const tooltips: Record<string, string> = {
+    'save': 'Сохранить скетч (Ctrl+S)',
+    'load': 'Загрузить скетч',
+    'ai': 'Deepseek AI помощник',
+    'font-up': 'Увеличить шрифт',
+    'font-down': 'Уменьшить шрифт',
+    'undo': 'Отмена (Ctrl+Z)',
+    'redo': 'Повтор (Ctrl+Y)',
+    'copy': 'Копировать код',
+    'reset': 'Восстановить пример',
+    'console-clear': 'Очистить консоль',
+    'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
+    'theme': 'Сменить тему',
+    'shortcuts': 'Горячие клавиши'
+  }
+  return tooltips[item] || item
+}
+
+let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null
+
+function debouncedSaveToHistory() {
+  if (saveHistoryTimer) clearTimeout(saveHistoryTimer)
+  saveHistoryTimer = setTimeout(() => saveToHistory(), 500)
+}
+
 </script>
 
 <template>
@@ -598,7 +628,7 @@ function setActiveMenuItem(item: string | null) {
                 :font-size="fontSize"
                 :font-family="fontFamily"
                 :theme="theme"
-                @update:model-value="saveToHistory"
+                @update:model-value="debouncedSaveToHistory"
               />
             </div>
           </div>
@@ -661,31 +691,27 @@ function setActiveMenuItem(item: string | null) {
           @send-message="handleAIMessage"
           @suggest-code="(newCode) => { code = newCode; addMessage('🤖 AI предложил код'); }"
         />
+
+        <!-- Призрачная линия при ресайзе -->
+        <div
+          v-if="ghostDividerX !== null"
+          class="ghost-divider"
+          :style="{ left: ghostDividerX + 'px' }"
+        />
+
+        <!-- Оверлей, чтобы iframe не перехватывал мышь -->
+        <div
+          v-if="draggingDivider"
+          class="drag-overlay"
+        />
+
       </div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-function getTooltipText(item: string): string {
-  const tooltips: Record<string, string> = {
-    'save': 'Сохранить скетч (Ctrl+S)',
-    'load': 'Загрузить скетч',
-    'ai': 'Deepseek AI помощник',
-    'font-up': 'Увеличить шрифт',
-    'font-down': 'Уменьшить шрифт',
-    'undo': 'Отмена (Ctrl+Z)',
-    'redo': 'Повтор (Ctrl+Y)',
-    'copy': 'Копировать код',
-    'reset': 'Восстановить пример',
-    'console-clear': 'Очистить консоль',
-    'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
-    'theme': 'Сменить тему',
-    'shortcuts': 'Горячие клавиши'
-  }
-  return tooltips[item] || item
-}
-</script>
+
+
 
 <style>
 * {
@@ -1309,4 +1335,36 @@ function getTooltipText(item: string): string {
 .side-menu::-webkit-scrollbar-thumb {
   background: rgba(100, 108, 255, 0.3);
 }
+
+/* Призрачная линия при перетаскивании */
+.ghost-divider {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #646cff;
+  box-shadow: 0 0 8px rgba(100, 108, 255, 0.6);
+  z-index: 10000;
+  pointer-events: none;
+  transition: none;
+}
+
+/* Оверлей, блокирующий iframe во время перетаскивания */
+.drag-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  cursor: col-resize;
+  background: transparent;
+}
+
+/* Запрещаем перерисовку содержимого панелей при ресайзе */
+.resizing-panels .editor-content,
+.resizing-panels .canvas-content {
+  pointer-events: none;
+}
+
 </style>

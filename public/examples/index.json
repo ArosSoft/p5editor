@@ -148,14 +148,14 @@
   },
   {
     "id": "11-image-snowman",
-    "title": "⭐ Загрузка изображений",
+    "title": "🖼️ Загрузка изображений",
     "description": "картинка снеговика из images",
     "theme": "Зима",
     "difficulty": "Лёгкая",
     "tags": [
       "файлы"
     ],
-    "icon": "⭐",
+    "icon": "🖼️",
     "color": "#191970",
     "codePath": "/examples/11-image-snowman/sketch.js"
   }
