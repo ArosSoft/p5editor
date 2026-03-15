@@ -145,5 +145,18 @@
     "icon": "⭐",
     "color": "#191970",
     "codePath": "/examples/10-starry-night/sketch.js"
+  },
+  {
+    "id": "11-image-snowman",
+    "title": "⭐ Загрузка изображений",
+    "description": "картинка снеговика из images",
+    "theme": "Зима",
+    "difficulty": "Лёгкая",
+    "tags": [
+      "файлы"
+    ],
+    "icon": "⭐",
+    "color": "#191970",
+    "codePath": "/examples/11-image-snowman/sketch.js"
   }
 ]
