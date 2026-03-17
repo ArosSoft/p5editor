@@ -5,22 +5,22 @@
   },
   {
     "title": "Шаг 2: Рисуем круг",
-    "file": "step2.txt"
+    "file": "step2.md"
   },
   {
     "title": "Шаг 3: Рисуем лицо",
-    "file": "step3.txt"
+    "file": "step3.md"
   },
   {
     "title": "Шаг 4: Рисуем детали",
-    "file": "step4.txt"
+    "file": "step4.md"
   },
   {
     "title": "Шаг 5: Остальные дополнения",
-    "file": "step5.txt"
+    "file": "step5.md"
   },
   {
     "title": "Шаг 6: Снег на земле",
-    "file": "step6.txt"
+    "file": "step6.md"
   }
 ]
