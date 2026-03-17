@@ -158,5 +158,18 @@
     "icon": "🖼️",
     "color": "#191970",
     "codePath": "/examples/11-image-snowman/sketch.js"
+  },
+  {
+    "id": "12-rocket-landing",
+    "title": "🚀 Посадка ракеты",
+    "description": "Ракета садится на разных планетах с ручным и автоматическим управлением",
+    "theme": "Космос",
+    "difficulty": "Тяжелая",
+    "tags": [
+      "Автопилот"
+    ],
+    "icon": "🚀",
+    "color": "#191970",
+    "codePath": "/examples/12-rocket-landing/sketch.js"
   }
 ]

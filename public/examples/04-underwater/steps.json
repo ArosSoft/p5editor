@@ -1,38 +1,38 @@
 [
   {
     "title": "Шаг 1: Создаём хранилища",
-    "file": "step1.txt"
+    "file": "step1.md"
   },
   {
     "title": "Шаг 2: Настраиваем сцену",
-    "file": "step2.txt"
+    "file": "step2.md"
   },
   {
     "title": "Шаг 3: Создаём рыбок",
-    "file": "step3.txt"
+    "file": "step3.md"
   },
   {
     "title": "Шаг 4: Рисуем воду (градиент)",
-    "file": "step4.txt"
+    "file": "step4.md"
   },
   {
     "title": "Шаг 5: Добавляем новые пузырьки",
-    "file": "step5.txt"
+    "file": "step5.md"
   },
   {
     "title": "Шаг 6: Рисуем и двигаем пузырьки",
-    "file": "step6.txt"
+    "file": "step6.md"
   },
   {
     "title": "Шаг 7: Рисуем и двигаем рыбок",
-    "file": "step7.txt"
+    "file": "step7.md"
   },
   {
     "title": "Шаг 8: Рисуем тело рыбки",
-    "file": "step8.txt"
+    "file": "step8.md"
   },
   {
     "title": "Шаг 9: Добавляем глаз и хвост",
-    "file": "step9.txt"
+    "file": "step9.md"
   }
 ]

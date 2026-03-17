@@ -1,0 +1,11 @@
+﻿let img; // Переменная для хранения изображения
+
+function preload() {
+  // Загружаем изображение (замените URL на свой)
+  img = loadImage('/images/snowman.png');
+}
+
+function setup() {
+  createCanvas(400, 400);
+  noLoop(); // Останавливаем draw, чтобы не перерисовывать постоянно
+}
