@@ -1,0 +1,19 @@
+{
+  "id": "004-mandelbrot",
+  "title": "Мандельброт",
+  "description": "Визуализация множества Мандельброта с зумом",
+  "author": {
+    "id": "user101",
+    "name": "Math Artist",
+    "avatar": "/images/avatars/user101.png"
+  },
+  "thumbnail": "/community-sketches/004-mandelbrot/thumbnail.png",
+  "codePath": "/community-sketches/004-mandelbrot/sketch.js",
+  "tags": ["фрактал", "математика", "зум"],
+  "category": "Генеративное",
+  "difficulty": "Тяжёлая",
+  "likes": 201,
+  "views": 678,
+  "createdAt": "2026-03-12T10:00:00Z",
+  "status": "approved"
+}

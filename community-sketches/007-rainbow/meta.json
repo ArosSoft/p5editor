@@ -1,0 +1,19 @@
+{
+  "id": "007-rainbow",
+  "title": "Радужный градиент",
+  "description": "Простой анимированный радужный фон",
+  "author": {
+    "id": "user404",
+    "name": "Color Lover",
+    "avatar": "/images/avatars/user404.png"
+  },
+  "thumbnail": "/community-sketches/007-rainbow/thumbnail.png",
+  "codePath": "/community-sketches/007-rainbow/sketch.js",
+  "tags": ["цвет", "градиент", "радуга"],
+  "category": "Анимация",
+  "difficulty": "Лёгкая",
+  "likes": 67,
+  "views": 198,
+  "createdAt": "2026-03-09T10:00:00Z",
+  "status": "approved"
+}

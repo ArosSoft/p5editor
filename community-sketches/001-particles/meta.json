@@ -1,0 +1,19 @@
+{
+  "id": "001-particles",
+  "title": "Анимированные частицы",
+  "description": "Красивая анимация летающих частиц с эффектом шлейфа",
+  "author": {
+    "id": "user123",
+    "name": "Alex Creative",
+    "avatar": "/images/avatars/user123.png"
+  },
+  "thumbnail": "/community-sketches/001-particles/thumbnail.png",
+  "codePath": "/community-sketches/001-particles/sketch.js",
+  "tags": ["анимация", "частицы", "эффекты"],
+  "category": "Анимация",
+  "difficulty": "Средняя",
+  "likes": 42,
+  "views": 156,
+  "createdAt": "2026-03-15T10:00:00Z",
+  "status": "approved"
+}
