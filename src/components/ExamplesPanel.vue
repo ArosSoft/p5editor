@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { marked } from 'marked'
+import type { Tokens } from 'marked'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+
+// Регистрируем язык JavaScript для подсветки
+hljs.registerLanguage('javascript', javascript)
 
 interface Step {
   title: string
@@ -41,10 +47,47 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 
-// Настройка marked
+// Настройка marked с кастомным рендерером для добавления кнопок копирования
+const renderer = new marked.Renderer()
+
+// Переопределяем рендеринг code блоков с подсветкой синтаксиса
+renderer.code = (token: Tokens.Code) => {
+  const lang = token.lang || 'javascript'
+  const code = token.text
+
+  // Используем highlight.js для подсветки синтаксиса
+  let highlightedCode: string
+  try {
+    // Пытаемся подсветить как JavaScript
+    const detected = hljs.highlight(code, { language: 'javascript', ignoreIllegals: true })
+    highlightedCode = detected.value
+  } catch {
+    // Fallback: экранируем без подсветки
+    highlightedCode = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
+  return `
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang">${lang}</span>
+    <button class="copy-code-btn" onclick="copyCodeBlock(this)" title="Скопировать код">
+      📋 Копировать
+    </button>
+  </div>
+  <pre><code class="language-${lang}">${highlightedCode}</code></pre>
+</div>
+`.trim()
+}
+
 marked.setOptions({
   breaks: true,
-  gfm: true
+  gfm: true,
+  renderer: renderer
 })
 
 // Определяем, является ли файл markdown
@@ -117,6 +160,51 @@ function showNotification(message: string) {
   if (notificationTimer) clearTimeout(notificationTimer)
   notification.value = message
   notificationTimer = setTimeout(() => notification.value = null, 2500)
+}
+
+// Функция для копирования кода из блока (вызывается из HTML)
+function copyCodeBlock(button: HTMLElement) {
+  const wrapper = button.closest('.code-block-wrapper')
+  if (!wrapper) return
+
+  const codeElement = wrapper.querySelector('pre code')
+  if (!codeElement) return
+
+  const code = codeElement.textContent || ''
+
+  navigator.clipboard.writeText(code).then(() => {
+    const originalText = button.textContent
+    button.textContent = '✓ Скопировано!'
+    button.classList.add('copied')
+
+    setTimeout(() => {
+      button.textContent = originalText || '📋 Копировать'
+      button.classList.remove('copied')
+    }, 2000)
+  }).catch(() => {
+    // Fallback для старых браузеров
+    const textArea = document.createElement('textarea')
+    textArea.value = code
+    textArea.style.cssText = 'position:fixed;opacity:0'
+    document.body.appendChild(textArea)
+    textArea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textArea)
+
+    const originalText = button.textContent
+    button.textContent = '✓ Скопировано!'
+    button.classList.add('copied')
+
+    setTimeout(() => {
+      button.textContent = originalText || '📋 Копировать'
+      button.classList.remove('copied')
+    }, 2000)
+  })
+}
+
+// Делаем функцию доступной глобально для onclick из HTML
+if (typeof window !== 'undefined') {
+  (window as any).copyCodeBlock = copyCodeBlock
 }
 
 // Функции для сохранения и загрузки состояния
@@ -848,6 +936,120 @@ function goToNextStep() {
   color: #333;
 }
 
+/* Code blocks with copy button */
+.markdown-body :deep(.code-block-wrapper) {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #2a2a4a;
+}
+.panel.light .markdown-body :deep(.code-block-wrapper) {
+  border-color: #e0e0e0;
+}
+
+.markdown-body :deep(.code-block-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a4a;
+}
+.panel.light .markdown-body :deep(.code-block-header) {
+  background: #e8e8ea;
+  border-color: #d0d0d0;
+}
+
+.markdown-body :deep(.code-lang) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9b9bf0;
+  text-transform: uppercase;
+}
+.panel.light .markdown-body :deep(.code-lang) {
+  color: #5b5bd6;
+}
+
+.markdown-body :deep(.copy-code-btn) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(91, 91, 214, 0.2);
+  color: #9b9bf0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.markdown-body :deep(.copy-code-btn:hover) {
+  background: rgba(91, 91, 214, 0.35);
+  color: #c9b1ff;
+}
+.panel.light .markdown-body :deep(.copy-code-btn) {
+  background: rgba(91, 91, 214, 0.15);
+  color: #5b5bd6;
+}
+.panel.light .markdown-body :deep(.copy-code-btn:hover) {
+  background: rgba(91, 91, 214, 0.25);
+  color: #333;
+}
+
+.markdown-body :deep(.copy-code-btn.copied) {
+  background: #2ea043;
+  color: white;
+}
+.panel.light .markdown-body :deep(.copy-code-btn.copied) {
+  background: #2ea043;
+  color: white;
+}
+
+.markdown-body :deep(.code-block-wrapper pre) {
+  margin: 0;
+  padding: 14px;
+  background: #0d0d1a;
+  border-radius: 0;
+  overflow-x: auto;
+  border: none;
+}
+.panel.light .markdown-body :deep(.code-block-wrapper pre) {
+  background: #f5f5f7;
+}
+
+/* Highlight.js syntax highlighting */
+.markdown-body :deep(.hljs-keyword) { color: #ff79c6; }
+.markdown-body :deep(.hljs-function) { color: #8be9fd; }
+.markdown-body :deep(.hljs-built_in) { color: #8be9fd; }
+.markdown-body :deep(.hljs-number) { color: #bd93f9; }
+.markdown-body :deep(.hljs-string) { color: #f1fa8c; }
+.markdown-body :deep(.hljs-comment) { color: #6272a4; font-style: italic; }
+.markdown-body :deep(.hljs-operator) { color: #ff79c6; }
+.markdown-body :deep(.hljs-variable) { color: #f8f8f2; }
+.markdown-body :deep(.hljs-params) { color: #ffb86c; }
+.markdown-body :deep(.hljs-property) { color: #50fa7b; }
+.markdown-body :deep(.hljs-class) { color: #8be9fd; }
+.markdown-body :deep(.hljs-title) { color: #50fa7b; }
+.markdown-body :deep(.hljs-title.class_) { color: #8be9fd; }
+.markdown-body :deep(.hljs-title.function_) { color: #50fa7b; }
+
+/* Light theme syntax colors */
+.panel.light .markdown-body :deep(.hljs-keyword) { color: #d73a49; }
+.panel.light .markdown-body :deep(.hljs-function) { color: #6f42c1; }
+.panel.light .markdown-body :deep(.hljs-built_in) { color: #005cc5; }
+.panel.light .markdown-body :deep(.hljs-number) { color: #005cc5; }
+.panel.light .markdown-body :deep(.hljs-string) { color: #032f62; }
+.panel.light .markdown-body :deep(.hljs-comment) { color: #6a737d; font-style: italic; }
+.panel.light .markdown-body :deep(.hljs-operator) { color: #d73a49; }
+.panel.light .markdown-body :deep(.hljs-variable) { color: #24292e; }
+.panel.light .markdown-body :deep(.hljs-params) { color: #e36209; }
+.panel.light .markdown-body :deep(.hljs-property) { color: #22863a; }
+.panel.light .markdown-body :deep(.hljs-class) { color: #22863a; }
+.panel.light .markdown-body :deep(.hljs-title) { color: #22863a; }
+.panel.light .markdown-body :deep(.hljs-title.class_) { color: #6f42c1; }
+.panel.light .markdown-body :deep(.hljs-title.function_) { color: #6f42c1; }
+
 /* Lists */
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
@@ -935,8 +1137,13 @@ function goToNextStep() {
 /* Images */
 .markdown-body :deep(img) {
   max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   border-radius: 8px;
   margin: 8px 0;
+  display: block;
+  object-fit: contain;
 }
 
 /* Task lists */
