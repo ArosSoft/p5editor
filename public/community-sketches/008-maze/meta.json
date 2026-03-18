@@ -1,0 +1,19 @@
+{
+  "id": "008-maze",
+  "title": "Лабиринт",
+  "description": "Генерация лабиринта алгоритмом DFS",
+  "author": {
+    "id": "user505",
+    "name": "Maze Runner",
+    "avatar": "/images/avatars/user505.png"
+  },
+  "thumbnail": "/community-sketches/008-maze/thumbnail.png",
+  "codePath": "/community-sketches/008-maze/sketch.js",
+  "tags": ["лабиринт", "генерация", "алгоритм"],
+  "category": "Генеративное",
+  "difficulty": "Средняя",
+  "likes": 112,
+  "views": 367,
+  "createdAt": "2026-03-08T10:00:00Z",
+  "status": "approved"
+}

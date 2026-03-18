@@ -1,0 +1,19 @@
+{
+  "id": "005-waves",
+  "title": "Звуковые волны",
+  "description": "Визуализация звуковых волн в реальном времени",
+  "author": {
+    "id": "user202",
+    "name": "Sound Visualizer",
+    "avatar": "/images/avatars/user202.png"
+  },
+  "thumbnail": "/community-sketches/005-waves/thumbnail.png",
+  "codePath": "/community-sketches/005-waves/sketch.js",
+  "tags": ["звук", "аудио", "визуализация"],
+  "category": "Аудио",
+  "difficulty": "Средняя",
+  "likes": 95,
+  "views": 234,
+  "createdAt": "2026-03-11T10:00:00Z",
+  "status": "approved"
+}

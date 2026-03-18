@@ -1,0 +1,19 @@
+{
+  "id": "003-snow",
+  "title": "Интерактивный снег",
+  "description": "Падающие снежинки, реагирующие на курсор мыши",
+  "author": {
+    "id": "user789",
+    "name": "Winter Coder",
+    "avatar": "/images/avatars/user789.png"
+  },
+  "thumbnail": "/community-sketches/003-snow/thumbnail.png",
+  "codePath": "/community-sketches/003-snow/sketch.js",
+  "tags": ["зима", "снег", "интерактив"],
+  "category": "Анимация",
+  "difficulty": "Лёгкая",
+  "likes": 124,
+  "views": 489,
+  "createdAt": "2026-03-13T10:00:00Z",
+  "status": "approved"
+}

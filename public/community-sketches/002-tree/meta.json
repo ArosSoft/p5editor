@@ -1,0 +1,19 @@
+{
+  "id": "002-tree",
+  "title": "Фрактальное дерево",
+  "description": "Рекурсивное дерево с изменяемыми параметрами",
+  "author": {
+    "id": "user456",
+    "name": "Maria Fractal",
+    "avatar": "/images/avatars/user456.png"
+  },
+  "thumbnail": "/community-sketches/002-tree/thumbnail.png",
+  "codePath": "/community-sketches/002-tree/sketch.js",
+  "tags": ["фрактал", "рекурсия", "дерево"],
+  "category": "Генеративное",
+  "difficulty": "Средняя",
+  "likes": 87,
+  "views": 312,
+  "createdAt": "2026-03-14T10:00:00Z",
+  "status": "approved"
+}

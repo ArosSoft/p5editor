@@ -1,0 +1,19 @@
+{
+  "id": "006-life",
+  "title": "Клеточный автомат",
+  "description": "Игра «Жизнь» Конвея с возможностью рисования",
+  "author": {
+    "id": "user303",
+    "name": "Cell Master",
+    "avatar": "/images/avatars/user303.png"
+  },
+  "thumbnail": "/community-sketches/006-life/thumbnail.png",
+  "codePath": "/community-sketches/006-life/sketch.js",
+  "tags": ["клеточный автомат", "игра жизнь", "симуляция"],
+  "category": "Симуляция",
+  "difficulty": "Тяжёлая",
+  "likes": 156,
+  "views": 521,
+  "createdAt": "2026-03-10T10:00:00Z",
+  "status": "approved"
+}
