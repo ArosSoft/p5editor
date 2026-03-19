@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="0;url=/p5editor/">
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p>Redirecting to <a href="/p5editor/">home page</a>...</p>
+  <script>
+    // Перенаправление с сохранением hash маршрута
+    var path = window.location.pathname;
+    var hash = window.location.hash;
+    var baseUrl = '/p5editor/';
+    
+    // Извлекаем маршрут из пути
+    var route = path.replace('/p5editor/', '').replace(/^\/+/, '');
+    
+    if (route || hash) {
+      var target = baseUrl + (hash ? hash : '#' + route);
+      window.location.replace(target);
+    } else {
+      window.location.replace(baseUrl);
+    }
+  </script>
+</body>
+</html>
