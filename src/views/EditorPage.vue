@@ -28,7 +28,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const showExamples = ref(false)
 
-const fontSize = ref(15)
+const fontSize = ref(19)
 const fontFamily = ref('Consolas, Monaco, monospace')
 
 type Theme = 'dark' | 'light'
@@ -877,15 +877,19 @@ function navigateToShare() {
   font-weight: 500;
   white-space: nowrap;
 }
+/* Базовая спокойная кнопка */
+.top-btn {
+  background: rgba(255, 255, 255, 0.08);
+}
 
 .top-btn:hover {
-  background: rgba(100, 108, 255, 0.3);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
 }
 
 .top-btn.active {
-  background: rgba(100, 108, 255, 0.4);
-  border-left: 2px solid #646cff;
+  background: rgba(255, 255, 255, 0.18);
+  border-left: 2px solid rgba(255, 255, 255, 0.35);
 }
 
 .top-btn .btn-icon {
@@ -897,12 +901,12 @@ function navigateToShare() {
 }
 
 .theme-light .top-btn {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(0, 0, 0, 0.04);
   color: #333;
 }
 
 .theme-light .top-btn:hover {
-  background: rgba(100, 108, 255, 0.2);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 /* Поле для названия скетча */
@@ -938,55 +942,83 @@ function navigateToShare() {
   border-color: #646cff;
 }
 
-/* Кнопки авторизации */
-.auth-btn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* Индивидуальные спокойные цвета верхних кнопок (низкая насыщенность) */
+
+/* Старт — мягкий зелёный */
+.top-btn:nth-of-type(1) {
+  background-color: rgba(46, 160, 67, 0.16);
+}
+.top-btn:nth-of-type(1):hover {
+  background-color: rgba(46, 160, 67, 0.22);
 }
 
+/* Стоп — мягкий красный */
+.top-btn:nth-of-type(2) {
+  background-color: rgba(212, 76, 64, 0.16);
+}
+.top-btn:nth-of-type(2):hover {
+  background-color: rgba(212, 76, 64, 0.22);
+}
+
+/* Форматировать — мягкий синий */
+.top-btn:nth-of-type(3) {
+  background-color: rgba(86, 156, 214, 0.18);
+}
+.top-btn:nth-of-type(3):hover {
+  background-color: rgba(86, 156, 214, 0.24);
+}
+
+/* Учебник по примерам — мягкий фиолетовый */
+.examples-btn {
+  background-color: rgba(147, 112, 219, 0.20);
+}
+.examples-btn:hover,
+.examples-btn.active {
+  background-color: rgba(147, 112, 219, 0.28);
+}
+
+/* Исследуй — мягкий бирюзовый */
+.explore-btn {
+  background-color: rgba(64, 179, 162, 0.20);
+}
+.explore-btn:hover {
+  background-color: rgba(64, 179, 162, 0.28);
+}
+
+/* Поделиться — мягкий оранжевый */
+.share-btn {
+  background-color: rgba(242, 153, 74, 0.22);
+}
+.share-btn:hover {
+  background-color: rgba(242, 153, 74, 0.30);
+}
+
+/* Войти — спокойный контурный серо-синий */
+.auth-btn {
+  background-color: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+}
+.auth-btn:hover {
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+/* Регистрация — мягкий акцентный синий */
 .auth-btn.register-btn {
-  background: linear-gradient(135deg, #646cff, #9089fc);
-  color: white;
-  border: none;
+  background-color: rgba(99, 102, 241, 0.24);
+  border-color: transparent;
+}
+.auth-btn.register-btn:hover {
+  background-color: rgba(99, 102, 241, 0.32);
 }
 
 .theme-light .auth-btn {
-  border-color: rgba(0, 0, 0, 0.2);
+  border-color: rgba(148, 163, 184, 0.8);
 }
-
+.theme-light .auth-btn:hover {
+  background-color: rgba(148, 163, 184, 0.14);
+}
 .theme-light .auth-btn.register-btn {
-  color: white;
-}
-
-/* Кнопка «Исследуй» */
-.explore-btn {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  border: none;
-  color: white;
-  font-weight: 600;
-}
-
-.explore-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-/* Кнопка «Поделиться» */
-.share-btn {
-  background: linear-gradient(135deg, #f093fb, #f5576c);
-  border: none;
-  color: white;
-  font-weight: 600;
-}
-
-.share-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-}
-
-.theme-light .explore-btn,
-.theme-light .share-btn {
-  color: white;
+  color: #1f2933;
 }
 
 /* Боковое меню */

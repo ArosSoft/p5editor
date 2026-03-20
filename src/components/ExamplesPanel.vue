@@ -602,7 +602,7 @@ function goToNextStep() {
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
   position: relative;
   z-index: 100;
 }
@@ -816,7 +816,7 @@ function goToNextStep() {
   background: #12122a;
   border-radius: 8px;
   line-height: 1.7;
-  font-size: 14px;
+  font-size: 16px;
 }
 .panel.light .markdown-body {
   background: #fff;
