@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="0;url=./">
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p>Redirecting to <a href="./">home page</a>...</p>
+  <script>
+    // Перенаправление с сохранением hash маршрута
+    var path = window.location.pathname;
+    var hash = window.location.hash;
+    
+    // Извлекаем маршрут из пути (убираем имя репозитория)
+    var segments = path.split('/').filter(s => s);
+    var route = segments.slice(1).join('/'); // Пропускаем 'p5editor'
+    
+    if (route || hash) {
+      var target = './' + (hash ? hash : '#' + route);
+      window.location.replace(target);
+    } else {
+      window.location.replace('./');
+    }
+  </script>
+</body>
+</html>

@@ -16,5 +16,5 @@ ellipse(fishy.x, fishy.y, fishy.size, fishy.size * 0.6);
 
 `ellipse(fishy.x, fishy.y, fishy.size, fishy.size * 0.6)` — рисуем овал. Высота меньше ширины, чтобы тело было вытянутым.
 
-> 🖼️ **[Здесь будет картинка: овалы — тела рыбок]**
+![картинка_8.1](/images/48.png)
 
