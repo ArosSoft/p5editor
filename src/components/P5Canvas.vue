@@ -25,7 +25,6 @@ defineExpose({ start, stop })
 function start(userCode: string) {
   stop()
   currentCode = userCode
-  props.addMessage('Запуск скетча в iframe...')
 
   const isDark = props.theme === 'dark'
   const backgroundColor = isDark ? '#1a1a1a' : '#f8f9fa'
@@ -164,8 +163,6 @@ function start(userCode: string) {
     iframeRef.value.src = url
     currentIframeSrc = url
   }
-
-  props.addMessage(`Скетч запущен (тема: \${isDark ? 'тёмная' : 'светлая'})`)
 }
 
 
@@ -178,7 +175,6 @@ function stop() {
     currentIframeSrc = null
   }
   currentCode = ''
-  props.addMessage('Скетч остановлен')
 }
 
 let handler: ((event: MessageEvent) => void) | null = null

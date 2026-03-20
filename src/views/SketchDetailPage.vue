@@ -55,8 +55,8 @@ function toggleLike() {
 function openInEditor() {
   if (sketch.value) {
     // Сохраняем код в localStorage для передачи в редактор
-    localStorage.setItem('p5editor_shared_code', sketch.value.code)
-    localStorage.setItem('p5editor_shared_name', sketch.value.title)
+    localStorage.setItem('p5editor_current_code', sketch.value.code)
+    localStorage.setItem('p5editor_current_name', sketch.value.title)
     router.push('/')
   }
 }

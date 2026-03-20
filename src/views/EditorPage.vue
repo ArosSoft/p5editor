@@ -5,11 +5,16 @@ import CodeEditor from '../components/CodeEditor.vue'
 import P5Canvas from '../components/P5Canvas.vue'
 import ConsoleOutput from '../components/ConsoleOutput.vue'
 import ExamplesPanel from '../components/ExamplesPanel.vue'
+import AuthModal from '../components/AuthModal.vue'
+import UserProfile from '../components/UserProfile.vue'
+import { useAuth } from '../composables/useAuth'
 import { saveAs } from 'file-saver'
 import beautify from 'js-beautify'
 import AIChat from '../components/AIChat.vue'
 
 const router = useRouter()
+const { isAuthenticated } = useAuth()
+const showAuthModal = ref(false)
 
 const code = ref(`function setup() {
   createCanvas(400, 400);
@@ -181,6 +186,18 @@ onMounted(() => {
   window.addEventListener('mousemove', onGlobalMouseMove)
   window.addEventListener('mouseup', onGlobalMouseUp)
   window.addEventListener('keydown', handleKeyDown)
+  
+  // Восстановление кода из localStorage при загрузке
+  const savedCode = localStorage.getItem('p5editor_current_code')
+  const savedName = localStorage.getItem('p5editor_current_name')
+  if (savedCode) {
+    code.value = savedCode
+    originalCode.value = savedCode
+    lastSavedCode = savedCode
+  }
+  if (savedName) {
+    sketchName.value = savedName
+  }
 })
 
 onUnmounted(() => {
@@ -217,7 +234,6 @@ function clearConsole() {
 }
 
 function startSketch() {
-  addMessage('🚀 Запуск скетча...')
   try {
     canvasRef.value?.start(code.value)
   } catch (e: any) {
@@ -226,7 +242,6 @@ function startSketch() {
 }
 
 function stopSketch() {
-  addMessage('⏹️ Остановка скетча...')
   canvasRef.value?.stop()
 }
 
@@ -423,10 +438,25 @@ function getTooltipText(item: string): string {
 }
 
 let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null
+let saveCodeTimer: ReturnType<typeof setTimeout> | null = null
+let lastSavedCode = ''
 
 function debouncedSaveToHistory() {
   if (saveHistoryTimer) clearTimeout(saveHistoryTimer)
   saveHistoryTimer = setTimeout(() => saveToHistory(), 500)
+  saveCodeToStorage()
+}
+
+// Автосохранение кода в localStorage (только если код изменился)
+function saveCodeToStorage() {
+  if (saveCodeTimer) clearTimeout(saveCodeTimer)
+  saveCodeTimer = setTimeout(() => {
+    if (code.value !== lastSavedCode) {
+      localStorage.setItem('p5editor_current_code', code.value)
+      localStorage.setItem('p5editor_current_name', sketchName.value)
+      lastSavedCode = code.value
+    }
+  }, 2000)
 }
 
 // Навигация к странице «Исследуй»
@@ -436,9 +466,7 @@ function navigateToExplore() {
 
 // Навигация к странице «Поделиться»
 function navigateToShare() {
-  // Сохраняем текущий код в localStorage для передачи на страницу публикации
-  localStorage.setItem('p5editor_shared_code', code.value)
-  localStorage.setItem('p5editor_shared_name', sketchName.value)
+  // Код уже сохранён в localStorage через saveCodeToStorage()
   router.push('/share')
 }
 </script>
@@ -495,14 +523,15 @@ function navigateToShare() {
       </div>
 
       <div class="top-bar-right">
-        <button class="top-btn auth-btn" title="Войти">
-          <span class="btn-icon">🔑</span>
-          <span class="btn-text">Войти</span>
-        </button>
-        <button class="top-btn auth-btn register-btn" title="Регистрация">
-          <span class="btn-icon">📝</span>
-          <span class="btn-text">Регистрация</span>
-        </button>
+        <template v-if="isAuthenticated">
+          <UserProfile />
+        </template>
+        <template v-else>
+          <button @click="showAuthModal = true" class="top-btn auth-btn" title="Войти">
+            <span class="btn-icon">🔑</span>
+            <span class="btn-text">Войти</span>
+          </button>
+        </template>
       </div>
     </header>
 
@@ -732,6 +761,9 @@ function navigateToShare() {
 
       </div>
     </div>
+
+    <!-- Модальное окно авторизации -->
+    <AuthModal v-model="showAuthModal" />
   </div>
 </template>
 
@@ -1002,23 +1034,11 @@ function navigateToShare() {
   background-color: rgba(148, 163, 184, 0.12);
 }
 
-/* Регистрация — мягкий акцентный синий */
-.auth-btn.register-btn {
-  background-color: rgba(99, 102, 241, 0.24);
-  border-color: transparent;
-}
-.auth-btn.register-btn:hover {
-  background-color: rgba(99, 102, 241, 0.32);
-}
-
 .theme-light .auth-btn {
   border-color: rgba(148, 163, 184, 0.8);
 }
 .theme-light .auth-btn:hover {
   background-color: rgba(148, 163, 184, 0.14);
-}
-.theme-light .auth-btn.register-btn {
-  color: #1f2933;
 }
 
 /* Боковое меню */

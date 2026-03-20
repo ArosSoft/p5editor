@@ -28,11 +28,11 @@ const categories = [
 
 // Получение кода из localStorage (если есть)
 const sharedCode = computed(() => {
-  return localStorage.getItem('p5editor_shared_code') || ''
+  return localStorage.getItem('p5editor_current_code') || ''
 })
 
 const sharedName = computed(() => {
-  return localStorage.getItem('p5editor_shared_name') || ''
+  return localStorage.getItem('p5editor_current_name') || ''
 })
 
 // Если есть общий код, используем его название
