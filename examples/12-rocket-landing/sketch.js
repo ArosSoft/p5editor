@@ -574,7 +574,8 @@ function runAutopilot() {
 
   let vxError = targetVx - r.vx;
   let windCompensation = wind * P.windEffect * 25;
-  let targetAngle = -vxError * 0.4 - windCompensation;
+  // Согласуем боковую компоненту ускорения с тем, как ракета поворачивается rotate(r.angle)
+  let targetAngle = vxError * 0.4 - windCompensation;
 
   let maxAngle;
   if (phase === 'APPROACH') maxAngle = 0.4;
@@ -625,7 +626,7 @@ function runAutopilot() {
 
   if (r.thrusting) {
     let actualThrust = thrust * min(thrustCommand, 1.0);
-    r.vx += -sin(r.angle) * actualThrust;
+    r.vx += sin(r.angle) * actualThrust;
     r.vy += -cos(r.angle) * actualThrust;
     r.fuel -= 0.5;
     spawnThrustParticles(r, actualThrust);
@@ -662,8 +663,8 @@ function updatePhysics() {
     r.thrustingRight = false;
 
     if (keyIsDown(UP_ARROW) || keyIsDown(87)) {
-      if (r.fuel > 0) {
-        r.vx += -sin(r.angle) * P.thrustPower;
+    if (r.fuel > 0) {
+        r.vx += sin(r.angle) * P.thrustPower;
         r.vy += -cos(r.angle) * P.thrustPower;
         r.fuel -= 0.5;
         r.thrusting = true;
@@ -851,12 +852,12 @@ function updateWindLimited() {
 function spawnThrustParticles(r, power) {
   let count = max(1, floor(power * 18));
   for (let i = 0; i < count; i++) {
-    let px = r.x + sin(r.angle) * (r.height / 2);
+    let px = r.x - sin(r.angle) * (r.height / 2);
     let py = r.y + cos(r.angle) * (r.height / 2);
     particles.push({
       x: px + random(-3, 3),
       y: py + random(-2, 2),
-      vx: sin(r.angle) * random(1, 3) * power * 8 + random(-0.5, 0.5),
+      vx: -sin(r.angle) * random(1, 3) * power * 8 + random(-0.5, 0.5),
       vy: cos(r.angle) * random(1, 3) * power * 8 + random(-0.5, 0.5),
       life: random(15, 35),
       maxLife: 35,
@@ -865,7 +866,7 @@ function spawnThrustParticles(r, power) {
     });
   }
   if (random() < 0.3 * power) {
-    let hx = r.x + sin(r.angle) * (r.height / 2 + 8);
+    let hx = r.x - sin(r.angle) * (r.height / 2 + 8);
     let hy = r.y + cos(r.angle) * (r.height / 2 + 8);
     heatParticles.push({
       x: hx + random(-5, 5),
@@ -1850,7 +1851,8 @@ function simulateOne(seed) {
 
     let vxError = targetVx - sim.vx;
     let windComp = sW * P.windEffect * 25;
-    let targetAngle = -vxError * 0.4 - windComp;
+    // Та же логика знаков, что и в runAutopilot()
+    let targetAngle = vxError * 0.4 - windComp;
     let maxAngle = phase === 'APPROACH' ? 0.4 : phase === 'DESCENT' ? 0.25 :
       phase === 'FINAL' ? 0.12 : 0.05;
     targetAngle = constrain(targetAngle, -maxAngle, maxAngle);
@@ -1872,7 +1874,7 @@ function simulateOne(seed) {
 
     if (thrustCmd > 0.1 && sim.fuel > 0) {
       let actThrust = thrust * min(thrustCmd, 1.0);
-      sim.vx += -sin(sim.angle) * actThrust;
+      sim.vx += sin(sim.angle) * actThrust;
       sim.vy += -cos(sim.angle) * actThrust;
       sim.fuel -= 0.5;
     }
