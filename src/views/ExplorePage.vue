@@ -40,12 +40,21 @@ async function loadCategories() {
 
 // Загрузка скетчей
 async function loadSketches() {
+  console.log('[ExplorePage] loadSketches вызвана')
   loading.value = true
   error.value = null
 
-  const difficultyValue = selectedDifficulty.value !== 'Все' 
+  const difficultyValue = selectedDifficulty.value !== 'Все'
     ? selectedDifficulty.value as 'Лёгкая' | 'Средняя' | 'Тяжёлая'
     : undefined
+
+  console.log('[ExplorePage] Параметры загрузки:', {
+    page: currentPage.value,
+    limit: itemsPerPage.value,
+    category: selectedCategory.value,
+    difficulty: difficultyValue,
+    search: searchQuery.value
+  })
 
   const result = await getGallerySketches({
     page: currentPage.value,
@@ -57,11 +66,15 @@ async function loadSketches() {
     sortOrder: sortBy.value === 'title' ? 'asc' : 'desc'
   })
 
+  console.log('[ExplorePage] Результат загрузки:', result)
+
   if (result.success) {
     sketches.value = result.data || []
     total.value = result.total || 0
+    console.log('[ExplorePage] Загружено скетчей:', sketches.value.length)
   } else {
     error.value = result.error || 'Ошибка загрузки скетчей'
+    console.error('[ExplorePage] Ошибка:', error.value)
   }
 
   loading.value = false
