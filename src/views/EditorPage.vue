@@ -195,6 +195,7 @@ const editorFlexStyle = computed(() => {
 })
 
 // Watch для обработки изменения sketch_id в route и localStorage
+let isFirstWatchRun = true
 watch(
   () => ({
     routeId: route.params.id,
@@ -206,16 +207,14 @@ watch(
     const sketchId = (newVal.routeId as string) || (newVal.querySketch as string) || newVal.storageSketchId
     const oldId = (oldVal?.routeId as string) || (oldVal?.querySketch as string) || oldVal?.storageSketchId
 
-    // Загружаем только если ID изменился или появился новый
-    if (sketchId && sketchId !== oldId) {
-      console.log('[EditorPage] sketch_id изменился, загружаю скетч:', sketchId)
-      await loadSketchFromDatabase(sketchId)
-    } else if (!sketchId && !oldId) {
-      // Нет ID - загружаем из localStorage код
-      console.log('[EditorPage] Нет sketch_id, загружаю код из localStorage')
+    // Пропускаем первый запуск если нет sketch_id
+    if (isFirstWatchRun && !sketchId) {
+      isFirstWatchRun = false
+      // Загружаем код из localStorage только если есть
       const savedCode = localStorage.getItem('p5editor_current_code')
       const savedName = localStorage.getItem('p5editor_current_name')
       if (savedCode) {
+        console.log('[EditorPage] Загрузка кода из localStorage при старте')
         code.value = savedCode
         originalCode.value = savedCode
         lastSavedCode = savedCode
@@ -223,6 +222,15 @@ watch(
       if (savedName) {
         sketchName.value = savedName
       }
+      return
+    }
+    
+    isFirstWatchRun = false
+
+    // Загружаем только если ID изменился или появился новый
+    if (sketchId && sketchId !== oldId) {
+      console.log('[EditorPage] sketch_id изменился, загружаю скетч:', sketchId)
+      await loadSketchFromDatabase(sketchId)
     }
   },
   { immediate: true } // Вызвать сразу при создании watch
