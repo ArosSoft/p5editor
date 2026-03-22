@@ -1,27 +1,48 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getSketchById, type Sketch } from '../mock/sketches'
+import { useSketches } from '../composables/useSketches'
+import { useAuth } from '../composables/useAuth'
+import type { SketchWithProfile } from '../types/supabase'
 
 const route = useRoute()
 const router = useRouter()
+const { getSketchById, toggleLike, checkLike, incrementViews, deleteSketch } = useSketches()
+const { user, isAuthenticated } = useAuth()
 
 // Состояние
-const sketch = ref<Sketch | null>(null)
+const sketch = ref<SketchWithProfile | null>(null)
 const isLoading = ref(true)
 const isCopied = ref(false)
-const likes = ref(0)
 const hasLiked = ref(false)
+const localLikes = ref(0)
+
+// Удаление скетча
+const showDeleteModal = ref(false)
+const isDeleting = ref(false)
 
 // Загрузка скетча
-onMounted(() => {
+onMounted(async () => {
   const id = route.params.id as string
-  const found = getSketchById(id)
   
-  if (found) {
-    sketch.value = found
-    likes.value = found.likes
+  const result = await getSketchById(id)
+  
+  if (result.success && result.data) {
+    sketch.value = result.data as SketchWithProfile
+    localLikes.value = sketch.value.likes
+    
+    // Увеличиваем счётчик просмотров
+    await incrementViews(id)
+    
+    // Проверяем, лайкнул ли текущий пользователь
+    if (user.value) {
+      const likeResult = await checkLike(id, user.value.id)
+      hasLiked.value = likeResult.liked || false
+    }
+  } else {
+    sketch.value = null
   }
+  
   isLoading.value = false
 })
 
@@ -41,22 +62,87 @@ function copyCode() {
   }
 }
 
-// Лайк
-function toggleLike() {
-  if (hasLiked.value) {
-    likes.value--
-  } else {
-    likes.value++
+// Открыть модальное окно удаления
+function confirmDelete() {
+  showDeleteModal.value = true
+}
+
+// Закрыть модальное окно
+function closeDeleteModal() {
+  showDeleteModal.value = false
+}
+
+// Удаление скетча
+async function handleDeleteSketch() {
+  if (!sketch.value || !user.value) return
+  
+  isDeleting.value = true
+  try {
+    const result = await deleteSketch(sketch.value.id)
+    
+    if (result.success) {
+      // Закрываем модальное окно и переходим в галерею
+      closeDeleteModal()
+      router.push('/explore')
+    } else {
+      alert(result.error || 'Ошибка удаления скетча')
+    }
+  } catch (error) {
+    console.error('Delete sketch error:', error)
+    alert('Ошибка при удалении скетча')
+  } finally {
+    isDeleting.value = false
   }
-  hasLiked.value = !hasLiked.value
+}
+
+// Лайк
+async function handleToggleLike() {
+  if (!user.value) {
+    alert('Для лайка необходимо войти в систему')
+    return
+  }
+  
+  if (!sketch.value) return
+  
+  const result = await toggleLike(sketch.value.id, user.value.id)
+  
+  if (result.success) {
+    hasLiked.value = result.liked || false
+    localLikes.value = result.liked 
+      ? localLikes.value + 1 
+      : Math.max(0, localLikes.value - 1)
+  } else {
+    alert(result.error || 'Ошибка при установке лайка')
+  }
 }
 
 // Запуск в редакторе
 function openInEditor() {
-  if (sketch.value) {
-    // Сохраняем код в localStorage для передачи в редактор
+  if (!sketch.value) return
+  
+  const currentUserId = user.value?.id
+  const isAuthor = currentUserId === sketch.value.user_id
+  
+  console.log('[SketchDetailPage] openInEditor:', {
+    sketchId: sketch.value.id,
+    currentUserId,
+    sketchAuthorId: sketch.value.user_id,
+    isAuthor
+  })
+  
+  if (isAuthor) {
+    // Автор скетча - сохраняем ID для редактирования в БД
+    console.log('[SketchDetailPage] Пользователь является автором, сохраняем ID скетча')
+    localStorage.setItem('p5editor_current_sketch_id', sketch.value.id)
     localStorage.setItem('p5editor_current_code', sketch.value.code)
     localStorage.setItem('p5editor_current_name', sketch.value.title)
+    router.push({ path: '/', query: { sketch: sketch.value.id, t: Date.now() } })
+  } else {
+    // Не автор - открываем как копию без ID
+    console.log('[SketchDetailPage] Пользователь не является автором, открываем как копию')
+    localStorage.removeItem('p5editor_current_sketch_id')
+    localStorage.setItem('p5editor_current_code', sketch.value.code)
+    localStorage.setItem('p5editor_current_name', sketch.value.title + ' (копия)')
     router.push('/')
   }
 }
@@ -70,6 +156,19 @@ function formatDate(dateStr: string) {
     day: 'numeric'
   })
 }
+
+// Вычисляемые
+const authorName = computed(() => {
+  if (!sketch.value) return ''
+  return sketch.value.profiles?.display_name || 
+         sketch.value.profiles?.email?.split('@')[0] || 
+         'Аноним'
+})
+
+const authorAvatar = computed(() => {
+  if (!sketch.value?.profiles?.avatar_url) return null
+  return sketch.value.profiles.avatar_url
+})
 </script>
 
 <template>
@@ -98,7 +197,13 @@ function formatDate(dateStr: string) {
       <div class="sketch-main">
         <!-- Превью -->
         <div class="sketch-preview">
-          <div class="preview-placeholder">
+          <img
+            v-if="sketch.thumbnail_url"
+            :src="sketch.thumbnail_url"
+            :alt="sketch.title"
+            class="preview-image"
+          />
+          <div v-else class="preview-placeholder">
             <span class="preview-icon">🎨</span>
           </div>
         </div>
@@ -111,10 +216,18 @@ function formatDate(dateStr: string) {
           <!-- Автор -->
           <div class="author-section">
             <div class="author-info">
-              <span class="author-avatar-large">👤</span>
+              <img
+                v-if="authorAvatar"
+                :src="authorAvatar"
+                class="author-avatar-img"
+                alt="Аватар автора"
+              />
+              <div v-else class="author-avatar-placeholder">
+                {{ authorName.charAt(0).toUpperCase() }}
+              </div>
               <div class="author-details">
                 <span class="author-label">Автор</span>
-                <span class="author-name">{{ sketch.author.name }}</span>
+                <span class="author-name">{{ authorName }}</span>
               </div>
             </div>
           </div>
@@ -123,7 +236,7 @@ function formatDate(dateStr: string) {
           <div class="stats-section">
             <div class="stat-box">
               <span class="stat-icon">❤️</span>
-              <span class="stat-value">{{ likes }}</span>
+              <span class="stat-value">{{ localLikes }}</span>
               <span class="stat-label">Лайков</span>
             </div>
             <div class="stat-box">
@@ -133,7 +246,7 @@ function formatDate(dateStr: string) {
             </div>
             <div class="stat-box">
               <span class="stat-icon">📅</span>
-              <span class="stat-value">{{ formatDate(sketch.createdAt) }}</span>
+              <span class="stat-value">{{ formatDate(sketch.created_at) }}</span>
               <span class="stat-label">Дата</span>
             </div>
           </div>
@@ -142,19 +255,19 @@ function formatDate(dateStr: string) {
           <div class="badges-section">
             <span
               class="difficulty-badge"
-              :class="`difficulty-${sketch.difficulty.toLowerCase()}`"
+              :class="`difficulty-${(sketch.difficulty || 'Средняя').toLowerCase()}`"
             >
-              {{ sketch.difficulty }}
+              {{ sketch.difficulty || 'Средняя' }}
             </span>
             <span class="category-badge">
-              {{ sketch.category }}
+              {{ sketch.category || 'Другое' }}
             </span>
           </div>
 
           <!-- Теги -->
           <div class="tags-section">
             <span
-              v-for="tag in sketch.tags"
+              v-for="tag in (sketch.tags || [])"
               :key="tag"
               class="detail-tag"
             >
@@ -164,8 +277,19 @@ function formatDate(dateStr: string) {
 
           <!-- Действия -->
           <div class="action-buttons">
-            <button @click="toggleLike" class="action-btn like-btn" :class="{ 'liked': hasLiked }">
+            <button
+              @click="handleToggleLike"
+              class="action-btn like-btn"
+              :class="{ 'liked': hasLiked }"
+            >
               {{ hasLiked ? '❤️' : '🤍' }} {{ hasLiked ? 'Понравилось!' : 'Лайк' }}
+            </button>
+            <button
+              v-if="isAuthenticated && user && sketch.user_id === user.id"
+              @click="confirmDelete"
+              class="action-btn delete-btn"
+            >
+              🗑️ Удалить скетч
             </button>
             <button @click="copyCode" class="action-btn copy-btn">
               {{ isCopied ? '✅ Скопировано!' : '📋 Копировать код' }}
@@ -190,11 +314,37 @@ function formatDate(dateStr: string) {
     <div v-else class="not-found">
       <span class="not-found-icon">😕</span>
       <h2>Скетч не найден</h2>
-      <p>К сожалению, скетч с таким ID не существует</p>
+      <p>К сожалению, скетч с таким ID не существует или не прошёл модерацию</p>
       <button @click="goBack" class="back-to-gallery-btn">
         ← Вернуться к галерее
       </button>
     </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+          <div class="modal" @click.stop>
+            <div class="modal-header">
+              <h3>🗑️ Удаление скетча</h3>
+              <button @click="closeDeleteModal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-content">
+              <p>Вы уверены, что хотите удалить этот скетч?</p>
+              <p class="warning">⚠️ Это действие нельзя отменить</p>
+            </div>
+            <div class="modal-actions">
+              <button @click="closeDeleteModal" class="modal-btn cancel-btn" :disabled="isDeleting">
+                Отмена
+              </button>
+              <button @click="handleDeleteSketch" class="modal-btn delete-btn" :disabled="isDeleting">
+                {{ isDeleting ? '⏳ Удаление...' : '🗑️ Удалить' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -294,6 +444,13 @@ function formatDate(dateStr: string) {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.preview-image {
+  width: 100%;
+  height: 400px;
+  object-fit: cover;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
 .preview-placeholder {
   width: 100%;
   height: 400px;
@@ -345,8 +502,24 @@ function formatDate(dateStr: string) {
   gap: 1rem;
 }
 
-.author-avatar-large {
-  font-size: 3rem;
+.author-avatar-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.author-avatar-placeholder {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 600;
 }
 
 .author-details {
@@ -491,6 +664,17 @@ function formatDate(dateStr: string) {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.delete-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: #ef4444;
+}
+
 /* Код */
 .code-section {
   margin-top: 2rem;
@@ -589,7 +773,8 @@ function formatDate(dateStr: string) {
     grid-template-columns: 1fr;
   }
 
-  .preview-placeholder {
+  .preview-placeholder,
+  .preview-image {
     height: 300px;
   }
 
@@ -612,5 +797,129 @@ function formatDate(dateStr: string) {
   .action-buttons {
     flex-direction: column;
   }
+}
+
+/* Модальное окно удаления */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h3 {
+  font-size: 1.25rem;
+  margin: 0;
+  color: #fff;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.modal-content {
+  padding: 1.5rem;
+}
+
+.modal-content p {
+  margin: 0 0 1rem 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+}
+
+.modal-content .warning {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-btn {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-btn.delete-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #fff;
+}
+
+.modal-btn.delete-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

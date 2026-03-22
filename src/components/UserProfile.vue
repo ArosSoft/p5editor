@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStorage } from '../composables/useStorage'
 
-const { user, profile, updateProfile, uploadAvatar, logout, loading } = useAuth()
+const router = useRouter()
+const { user, profile, updateProfile, uploadAvatar, logout, loading, isModerator } = useAuth()
 const { uploadAvatar: uploadAvatarStorage, uploading } = useStorage()
 
 const isEditing = ref(false)
@@ -85,6 +87,21 @@ async function handleFileChange(event: Event) {
   target.value = ''
 }
 
+function navigateToAdmin() {
+  router.push('/admin')
+  closeDropdown()
+}
+
+function navigateToDashboard() {
+  router.push('/dashboard')
+  closeDropdown()
+}
+
+function navigateToProfile() {
+  router.push('/profile')
+  closeDropdown()
+}
+
 // Закрытие dropdown при клике вне
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement
@@ -123,6 +140,27 @@ function handleClickOutside(event: MouseEvent) {
         </div>
 
         <div class="dropdown-divider"></div>
+
+        <button v-if="isModerator" class="dropdown-item admin-link" @click="navigateToAdmin">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v6c0 4.48-3.07 8.75-7 9.96-3.93-1.21-7-5.48-7-9.96V6.3l7-3.12zM11 7v2H9v2h2v2h2v-2h2V9h-2V7h-2zm0 12c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+          </svg>
+          Админ-панель
+        </button>
+
+        <button class="dropdown-item" @click="navigateToDashboard">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+          </svg>
+          Личный кабинет
+        </button>
+
+        <button class="dropdown-item" @click="navigateToProfile">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+          </svg>
+          Профиль
+        </button>
 
         <button class="dropdown-item" @click="startEditing">
           <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
@@ -319,6 +357,14 @@ function handleClickOutside(event: MouseEvent) {
 
 .dropdown-item.logout:hover {
   background: rgba(239, 68, 68, 0.1);
+}
+
+.dropdown-item.admin-link {
+  color: #8b5cf6;
+}
+
+.dropdown-item.admin-link:hover {
+  background: rgba(139, 92, 246, 0.1);
 }
 
 .dropdown-icon-svg {

@@ -12,6 +12,8 @@ export type SketchStatus = 'pending' | 'approved' | 'rejected' | 'draft'
 
 export type SketchDifficulty = 'Лёгкая' | 'Средняя' | 'Тяжёлая'
 
+export type ModerationAction = 'approved' | 'rejected'
+
 export interface Database {
   public: {
     Tables: {
@@ -61,6 +63,7 @@ export interface Database {
           status: SketchStatus
           views: number
           likes: number
+          rejection_reason: string | null
           created_at: string
           updated_at: string
         }
@@ -77,6 +80,7 @@ export interface Database {
           status?: SketchStatus
           views?: number
           likes?: number
+          rejection_reason?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -93,8 +97,35 @@ export interface Database {
           status?: SketchStatus
           views?: number
           likes?: number
+          rejection_reason?: string | null
           created_at?: string
           updated_at?: string
+        }
+      }
+      sketch_moderation_logs: {
+        Row: {
+          id: string
+          sketch_id: string
+          moderator_id: string
+          action: ModerationAction
+          comment: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          sketch_id: string
+          moderator_id: string
+          action: ModerationAction
+          comment?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          sketch_id?: string
+          moderator_id?: string
+          action?: ModerationAction
+          comment?: string | null
+          created_at?: string
         }
       }
       sketch_likes: {
@@ -191,3 +222,17 @@ export type ProfilesUpdate = Database['public']['Tables']['profiles']['Update']
 export type SketchesInsert = Database['public']['Tables']['sketches']['Insert']
 export type SketchesUpdate = Database['public']['Tables']['sketches']['Update']
 export type SketchLikesInsert = Database['public']['Tables']['sketch_likes']['Insert']
+
+// Типы для модерации
+export type SketchModerationLog = Database['public']['Tables']['sketch_moderation_logs']['Row']
+export type SketchModerationLogInsert = Database['public']['Tables']['sketch_moderation_logs']['Insert']
+
+// Тип для скетча с данными профиля автора
+export interface SketchWithProfile extends Sketch {
+  profiles?: {
+    id: string
+    display_name: string | null
+    email: string
+    avatar_url: string | null
+  } | null
+}

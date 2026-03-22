@@ -1,9 +1,9 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
-import type { Sketch, SketchDifficulty, SketchStatus } from '../types/supabase'
+import type { Sketch, SketchDifficulty, SketchStatus, SketchWithProfile } from '../types/supabase'
 
 export function useSketches() {
-  const sketches = ref<Sketch[]>([])
+  const sketches = ref<SketchWithProfile[]>([])
   const sketch = ref<Sketch | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -24,7 +24,7 @@ export function useSketches() {
             display_name,
             avatar_url
           )
-        `)
+        `, { count: 'exact' })
         .eq('id', id)
         .single()
 
@@ -90,8 +90,18 @@ export function useSketches() {
         query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
       }
 
+      // Маппинг имени сортировки на реальные колонки
+      const sortColumnMap: Record<string, string> = {
+        'popular': 'likes',
+        'new': 'created_at',
+        'title': 'title',
+        'views': 'views',
+        'created_at': 'created_at'
+      }
+      const sortColumn = sortColumnMap[sortBy] || 'created_at'
+
       // Сортировка
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' })
+      query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
 
       // Пагинация
       const from = (page - 1) * limit
@@ -102,10 +112,10 @@ export function useSketches() {
 
       if (fetchError) throw fetchError
 
-      sketches.value = (data as Sketch[]) || []
+      sketches.value = (data as SketchWithProfile[]) || []
       total.value = count || 0
 
-      return { success: true, data: sketches.value, total: total.value }
+      return { success: true, data: sketches.value as SketchWithProfile[], total: total.value }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Ошибка загрузки галереи'
       console.error('Get gallery sketches error:', e)
@@ -387,6 +397,110 @@ export function useSketches() {
     }
   }
 
+  // Одобрение скетча
+  async function approveSketch(sketchId: string, moderatorId: string, comment?: string) {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Обновляем статус скетча
+      const { data: sketchData, error: updateError } = await supabase
+        .from('sketches')
+        .update({ status: 'approved' })
+        .eq('id', sketchId)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+
+      // Логируем действие модерации
+      if (moderatorId) {
+        await supabase
+          .from('sketch_moderation_logs')
+          .insert({
+            sketch_id: sketchId,
+            moderator_id: moderatorId,
+            action: 'approved',
+            comment: comment || null
+          })
+      }
+
+      return { success: true, data: sketchData }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Ошибка одобрения скетча'
+      console.error('Approve sketch error:', e)
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Отклонение скетча
+  async function rejectSketch(sketchId: string, moderatorId: string, reason: string) {
+    try {
+      loading.value = true
+      error.value = null
+
+      // Обновляем статус скетча
+      const { data: sketchData, error: updateError } = await supabase
+        .from('sketches')
+        .update({ 
+          status: 'rejected',
+          rejection_reason: reason
+        })
+        .eq('id', sketchId)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+
+      // Логируем действие модерации
+      if (moderatorId) {
+        await supabase
+          .from('sketch_moderation_logs')
+          .insert({
+            sketch_id: sketchId,
+            moderator_id: moderatorId,
+            action: 'rejected',
+            comment: reason
+          })
+      }
+
+      return { success: true, data: sketchData }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Ошибка отклонения скетча'
+      console.error('Reject sketch error:', e)
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Получение истории модерации скетча
+  async function getSketchModerationHistory(sketchId: string) {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('sketch_moderation_logs')
+        .select(`
+          *,
+          profiles:moderator_id (
+            id,
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('sketch_id', sketchId)
+        .order('created_at', { ascending: false })
+
+      if (fetchError) throw fetchError
+
+      return { success: true, data: data || [] }
+    } catch (e) {
+      console.error('Get moderation history error:', e)
+      return { success: false, error: e instanceof Error ? e.message : 'Ошибка загрузки истории' }
+    }
+  }
+
   return {
     sketches,
     sketch,
@@ -403,6 +517,9 @@ export function useSketches() {
     toggleLike,
     checkLike,
     getCategories,
-    getPendingSketches
+    getPendingSketches,
+    approveSketch,
+    rejectSketch,
+    getSketchModerationHistory
   }
 }

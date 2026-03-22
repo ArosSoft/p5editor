@@ -1,0 +1,11 @@
+Публикуемый скетч хранится в таблице public.sketches.
+
+Ключевые поля этой таблицы, релевантные публикации:
+
+id — UUID скетча
+user_id — автор (связан с public.profiles.id)
+title, description, code — содержимое скетча
+thumbnail_url — миниатюра (если есть)
+tags, category, difficulty — метаданные
+status — статус: один из ['pending','approved','rejected','draft'] — именно это поле отражает, опубликован ли скетч (обычно статус = 'approved' означает опубликованный)
+created_at / updated_at — временные метки

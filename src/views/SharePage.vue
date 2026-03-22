@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
+import { useSketches } from '../composables/useSketches'
+import { useStorage } from '../composables/useStorage'
 
 const router = useRouter()
+const { user, profile, isAuthenticated } = useAuth()
+const { createSketch } = useSketches()
+const { uploadFile, uploading } = useStorage()
 
 // Состояние формы
 const title = ref('')
@@ -11,8 +17,10 @@ const tags = ref('')
 const category = ref('Анимация')
 const difficulty = ref<'Лёгкая' | 'Средняя' | 'Тяжёлая'>('Средняя')
 const thumbnail = ref<string | null>(null)
+const thumbnailFile = ref<File | null>(null)
 const isSubmitting = ref(false)
 const submitSuccess = ref(false)
+const formErrors = ref<Record<string, string>>({})
 
 // Категории
 const categories = [
@@ -25,6 +33,18 @@ const categories = [
   'Игра',
   'Другое'
 ]
+
+// Проверка авторизации при загрузке
+onMounted(() => {
+  // Проверяем localStorage, так как initAuth может ещё работать
+  const userRole = localStorage.getItem('user_role')
+  const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
+  
+  if (!isAuth) {
+    alert('Для публикации скетча необходимо войти в систему')
+    router.push('/')
+  }
+})
 
 // Получение кода из localStorage (если есть)
 const sharedCode = computed(() => {
@@ -40,11 +60,27 @@ if (sharedName.value && !title.value) {
   title.value = sharedName.value
 }
 
-// Загрузка thumbnail
+// Загрузка thumbnail из файла
 function handleThumbnailUpload(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) {
     const file = target.files[0]
+    
+    // Проверка размера файла (макс 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      formErrors.value.thumbnail = 'Размер файла не должен превышать 5MB'
+      return
+    }
+    
+    // Проверка типа файла
+    if (!file.type.startsWith('image/')) {
+      formErrors.value.thumbnail = 'Пожалуйста, выберите изображение'
+      return
+    }
+    
+    delete formErrors.value.thumbnail
+    thumbnailFile.value = file
+    
     const reader = new FileReader()
     reader.onload = (e) => {
       thumbnail.value = e.target?.result as string
@@ -57,46 +93,106 @@ function handleThumbnailUpload(event: Event) {
 function captureFromCanvas() {
   const canvas = document.querySelector('canvas')
   if (canvas) {
-    thumbnail.value = canvas.toDataURL('image/png')
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], 'thumbnail.png', { type: 'image/png' })
+        thumbnailFile.value = file
+        thumbnail.value = canvas.toDataURL('image/png')
+        delete formErrors.value.thumbnail
+      }
+    }, 'image/png')
   } else {
     alert('Сначала запустите скетч в редакторе!')
   }
 }
 
+// Валидация формы
+function validateForm(): boolean {
+  formErrors.value = {}
+  
+  if (!title.value.trim()) {
+    formErrors.value.title = 'Введите название скетча'
+  } else if (title.value.length < 3) {
+    formErrors.value.title = 'Название должно содержать минимум 3 символа'
+  }
+  
+  if (!description.value.trim()) {
+    formErrors.value.description = 'Введите описание скетча'
+  } else if (description.value.length < 10) {
+    formErrors.value.description = 'Описание должно содержать минимум 10 символов'
+  }
+  
+  if (!sharedCode.value.trim()) {
+    formErrors.value.code = 'Код скетча не найден. Создайте скетч в редакторе.'
+  }
+  
+  return Object.keys(formErrors.value).length === 0
+}
+
 // Отправка формы
 async function submitSketch() {
-  if (!title.value || !description.value) {
-    alert('Пожалуйста, заполните название и описание')
+  if (!validateForm()) {
+    return
+  }
+
+  if (!user.value || !profile.value) {
+    alert('Ошибка авторизации. Пожалуйста, войдите в систему.')
     return
   }
 
   isSubmitting.value = true
 
-  // Симуляция отправки на сервер
-  await new Promise(resolve => setTimeout(resolve, 1500))
+  try {
+    let thumbnailUrl: string | null = null
 
-  // В реальной реализации здесь будет отправка на сервер
-  console.log('Отправка скетча:', {
-    title: title.value,
-    description: description.value,
-    tags: tags.value.split(',').map(t => t.trim()),
-    category: category.value,
-    difficulty: difficulty.value,
-    thumbnail: thumbnail.value,
-    code: sharedCode.value
-  })
+    // Загрузка thumbnail в Storage
+    if (thumbnailFile.value) {
+      const uploadResult = await uploadFile(thumbnailFile.value, 'thumbnails')
+      if (uploadResult.success && uploadResult.url) {
+        thumbnailUrl = uploadResult.url
+      }
+    }
 
-  isSubmitting.value = false
-  submitSuccess.value = true
+    // Парсинг тегов
+    const tagsArray = tags.value
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0)
+      .slice(0, 10) // Максимум 10 тегов
 
-  // Очистка localStorage
-  localStorage.removeItem('p5editor_shared_code')
-  localStorage.removeItem('p5editor_shared_name')
+    // Создание скетча в Supabase
+    const result = await createSketch({
+      user_id: user.value.id,
+      title: title.value.trim(),
+      description: description.value.trim(),
+      code: sharedCode.value,
+      thumbnail_url: thumbnailUrl,
+      tags: tagsArray,
+      category: category.value,
+      difficulty: difficulty.value,
+      status: 'pending' // По умолчанию на модерации
+    })
 
-  // Перенаправление через 2 секунды
-  setTimeout(() => {
-    router.push('/explore')
-  }, 2000)
+    if (result.success) {
+      submitSuccess.value = true
+
+      // Очистка localStorage
+      localStorage.removeItem('p5editor_shared_code')
+      localStorage.removeItem('p5editor_shared_name')
+
+      // Перенаправление через 2 секунды
+      setTimeout(() => {
+        router.push('/explore')
+      }, 2000)
+    } else {
+      alert(`Ошибка при сохранении: ${result.error}`)
+    }
+  } catch (error) {
+    console.error('Submit error:', error)
+    alert('Произошла ошибка при публикации скетча')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 // Назад к редактору
@@ -107,169 +203,187 @@ function goBack() {
 
 <template>
   <div class="share-page">
-    <!-- Заголовок -->
-    <header class="share-header">
-      <button @click="goBack" class="back-btn">
-        ← Назад к редактору
+    <!-- Уведомление об ошибке -->
+    <div v-if="!isAuthenticated" class="auth-required">
+      <span class="auth-icon">🔐</span>
+      <h2>Требуется авторизация</h2>
+      <p>Для публикации скетча необходимо войти в систему</p>
+      <button @click="router.push('/')" class="login-btn">
+        Войти в систему
       </button>
-      <h1 class="page-title">
-        <span class="title-icon">📤</span>
-        Поделиться скетчем
-      </h1>
-    </header>
-
-    <!-- Успешная отправка -->
-    <div v-if="submitSuccess" class="success-message">
-      <span class="success-icon">✅</span>
-      <h2>Скетч отправлен на модерацию!</h2>
-      <p>После проверки он появится в галерее сообщества</p>
-      <p class="redirect-text">Перенаправление в галерею...</p>
     </div>
 
-    <!-- Форма -->
-    <div v-else class="share-content">
-      <div class="form-container">
-        <!-- Основная информация -->
-        <div class="form-section">
-          <h2 class="section-title">📝 Основная информация</h2>
+    <template v-else>
+      <!-- Успешная отправка -->
+      <div v-if="submitSuccess" class="success-message">
+        <span class="success-icon">✅</span>
+        <h2>Скетч отправлен на модерацию!</h2>
+        <p>После проверки он появится в галерее сообщества</p>
+        <p class="redirect-text">Перенаправление в галерею...</p>
+      </div>
 
-          <div class="form-group">
-            <label class="form-label">
-              Название скетча <span class="required">*</span>
-            </label>
-            <input
-              v-model="title"
-              type="text"
-              class="form-input"
-              placeholder="Придумайте название"
-              maxlength="100"
-            />
-            <span class="char-count">{{ title.length }}/100</span>
-          </div>
+      <!-- Форма -->
+      <div v-else class="share-content">
+        <!-- Заголовок -->
+        <header class="share-header">
+          <button @click="goBack" class="back-btn">
+            ← Назад к редактору
+          </button>
+          <h1 class="page-title">
+            <span class="title-icon">📤</span>
+            Поделиться скетчем
+          </h1>
+        </header>
 
-          <div class="form-group">
-            <label class="form-label">
-              Описание <span class="required">*</span>
-            </label>
-            <textarea
-              v-model="description"
-              class="form-textarea"
-              placeholder="Опишите ваш скетч: что он делает, какие техники использует..."
-              rows="4"
-              maxlength="500"
-            />
-            <span class="char-count">{{ description.length }}/500</span>
-          </div>
-        </div>
-
-        <!-- Категория и сложность -->
-        <div class="form-section">
-          <h2 class="section-title">📊 Категоризация</h2>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Категория</label>
-              <select v-model="category" class="form-select">
-                <option v-for="cat in categories" :key="cat" :value="cat">
-                  {{ cat }}
-                </option>
-              </select>
-            </div>
+        <div class="form-container">
+          <!-- Основная информация -->
+          <div class="form-section">
+            <h2 class="section-title">📝 Основная информация</h2>
 
             <div class="form-group">
-              <label class="form-label">Сложность</label>
-              <select v-model="difficulty" class="form-select">
-                <option value="Лёгкая">🟢 Лёгкая</option>
-                <option value="Средняя">🟡 Средняя</option>
-                <option value="Тяжёлая">🔴 Тяжёлая</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Теги</label>
-            <input
-              v-model="tags"
-              type="text"
-              class="form-input"
-              placeholder="анимация, частицы, эффекты (через запятую)"
-            />
-            <span class="form-hint">Перечислите теги через запятую</span>
-          </div>
-        </div>
-
-        <!-- Thumbnail -->
-        <div class="form-section">
-          <h2 class="section-title">🖼️ Миниатюра</h2>
-
-          <div class="thumbnail-section">
-            <div class="thumbnail-preview" :style="{ 
-              background: thumbnail ? `url(${thumbnail}) center/cover` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-            }">
-              <span v-if="!thumbnail" class="thumbnail-placeholder-icon">🎨</span>
-            </div>
-
-            <div class="thumbnail-actions">
-              <label class="thumbnail-btn">
-                <input
-                  type="file"
-                  @change="handleThumbnailUpload"
-                  accept="image/*"
-                  hidden
-                />
-                📁 Загрузить изображение
+              <label class="form-label">
+                Название скетча <span class="required">*</span>
               </label>
-              <button @click="captureFromCanvas" class="thumbnail-btn capture-btn">
-                📷 Сделать скриншот из canvas
-              </button>
+              <input
+                v-model="title"
+                type="text"
+                class="form-input"
+                :class="{ 'input-error': formErrors.title }"
+                placeholder="Придумайте название"
+                maxlength="100"
+              />
+              <span v-if="formErrors.title" class="error-message">{{ formErrors.title }}</span>
+              <span class="char-count">{{ title.length }}/100</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Описание <span class="required">*</span>
+              </label>
+              <textarea
+                v-model="description"
+                class="form-textarea"
+                :class="{ 'input-error': formErrors.description }"
+                placeholder="Опишите ваш скетч: что он делает, какие техники использует..."
+                rows="4"
+                maxlength="500"
+              />
+              <span v-if="formErrors.description" class="error-message">{{ formErrors.description }}</span>
+              <span class="char-count">{{ description.length }}/500</span>
             </div>
           </div>
-        </div>
 
-        <!-- Предпросмотр кода -->
-        <div class="form-section">
-          <h2 class="section-title">💻 Код скетча</h2>
-          
-          <div v-if="sharedCode" class="code-preview">
-            <div class="code-preview-header">
-              <span class="code-info">Код будет сохранён из редактора</span>
-              <span class="code-length">{{ sharedCode.length }} символов</span>
+          <!-- Категория и сложность -->
+          <div class="form-section">
+            <h2 class="section-title">📊 Категоризация</h2>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Категория</label>
+                <select v-model="category" class="form-select">
+                  <option v-for="cat in categories" :key="cat" :value="cat">
+                    {{ cat }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Сложность</label>
+                <select v-model="difficulty" class="form-select">
+                  <option value="Лёгкая">🟢 Лёгкая</option>
+                  <option value="Средняя">🟡 Средняя</option>
+                  <option value="Тяжёлая">🔴 Тяжёлая</option>
+                </select>
+              </div>
             </div>
-            <pre class="code-block"><code>{{ sharedCode.substring(0, 500) }}{{ sharedCode.length > 500 ? '...' : '' }}</code></pre>
+
+            <div class="form-group">
+              <label class="form-label">Теги</label>
+              <input
+                v-model="tags"
+                type="text"
+                class="form-input"
+                placeholder="анимация, частицы, эффекты (через запятую)"
+              />
+              <span class="form-hint">Перечислите теги через запятую (максимум 10)</span>
+            </div>
           </div>
-          <div v-else class="no-code">
-            <span class="no-code-icon">⚠️</span>
-            <p>Код скетча не найден</p>
-            <p class="hint">Сначала создайте скетч в редакторе</p>
+
+          <!-- Thumbnail -->
+          <div class="form-section">
+            <h2 class="section-title">🖼️ Миниатюра</h2>
+
+            <div class="thumbnail-section">
+              <div class="thumbnail-preview" :style="{
+                background: thumbnail ? `url(${thumbnail}) center/cover` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              }">
+                <span v-if="!thumbnail" class="thumbnail-placeholder-icon">🎨</span>
+              </div>
+
+              <div class="thumbnail-actions">
+                <label class="thumbnail-btn">
+                  <input
+                    type="file"
+                    @change="handleThumbnailUpload"
+                    accept="image/*"
+                    hidden
+                  />
+                  📁 Загрузить изображение
+                </label>
+                <button @click="captureFromCanvas" class="thumbnail-btn capture-btn">
+                  📷 Сделать скриншот из canvas
+                </button>
+                <span v-if="formErrors.thumbnail" class="error-message">{{ formErrors.thumbnail }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Предпросмотр кода -->
+          <div class="form-section">
+            <h2 class="section-title">💻 Код скетча</h2>
+
+            <div v-if="sharedCode" class="code-preview">
+              <div class="code-preview-header">
+                <span class="code-info">Код будет сохранён из редактора</span>
+                <span class="code-length">{{ sharedCode.length }} символов</span>
+              </div>
+              <pre class="code-block"><code>{{ sharedCode.substring(0, 500) }}{{ sharedCode.length > 500 ? '...' : '' }}</code></pre>
+            </div>
+            <div v-else class="no-code">
+              <span class="no-code-icon">⚠️</span>
+              <p>Код скетча не найден</p>
+              <p class="hint">Сначала создайте скетч в редакторе</p>
+            </div>
+            <span v-if="formErrors.code" class="error-message block-error">{{ formErrors.code }}</span>
+          </div>
+
+          <!-- Кнопки -->
+          <div class="form-actions">
+            <button @click="goBack" class="cancel-btn">
+              Отмена
+            </button>
+            <button
+              @click="submitSketch"
+              class="submit-btn"
+              :disabled="isSubmitting || uploading || !title || !description"
+            >
+              {{ isSubmitting ? '⏳ Отправка...' : uploading ? '⏳ Загрузка...' : '🚀 Опубликовать' }}
+            </button>
           </div>
         </div>
 
-        <!-- Кнопки -->
-        <div class="form-actions">
-          <button @click="goBack" class="cancel-btn">
-            Отмена
-          </button>
-          <button
-            @click="submitSketch"
-            class="submit-btn"
-            :disabled="isSubmitting || !title || !description"
-          >
-            {{ isSubmitting ? '⏳ Отправка...' : '🚀 Опубликовать' }}
-          </button>
+        <!-- Информация о модерации -->
+        <div class="moderation-info">
+          <h3>ℹ️ Как работает модерация</h3>
+          <ul>
+            <li>Ваш скетч будет проверен модераторами в течение 24 часов</li>
+            <li>Запрещён вредоносный код и плагиат</li>
+            <li>После одобрения скетч появится в галерее</li>
+            <li>Вы получите уведомление о результате проверки</li>
+          </ul>
         </div>
       </div>
-
-      <!-- Информация о модерации -->
-      <div class="moderation-info">
-        <h3>ℹ️ Как работает модерация</h3>
-        <ul>
-          <li>Ваш скетч будет проверен модераторами в течение 24 часов</li>
-          <li>Запрещён вредоносный код и плагиат</li>
-          <li>После одобрения скетч появится в галерее</li>
-          <li>Вы получите уведомление о результате проверки</li>
-        </ul>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -281,48 +395,49 @@ function goBack() {
   padding-bottom: 3rem;
 }
 
-/* Заголовок */
-.share-header {
+/* Уведомление об авторизации */
+.auth-required {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2rem;
-  padding: 1.5rem 3rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  gap: 1rem;
 }
 
-.back-btn {
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.auth-icon {
+  font-size: 5rem;
+}
+
+.auth-required h2 {
+  font-size: 1.75rem;
+  margin: 0;
+  color: #fff;
+}
+
+.auth-required p {
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.login-btn {
+  margin-top: 1rem;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
   border-radius: 8px;
   color: #fff;
   font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateX(-2px);
-}
-
-.page-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.title-icon {
-  font-size: 2rem;
-  -webkit-text-fill-color: initial;
+.login-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
 }
 
 /* Успешная отправка */
@@ -364,11 +479,56 @@ function goBack() {
   font-style: italic;
 }
 
+/* Заголовок */
+.share-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.5rem 3rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 2rem;
+}
+
+.back-btn {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(-2px);
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.title-icon {
+  font-size: 2rem;
+  -webkit-text-fill-color: initial;
+}
+
 /* Контент */
 .share-content {
   max-width: 900px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0 2rem 2rem;
 }
 
 .form-container {
@@ -436,6 +596,12 @@ function goBack() {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.form-input.input-error,
+.form-textarea.input-error {
+  border-color: #ff6464;
+  background: rgba(255, 100, 100, 0.1);
+}
+
 .form-textarea {
   resize: vertical;
   min-height: 100px;
@@ -455,6 +621,18 @@ function goBack() {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.4);
   text-align: right;
+}
+
+/* Ошибки валидации */
+.error-message {
+  font-size: 0.85rem;
+  color: #ff6464;
+  margin-top: 0.25rem;
+}
+
+.block-error {
+  display: block;
+  margin-top: 0.5rem;
 }
 
 /* Thumbnail */
@@ -642,7 +820,7 @@ function goBack() {
   }
 
   .share-content {
-    padding: 1rem;
+    padding: 0 1rem 2rem;
   }
 
   .form-row {

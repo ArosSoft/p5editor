@@ -1,7 +1,7 @@
 # Инструкция по настройке Supabase для p5editor
 
-**Версия:** 0.3.0  
-**Дата:** 20 марта 2026 г.
+**Версия:** 0.5.3
+**Дата:** 21 марта 2026 г.
 
 ---
 
@@ -35,10 +35,11 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_9Yrru1vT4XDUZPY3_sm1XQ_j0YIdHLy
 5. **Проверьте результат:**
    - Убедитесь, что все команды выполнены без ошибок
    - В разделе **Table Editor** должны появиться таблицы:
-     - `profiles`
-     - `sketches`
-     - `sketch_likes`
-     - `sketch_comments`
+     - `profiles` — профили пользователей
+     - `sketches` — скетчи
+     - `sketch_moderation_logs` — логи модерации скетчей
+     - `sketch_likes` — лайки скетчей
+     - `sketch_comments` — комментарии к скетчам
 
 ---
 
@@ -195,6 +196,42 @@ WHERE schemaname = 'public';
 
 ---
 
+## 📋 Шаг 5: Назначение роли модератора
+
+Чтобы получить доступ к админ-панели, назначьте пользователю роль модератора или администратора:
+
+1. **Зарегистрируйте пользователя через приложение:**
+   - Откройте [p5editor](http://localhost:5173)
+   - Нажмите "Войти" → "Регистрация"
+   - Введите email и пароль
+
+2. **Назначьте роль через SQL Editor:**
+
+```sql
+-- Назначить роль модератора
+UPDATE public.profiles 
+SET role = 'moderator' 
+WHERE email = 'your-email@example.com';
+
+-- Или роль администратора
+UPDATE public.profiles 
+SET role = 'admin' 
+WHERE email = 'your-email@example.com';
+```
+
+3. **Проверьте роль:**
+
+```sql
+SELECT email, role FROM public.profiles 
+WHERE email = 'your-email@example.com';
+```
+
+4. **Доступ к админ-панели:**
+   - После назначения роли в профиле пользователя появится кнопка "Админ-панель"
+   - Или перейдите напрямую: `http://localhost:5173/#/admin`
+
+---
+
 ## 🔧 Возможные проблемы и решения
 
 ### Ошибка: "relation already exists"
@@ -239,4 +276,4 @@ DROP VIEW IF EXISTS gallery_sketches CASCADE;
 
 ---
 
-*Инструкция обновлена: 20 марта 2026 г.*
+*Инструкция обновлена: 21 марта 2026 г.*

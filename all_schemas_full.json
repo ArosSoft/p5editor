@@ -1,0 +1,279 @@
+{
+  "generated_at": "2026-03-21T00:00:00Z",
+  "project": "gfupycrmnegbcafuoxdx",
+  "schemas": {
+    "public": {
+      "tables": [
+        {
+          "name": "profiles",
+          "rows_count": 6,
+          "rls_enabled": true,
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "email", "data_type": "text", "nullable": false, "default": null},
+            {"name": "display_name", "data_type": "text", "nullable": true, "default": null},
+            {"name": "avatar_url", "data_type": "text", "nullable": true, "default": null},
+            {"name": "bio", "data_type": "text", "nullable": true, "default": null},
+            {"name": "role", "data_type": "text", "nullable": false, "default": "'user'::text", "check": "role = ANY (ARRAY['user'::text, 'moderator'::text, 'admin'::text])"},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"},
+            {"name": "updated_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ],
+          "primary_key": ["id"],
+          "foreign_keys": [
+            {"constraint_name": "profiles_id_fkey", "column": "id", "references_table": "auth.users", "references_column": "id"}
+          ]
+        },
+        {
+          "name": "sketches",
+          "rows_count": 2,
+          "rls_enabled": true,
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+            {"name": "user_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "title", "data_type": "text", "nullable": false, "default": null},
+            {"name": "description", "data_type": "text", "nullable": false, "default": null},
+            {"name": "code", "data_type": "text", "nullable": false, "default": null},
+            {"name": "thumbnail_url", "data_type": "text", "nullable": true, "default": null},
+            {"name": "tags", "data_type": "text[]", "nullable": false, "default": "'{}'::text[]"},
+            {"name": "category", "data_type": "text", "nullable": true, "default": null},
+            {"name": "difficulty", "data_type": "text", "nullable": true, "default": null, "check": "difficulty = ANY (ARRAY['Лёгкая'::text, 'Средняя'::text, 'Тяжёлая'::text])"},
+            {"name": "status", "data_type": "text", "nullable": false, "default": "'pending'::text", "check": "status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'draft'::text])"},
+            {"name": "rejection_reason", "data_type": "text", "nullable": true, "default": null},
+            {"name": "views", "data_type": "integer", "nullable": false, "default": "0"},
+            {"name": "likes", "data_type": "integer", "nullable": false, "default": "0"},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"},
+            {"name": "updated_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ],
+          "primary_key": ["id"],
+          "foreign_keys": [
+            {"constraint_name": "sketches_user_id_fkey", "column": "user_id", "references_table": "public.profiles", "references_column": "id"}
+          ]
+        },
+        {
+          "name": "sketch_moderation_logs",
+          "rows_count": 0,
+          "rls_enabled": true,
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+            {"name": "sketch_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "moderator_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "action", "data_type": "text", "nullable": false, "default": null, "check": "action = ANY (ARRAY['approved'::text, 'rejected'::text])"},
+            {"name": "comment", "data_type": "text", "nullable": true, "default": null},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ],
+          "primary_key": ["id"],
+          "foreign_keys": [
+            {"constraint_name": "sketch_moderation_logs_sketch_id_fkey", "column": "sketch_id", "references_table": "public.sketches", "references_column": "id"},
+            {"constraint_name": "sketch_moderation_logs_moderator_id_fkey", "column": "moderator_id", "references_table": "public.profiles", "references_column": "id"}
+          ]
+        },
+        {
+          "name": "sketch_likes",
+          "rows_count": 0,
+          "rls_enabled": true,
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+            {"name": "user_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "sketch_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ],
+          "primary_key": ["id"],
+          "foreign_keys": [
+            {"constraint_name": "sketch_likes_user_id_fkey", "column": "user_id", "references_table": "public.profiles", "references_column": "id"},
+            {"constraint_name": "sketch_likes_sketch_id_fkey", "column": "sketch_id", "references_table": "public.sketches", "references_column": "id"}
+          ],
+          "unique_constraints": [["user_id", "sketch_id"]]
+        },
+        {
+          "name": "sketch_comments",
+          "rows_count": 0,
+          "rls_enabled": true,
+          "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+            {"name": "user_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "sketch_id", "data_type": "uuid", "nullable": false, "default": null},
+            {"name": "content", "data_type": "text", "nullable": false, "default": null},
+            {"name": "created_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"},
+            {"name": "updated_at", "data_type": "timestamp with time zone", "nullable": false, "default": "now()"}
+          ],
+          "primary_key": ["id"],
+          "foreign_keys": [
+            {"constraint_name": "sketch_comments_user_id_fkey", "column": "user_id", "references_table": "public.profiles", "references_column": "id"},
+            {"constraint_name": "sketch_comments_sketch_id_fkey", "column": "sketch_id", "references_table": "public.sketches", "references_column": "id"}
+          ]
+        }
+      ],
+      "views": [
+        {
+          "name": "gallery_sketches",
+          "definition": "SELECT s.id, s.title, s.description, COALESCE(p.display_name, SPLIT_PART(p.email, '@', 1)) AS author_name, p.avatar_url AS author_avatar, s.thumbnail_url, s.tags, s.category, s.difficulty, s.likes, s.views, s.created_at FROM sketches s JOIN profiles p ON s.user_id = p.id WHERE s.status = 'approved' ORDER BY s.created_at DESC"
+        }
+      ],
+      "indexes": [
+        {"table": "profiles", "name": "idx_profiles_email", "columns": ["email"]},
+        {"table": "profiles", "name": "idx_profiles_role", "columns": ["role"]},
+        {"table": "sketches", "name": "idx_sketches_user_id", "columns": ["user_id"]},
+        {"table": "sketches", "name": "idx_sketches_status", "columns": ["status"]},
+        {"table": "sketches", "name": "idx_sketches_category", "columns": ["category"], "where": "category IS NOT NULL"},
+        {"table": "sketches", "name": "idx_sketches_difficulty", "columns": ["difficulty"], "where": "difficulty IS NOT NULL"},
+        {"table": "sketches", "name": "idx_sketches_created_at", "columns": ["created_at"]},
+        {"table": "sketches", "name": "idx_sketches_likes", "columns": ["likes"]},
+        {"table": "sketches", "name": "idx_sketches_views", "columns": ["views"]},
+        {"table": "sketches", "name": "idx_sketches_tags", "columns": ["tags"], "type": "GIN"},
+        {"table": "sketch_likes", "name": "idx_sketch_likes_user_id", "columns": ["user_id"]},
+        {"table": "sketch_likes", "name": "idx_sketch_likes_sketch_id", "columns": ["sketch_id"]},
+        {"table": "sketch_comments", "name": "idx_sketch_comments_user_id", "columns": ["user_id"]},
+        {"table": "sketch_comments", "name": "idx_sketch_comments_sketch_id", "columns": ["sketch_id"]},
+        {"table": "sketch_moderation_logs", "name": "idx_sketch_moderation_logs_sketch_id", "columns": ["sketch_id"]},
+        {"table": "sketch_moderation_logs", "name": "idx_sketch_moderation_logs_moderator_id", "columns": ["moderator_id"]},
+        {"table": "sketch_moderation_logs", "name": "idx_sketch_moderation_logs_action", "columns": ["action"]}
+      ]
+    },
+    "auth": {
+      "tables": [
+        {
+          "name": "users",
+          "schema": "auth",
+          "rows_count": 6,
+          "rls_enabled": true,
+          "comment": "Auth: Stores user login data within a secure schema.",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "refresh_tokens",
+          "schema": "auth",
+          "rows_count": 2,
+          "rls_enabled": true,
+          "comment": "Auth: Store of tokens used to refresh JWT tokens once they expire.",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "identities",
+          "schema": "auth",
+          "rows_count": 2,
+          "rls_enabled": true,
+          "comment": "Auth: Stores identities associated to a user.",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "sessions",
+          "schema": "auth",
+          "rows_count": 1,
+          "rls_enabled": true,
+          "comment": "Auth: Stores session data associated to a user.",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "mfa_factors",
+          "schema": "auth",
+          "rows_count": 0,
+          "rls_enabled": true,
+          "comment": "Auth: Stores metadata about factors",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "mfa_challenges",
+          "schema": "auth",
+          "rows_count": 0,
+          "rls_enabled": true,
+          "comment": "Auth: Stores metadata about challenge requests made",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "mfa_amr_claims",
+          "schema": "auth",
+          "rows_count": 1,
+          "rls_enabled": true,
+          "comment": "Auth: Stores authenticator method reference claims for multi factor authentication",
+          "primary_key": ["id"]
+        },
+        {
+          "name": "schema_migrations",
+          "schema": "auth",
+          "rows_count": 76,
+          "rls_enabled": true,
+          "comment": "Auth: Manages updates to the auth system.",
+          "primary_key": ["version"]
+        }
+      ]
+    },
+    "storage": {
+      "tables": [
+        {
+          "name": "buckets",
+          "schema": "storage",
+          "rows_count": 1,
+          "rls_enabled": true,
+          "primary_key": ["id"]
+        },
+        {
+          "name": "objects",
+          "schema": "storage",
+          "rows_count": 1,
+          "rls_enabled": true,
+          "primary_key": ["id"]
+        },
+        {
+          "name": "migrations",
+          "schema": "storage",
+          "rows_count": 57,
+          "rls_enabled": true,
+          "primary_key": ["id"]
+        }
+      ],
+      "buckets": [
+        {
+          "name": "user-content",
+          "public": true,
+          "file_size_limit": 5242880
+        }
+      ]
+    }
+  },
+  "rls_policies": {
+    "profiles": [
+      {"name": "Profiles are viewable by everyone", "operation": "SELECT", "role": "all"},
+      {"name": "Users can update own profile", "operation": "UPDATE", "role": "user", "condition": "auth.uid() = id"},
+      {"name": "Users can insert own profile", "operation": "INSERT", "role": "user", "condition": "auth.uid() = id"}
+    ],
+    "sketches": [
+      {"name": "Approved sketches are viewable by everyone", "operation": "SELECT", "role": "all", "condition": "status = 'approved'"},
+      {"name": "Authenticated users can create sketches", "operation": "INSERT", "role": "authenticated", "condition": "auth.uid() = user_id"},
+      {"name": "Users can update own sketches", "operation": "UPDATE", "role": "user", "condition": "auth.uid() = user_id"},
+      {"name": "Users can delete own sketches", "operation": "DELETE", "role": "user", "condition": "auth.uid() = user_id"},
+      {"name": "Moderators can update any sketch status", "operation": "UPDATE", "role": "moderator", "condition": "role IN ('moderator', 'admin')"},
+      {"name": "Moderators can view all sketches", "operation": "SELECT", "role": "moderator", "condition": "role IN ('moderator', 'admin')"}
+    ],
+    "sketch_moderation_logs": [
+      {"name": "Moderators can view moderation logs", "operation": "SELECT", "role": "moderator"},
+      {"name": "Moderators can create moderation logs", "operation": "INSERT", "role": "moderator"}
+    ],
+    "sketch_likes": [
+      {"name": "Likes are viewable by everyone", "operation": "SELECT", "role": "all"},
+      {"name": "Authenticated users can create likes", "operation": "INSERT", "role": "authenticated"},
+      {"name": "Users can delete own likes", "operation": "DELETE", "role": "user"}
+    ],
+    "sketch_comments": [
+      {"name": "Comments are viewable by everyone", "operation": "SELECT", "role": "all"},
+      {"name": "Authenticated users can create comments", "operation": "INSERT", "role": "authenticated"},
+      {"name": "Users can update own comments", "operation": "UPDATE", "role": "user"},
+      {"name": "Users can delete own comments", "operation": "DELETE", "role": "user"}
+    ]
+  },
+  "triggers": {
+    "profiles": [
+      {"name": "on_auth_user_created", "event": "AFTER INSERT ON auth.users", "function": "handle_new_user()"},
+      {"name": "update_profiles_updated_at", "event": "BEFORE UPDATE ON profiles", "function": "update_updated_at_column()"}
+    ],
+    "sketches": [
+      {"name": "update_sketches_updated_at", "event": "BEFORE UPDATE ON sketches", "function": "update_updated_at_column()"}
+    ],
+    "sketch_comments": [
+      {"name": "update_sketch_comments_updated_at", "event": "BEFORE UPDATE ON sketch_comments", "function": "update_updated_at_column()"}
+    ],
+    "sketch_likes": [
+      {"name": "on_like_created", "event": "AFTER INSERT ON sketch_likes", "function": "increment_sketch_likes()"},
+      {"name": "on_like_deleted", "event": "AFTER DELETE ON sketch_likes", "function": "decrement_sketch_likes()"}
+    ]
+  }
+}

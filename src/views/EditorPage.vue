@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import CodeEditor from '../components/CodeEditor.vue'
 import P5Canvas from '../components/P5Canvas.vue'
 import ConsoleOutput from '../components/ConsoleOutput.vue'
@@ -8,13 +8,20 @@ import ExamplesPanel from '../components/ExamplesPanel.vue'
 import AuthModal from '../components/AuthModal.vue'
 import UserProfile from '../components/UserProfile.vue'
 import { useAuth } from '../composables/useAuth'
+import { useSketches } from '../composables/useSketches'
 import { saveAs } from 'file-saver'
 import beautify from 'js-beautify'
 import AIChat from '../components/AIChat.vue'
 
+const route = useRoute()
 const router = useRouter()
-const { isAuthenticated } = useAuth()
+const { isAuthenticated, user } = useAuth()
+const { updateSketch, getSketchById } = useSketches()
 const showAuthModal = ref(false)
+
+// ID текущего скетча (если загружен из БД)
+const currentSketchId = ref<string | null>(null)
+const isSaving = ref(false)
 
 const code = ref(`function setup() {
   createCanvas(400, 400);
@@ -79,6 +86,11 @@ const mainRef = ref<HTMLElement | null>(null)
 
 // Добавляем новые переменные для "призрачного" ресайза
 const ghostDividerX = ref<number | null>(null) // позиция призрачной линии
+
+// Переменные для таймеров автосохранения
+let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null
+let saveCodeTimer: ReturnType<typeof setTimeout> | null = null
+let lastSavedCode = ''
 
 function updateMouseCoordinates(x: number, y: number) {
   mouseX.value = Math.round(x)
@@ -182,28 +194,106 @@ const editorFlexStyle = computed(() => {
   return { flex: '1', minWidth: MIN_EDITOR_WIDTH + 'px' }
 })
 
-onMounted(() => {
+// Watch для обработки изменения sketch_id в route и localStorage
+watch(
+  () => ({
+    routeId: route.params.id,
+    querySketch: route.query.sketch,
+    queryT: route.query.t,
+    storageSketchId: localStorage.getItem('p5editor_current_sketch_id')
+  }),
+  async (newVal, oldVal) => {
+    const sketchId = (newVal.routeId as string) || (newVal.querySketch as string) || newVal.storageSketchId
+    const oldId = (oldVal?.routeId as string) || (oldVal?.querySketch as string) || oldVal?.storageSketchId
+
+    // Загружаем только если ID изменился или появился новый
+    if (sketchId && sketchId !== oldId) {
+      console.log('[EditorPage] sketch_id изменился, загружаю скетч:', sketchId)
+      await loadSketchFromDatabase(sketchId)
+    } else if (!sketchId && !oldId) {
+      // Нет ID - загружаем из localStorage код
+      console.log('[EditorPage] Нет sketch_id, загружаю код из localStorage')
+      const savedCode = localStorage.getItem('p5editor_current_code')
+      const savedName = localStorage.getItem('p5editor_current_name')
+      if (savedCode) {
+        code.value = savedCode
+        originalCode.value = savedCode
+        lastSavedCode = savedCode
+      }
+      if (savedName) {
+        sketchName.value = savedName
+      }
+    }
+  },
+  { immediate: true } // Вызвать сразу при создании watch
+)
+
+onMounted(async () => {
   window.addEventListener('mousemove', onGlobalMouseMove)
   window.addEventListener('mouseup', onGlobalMouseUp)
   window.addEventListener('keydown', handleKeyDown)
   
-  // Восстановление кода из localStorage при загрузке
-  const savedCode = localStorage.getItem('p5editor_current_code')
-  const savedName = localStorage.getItem('p5editor_current_name')
-  if (savedCode) {
-    code.value = savedCode
-    originalCode.value = savedCode
-    lastSavedCode = savedCode
-  }
-  if (savedName) {
-    sketchName.value = savedName
+  // Обработка изменения localStorage из других вкладок/окон
+  window.addEventListener('storage', handleStorageChange)
+
+  console.log('[EditorPage] onMounted')
+  
+  // Проверка параметра auth:required для открытия модального окна входа
+  if (route.query.auth === 'required') {
+    showAuthModal.value = true
+    // Очищаем query параметр
+    router.replace({ query: {} })
   }
 })
+
+// Обработка изменений localStorage
+function handleStorageChange(event: StorageEvent) {
+  if (event.key === 'p5editor_current_sketch_id' && event.newValue) {
+    console.log('[EditorPage] storage change: p5editor_current_sketch_id =', event.newValue)
+    loadSketchFromDatabase(event.newValue)
+  }
+}
+
+// Загрузка скетча из базы данных
+async function loadSketchFromDatabase(sketchId: string) {
+  try {
+    addMessage(`📂 Загрузка скетча из облака...`)
+    const result = await getSketchById(sketchId)
+
+    if (result.success && result.data) {
+      const sketch = result.data as any
+      code.value = sketch.code
+      sketchName.value = sketch.title || 'Скетч из БД'
+      currentSketchId.value = sketchId
+
+      // Сохраняем в localStorage
+      localStorage.setItem('p5editor_current_code', sketch.code)
+      localStorage.setItem('p5editor_current_name', sketch.title || 'Скетч из БД')
+      localStorage.setItem('p5editor_current_sketch_id', sketchId)
+      
+      // Обновляем lastSavedCode для корректной работы автосохранения
+      lastSavedCode = sketch.code
+
+      addMessage(`✅ Скетч "${sketch.title}" загружен`)
+    } else {
+      addMessage(`❌ Ошибка загрузки скетча: ${result.error}`)
+      // Очищаем ID и загружаем из localStorage
+      currentSketchId.value = null
+      localStorage.removeItem('p5editor_current_sketch_id')
+    }
+  } catch (error) {
+    console.error('Load sketch error:', error)
+    addMessage('❌ Ошибка загрузки скетча из базы данных')
+    currentSketchId.value = null
+    localStorage.removeItem('p5editor_current_sketch_id')
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', onGlobalMouseMove)
   window.removeEventListener('mouseup', onGlobalMouseUp)
   window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('storage', handleStorageChange)
 })
 
 // Единый обработчик mousemove
@@ -245,15 +335,86 @@ function stopSketch() {
   canvasRef.value?.stop()
 }
 
-function saveSketch() {
+async function saveSketch() {
+  console.log('[EditorPage] saveSketch вызвана')
+  console.log('[EditorPage] currentSketchId:', currentSketchId.value)
+  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
+  console.log('[EditorPage] user:', user.value)
+  
   const cleanName = sketchName.value
     .replace(/[^a-zа-яё0-9\s_-]/gi, '')
     .replace(/\s+/g, '_')
     .toLowerCase() || 'sketch'
   const fileName = `${cleanName}.js`
   const blob = new Blob([code.value], { type: 'text/javascript;charset=utf-8' })
+  
+  console.log('[EditorPage] Сохраняю файл:', fileName)
   saveAs(blob, fileName)
-  addMessage(`💾 Скетч сохранён как "${fileName}"`)
+  console.log('[EditorPage] Файл сохранён')
+
+  // Если скетч загружен из БД и пользователь авторизован - сохраняем в БД
+  if (currentSketchId.value && isAuthenticated.value && user.value) {
+    console.log('[EditorPage] Вызываю saveToDatabase')
+    try {
+      await saveToDatabase()
+      console.log('[EditorPage] saveToDatabase завершена успешно')
+    } catch (e) {
+      console.error('[EditorPage] Ошибка в saveToDatabase:', e)
+    }
+  } else {
+    console.log('[EditorPage] Не выполняются условия для saveToDatabase')
+    console.log('[EditorPage] currentSketchId exists:', !!currentSketchId.value)
+    console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
+    console.log('[EditorPage] user exists:', !!user.value)
+    addMessage(`💾 Скетч сохранён как "${fileName}". Чтобы сохранить в облако, сначала поделитесь с сообществом`)
+  }
+}
+
+// Сохранение в базу данных Supabase
+async function saveToDatabase() {
+  if (!currentSketchId.value || !user.value) {
+    addMessage('❌ Ошибка: скетч не найден в базе данных')
+    console.error('[EditorPage] saveToDatabase: нет currentSketchId или user')
+    return
+  }
+
+  console.log('[EditorPage] saveToDatabase: сохраняю скетч', currentSketchId.value)
+  console.log('[EditorPage] saveToDatabase: длина кода:', code.value.length)
+  
+  isSaving.value = true
+  try {
+    const result = await updateSketch(currentSketchId.value, {
+      code: code.value
+    })
+
+    console.log('[EditorPage] saveToDatabase: результат updateSketch:', result)
+
+    if (result.success) {
+      // Принудительно перезагружаем скетч из БД для получения актуальных данных
+      const freshResult = await getSketchById(currentSketchId.value)
+      console.log('[EditorPage] saveToDatabase: результат getSketchById:', freshResult)
+      
+      if (freshResult.success && freshResult.data) {
+        const freshSketch = freshResult.data as any
+        code.value = freshSketch.code
+        lastSavedCode = freshSketch.code
+        console.log('[EditorPage] saveToDatabase: код обновлён из БД, длина:', freshSketch.code.length)
+      }
+      
+      addMessage('💾 Скетч сохранён в облако')
+      // Сохраняем код в localStorage как резервную копию
+      localStorage.setItem('p5editor_current_code', code.value)
+      localStorage.setItem('p5editor_current_name', sketchName.value)
+      localStorage.setItem('p5editor_current_sketch_id', currentSketchId.value)
+    } else {
+      addMessage(`❌ Ошибка сохранения: ${result.error}`)
+    }
+  } catch (error) {
+    console.error('[EditorPage] saveToDatabase: ошибка:', error)
+    addMessage('❌ Ошибка сохранения в базу данных')
+  } finally {
+    isSaving.value = false
+  }
 }
 
 function loadSketch() {
@@ -270,6 +431,9 @@ function handleFileUpload(event: Event) {
       code.value = e.target?.result as string
       const fileName = file.name.replace('.js', '').replace(/_/g, ' ')
       sketchName.value = fileName
+      // Сбрасываем ID скетча, так как это теперь новый локальный файл
+      currentSketchId.value = null
+      localStorage.removeItem('p5editor_current_sketch_id')
       addMessage(`📂 Скетч загружен: ${file.name}`)
     }
     reader.readAsText(file)
@@ -437,10 +601,6 @@ function getTooltipText(item: string): string {
   return tooltips[item] || item
 }
 
-let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null
-let saveCodeTimer: ReturnType<typeof setTimeout> | null = null
-let lastSavedCode = ''
-
 function debouncedSaveToHistory() {
   if (saveHistoryTimer) clearTimeout(saveHistoryTimer)
   saveHistoryTimer = setTimeout(() => saveToHistory(), 500)
@@ -468,6 +628,11 @@ function navigateToExplore() {
 function navigateToShare() {
   // Код уже сохранён в localStorage через saveCodeToStorage()
   router.push('/share')
+}
+
+// Навигация к странице «Личный кабинет»
+function navigateToDashboard() {
+  router.push('/dashboard')
 }
 </script>
 
@@ -516,6 +681,11 @@ function navigateToShare() {
           <span class="btn-text">Исследуй</span>
         </button>
 
+        <button @click="navigateToDashboard" class="top-btn dashboard-btn" title="Личный кабинет">
+          <span class="btn-icon">📊</span>
+          <span class="btn-text">Личный кабинет</span>
+        </button>
+
         <button @click="navigateToShare" class="top-btn share-btn" title="Поделиться скетчем">
           <span class="btn-icon">📤</span>
           <span class="btn-text">Поделиться</span>
@@ -553,9 +723,10 @@ function navigateToShare() {
         </div>
 
         <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
-                @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)">
-          <span class="menu-icon">💾</span>
-          <span class="menu-text" v-show="isMenuExpanded">Сохранить</span>
+                @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)"
+                :disabled="isSaving">
+          <span class="menu-icon">{{ isSaving ? '⏳' : '💾' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{ isSaving ? 'Сохранение...' : 'Сохранить' }}</span>
         </button>
 
         <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
@@ -1015,6 +1186,14 @@ function navigateToShare() {
 }
 .explore-btn:hover {
   background-color: rgba(64, 179, 162, 0.28);
+}
+
+/* Личный кабинет — мягкий фиолетовый */
+.dashboard-btn {
+  background-color: rgba(139, 92, 246, 0.20);
+}
+.dashboard-btn:hover {
+  background-color: rgba(139, 92, 246, 0.28);
 }
 
 /* Поделиться — мягкий оранжевый */
