@@ -72,6 +72,11 @@ async function loadSketches() {
     sketches.value = result.data || []
     total.value = result.total || 0
     console.log('[ExplorePage] Загружено скетчей:', sketches.value.length)
+    
+    if (sketches.value.length === 0) {
+      console.warn('[ExplorePage] В галерее нет одобренных скетчей!')
+      console.warn('[ExplorePage] Проверьте Supabase: есть ли скетчи со status=approved?')
+    }
   } else {
     error.value = result.error || 'Ошибка загрузки скетчей'
     console.error('[ExplorePage] Ошибка:', error.value)
