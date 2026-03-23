@@ -61,7 +61,7 @@ const MIN_EDITOR_WIDTH = 300
 const MIN_CANVAS_WIDTH = 410
 
 // Ширины панелей в пикселях (будут рассчитаны при монтировании)
-const examplesWidth = ref(350)
+const examplesWidth = ref(420)
 const canvasWidth = ref(MIN_CANVAS_WIDTH)
 
 // Состояние перетаскивания разделителей
