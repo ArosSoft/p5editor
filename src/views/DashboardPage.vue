@@ -15,12 +15,22 @@ const userSketches = ref<Sketch[]>([])
 const recentSketches = ref<SketchWithProfile[]>([])
 const pendingSketchesCount = ref(0)
 
+// Тема (синхронизация с редактором)
+type Theme = 'dark' | 'light'
+const currentTheme = ref<Theme>('dark')
+
 // Загрузка данных
 onMounted(async () => {
+  // Загрузка темы из localStorage
+  const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    currentTheme.value = savedTheme
+  }
+
   // Проверяем localStorage, так как initAuth может ещё работать
   const userRole = localStorage.getItem('user_role')
   const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
-  
+
   if (!isAuth) {
     router.push('/')
     return
@@ -116,24 +126,21 @@ const statusText = (status: string) => {
 </script>
 
 <template>
-  <div class="dashboard-page">
+  <div :class="['dashboard', currentTheme === 'dark' ? 'theme-dark' : 'theme-light']">
     <!-- Заголовок -->
     <header class="dashboard-header">
       <div class="header-content">
-        <h1 class="page-title">
-          <span class="title-icon">📊</span>
-          Личный кабинет
-        </h1>
+        <h1 class="page-title">Личный кабинет</h1>
         <p class="page-subtitle">
-          Добро пожаловать, {{ displayName }}!
+          {{ displayName }}
         </p>
       </div>
       <div class="header-actions">
-        <button @click="navigateTo('/')" class="header-btn">
-          🏠 В редактор
+        <button @click="navigateTo('/')" class="btn btn-ghost">
+          Редактор
         </button>
-        <button @click="navigateTo('/profile')" class="header-btn profile-btn">
-          👤 Профиль
+        <button @click="navigateTo('/profile')" class="btn btn-primary">
+          Профиль
         </button>
       </div>
     </header>
@@ -169,7 +176,7 @@ const statusText = (status: string) => {
 
       <!-- Статистика -->
       <div class="stats-section">
-        <h2 class="section-title">📈 Моя статистика</h2>
+        <h2 class="section-title">Статистика</h2>
         <div class="stats-grid">
           <div class="stat-card">
             <span class="stat-value">{{ stats.total }}</span>
@@ -189,26 +196,26 @@ const statusText = (status: string) => {
           </div>
           <div class="stat-card stat-likes">
             <span class="stat-value">{{ stats.totalLikes }}</span>
-            <span class="stat-label">Всего лайков</span>
+            <span class="stat-label">Лайки</span>
           </div>
           <div class="stat-card stat-views">
             <span class="stat-value">{{ stats.totalViews }}</span>
-            <span class="stat-label">Всего просмотров</span>
+            <span class="stat-label">Просмотры</span>
           </div>
         </div>
       </div>
 
-      <!-- Последние скетчи пользователя -->
+      <!-- Мои скетчи -->
       <div class="sketches-section">
         <div class="section-header">
-          <h2 class="section-title">📁 Мои скетчи</h2>
-          <button @click="navigateTo('/profile')" class="view-all-btn">
+          <h2 class="section-title">Мои скетчи</h2>
+          <button @click="navigateTo('/profile')" class="btn btn-text">
             Все скетчи →
           </button>
         </div>
 
         <div v-if="loading" class="loading-state">
-          <span class="loading-spinner">⏳</span>
+          <span class="loading-spinner"></span>
           <p>Загрузка...</p>
         </div>
 
@@ -234,7 +241,7 @@ const statusText = (status: string) => {
               <h3 class="sketch-title">{{ sketch.title }}</h3>
               <div class="sketch-meta">
                 <span :class="['status-badge', statusBadgeClass(sketch.status)]">
-                  {{ statusText(sketch.status) }}
+                  {{ statusText(sketch.status).replace(/[✅⏳❌📝] /g, '') }}
                 </span>
                 <span class="sketch-date">{{ formatDate(sketch.created_at) }}</span>
               </div>
@@ -250,17 +257,17 @@ const statusText = (status: string) => {
           <span class="no-sketches-icon">📭</span>
           <h3>У вас пока нет скетчей</h3>
           <p>Создайте первый скетч в редакторе</p>
-          <button @click="navigateTo('/')" class="create-btn">
-            🎨 Создать скетч
+          <button @click="navigateTo('/')" class="btn btn-primary">
+            Создать скетч
           </button>
         </div>
       </div>
 
-      <!-- Последние скетчи в галерее -->
+      <!-- Новое в галерее -->
       <div class="gallery-section">
         <div class="section-header">
-          <h2 class="section-title">🌍 Новое в галерее</h2>
-          <button @click="navigateTo('/explore')" class="view-all-btn">
+          <h2 class="section-title">Новое в галерее</h2>
+          <button @click="navigateTo('/explore')" class="btn btn-text">
             Вся галерея →
           </button>
         </div>
@@ -286,7 +293,7 @@ const statusText = (status: string) => {
             <div class="gallery-info">
               <h3 class="gallery-title">{{ sketch.title }}</h3>
               <p class="gallery-author">
-                👤 {{ sketch.profiles?.display_name || 'Аноним' }}
+                {{ sketch.profiles?.display_name || 'Аноним' }}
               </p>
               <div class="gallery-stats">
                 <span>❤️ {{ sketch.likes }}</span>
@@ -303,7 +310,7 @@ const statusText = (status: string) => {
       <span class="not-auth-icon">🔐</span>
       <h2>Требуется авторизация</h2>
       <p>Для просмотра личного кабинета необходимо войти в систему</p>
-      <button @click="navigateTo('/')" class="login-btn">
+      <button @click="navigateTo('/')" class="btn btn-primary">
         Войти в систему
       </button>
     </div>
@@ -311,11 +318,69 @@ const statusText = (status: string) => {
 </template>
 
 <style scoped>
-.dashboard-page {
+/* Переменные тем */
+.theme-dark {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: rgba(30, 30, 30, 0.8);
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-card-hover: rgba(255, 255, 255, 0.08);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --border-focus: #646cff;
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #666666;
+  --accent-color: #646cff;
+  --accent-hover: #7a85ff;
+  --accent-soft: rgba(100, 108, 255, 0.1);
+  --accent-soft-border: rgba(100, 108, 255, 0.4);
+  --success-color: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.4);
+  --warning-color: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.4);
+  --error-color: #ef4444;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-border: rgba(239, 68, 68, 0.4);
+  --purple-color: #8b5cf6;
+  --purple-bg: rgba(139, 92, 246, 0.1);
+  --purple-border: rgba(139, 92, 246, 0.4);
+}
+
+.theme-light {
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f3f4f6;
+  --border-color: #e5e7eb;
+  --border-focus: #646cff;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent-color: #646cff;
+  --accent-hover: #7a85ff;
+  --accent-soft: rgba(100, 108, 255, 0.1);
+  --accent-soft-border: rgba(100, 108, 255, 0.4);
+  --success-color: #10b981;
+  --success-bg: #f0fdf4;
+  --success-border: #10b981;
+  --warning-color: #f59e0b;
+  --warning-bg: #fffbeb;
+  --warning-border: #f59e0b;
+  --error-color: #ef4444;
+  --error-bg: #fef2f2;
+  --error-border: #ef4444;
+  --purple-color: #8b5cf6;
+  --purple-bg: #f5f3ff;
+  --purple-border: #8b5cf6;
+}
+
+/* Основной контейнер */
+.dashboard {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  color: #ffffff;
-  padding-bottom: 3rem;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Заголовок */
@@ -323,73 +388,90 @@ const statusText = (status: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2rem 3rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1.5rem 2rem;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .header-content {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .page-title {
-  font-size: 2rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.title-icon {
-  font-size: 2.5rem;
-  -webkit-text-fill-color: initial;
 }
 
 .page-subtitle {
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .header-actions {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.header-btn {
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.95rem;
+/* Кнопки */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-}
-
-.header-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.profile-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
 }
 
-.profile-btn:hover {
-  transform: scale(1.05);
+.btn-primary {
+  background: var(--accent-color);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.theme-light .btn-ghost {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.theme-light .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.btn-text {
+  background: transparent;
+  color: var(--accent-color);
+  padding: 0.25rem 0.5rem;
+}
+
+.btn-text:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
 }
 
 /* Контент */
 .dashboard-content {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -397,8 +479,8 @@ const statusText = (status: string) => {
 /* Быстрые действия */
 .quick-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
@@ -407,50 +489,50 @@ const statusText = (status: string) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  padding: 2rem 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
 }
 
 .action-card:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(102, 126, 234, 0.5);
-  transform: translateY(-5px);
+  background: var(--bg-card-hover);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
 }
 
 .moderator-card {
-  border-color: rgba(139, 92, 246, 0.3);
+  border-color: var(--purple-border);
 }
 
 .moderator-card:hover {
-  border-color: rgba(139, 92, 246, 0.6);
-  background: rgba(139, 92, 246, 0.1);
+  border-color: var(--purple-color);
+  background: var(--purple-bg);
 }
 
 .action-icon {
-  font-size: 3rem;
+  font-size: 2rem;
 }
 
 .action-label {
-  font-size: 1rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .pending-badge {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  background: #ef4444;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--error-color);
   color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
-  border-radius: 20px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
 }
 
 /* Статистика */
@@ -459,84 +541,84 @@ const statusText = (status: string) => {
 }
 
 .section-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0 0 1.5rem 0;
-  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 1rem 0;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
   text-align: center;
 }
 
 .stat-card.stat-approved {
-  border-color: rgba(100, 200, 100, 0.3);
-  background: rgba(100, 200, 100, 0.1);
+  border-color: var(--success-border);
+  background: var(--success-bg);
 }
 
 .stat-card.stat-pending {
-  border-color: rgba(255, 200, 100, 0.3);
-  background: rgba(255, 200, 100, 0.1);
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
 }
 
 .stat-card.stat-rejected {
-  border-color: rgba(255, 100, 100, 0.3);
-  background: rgba(255, 100, 100, 0.1);
+  border-color: var(--error-border);
+  background: var(--error-bg);
 }
 
 .stat-card.stat-likes {
-  border-color: rgba(102, 126, 234, 0.3);
-  background: rgba(102, 126, 234, 0.1);
+  border-color: var(--accent-soft-border);
+  background: var(--accent-soft);
 }
 
 .stat-card.stat-views {
-  border-color: rgba(118, 75, 162, 0.3);
-  background: rgba(118, 75, 162, 0.1);
+  border-color: var(--purple-border);
+  background: var(--purple-bg);
 }
 
 .stat-value {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  color: #667eea;
+  color: var(--accent-color);
 }
 
 .stat-card.stat-approved .stat-value {
-  color: #64c864;
+  color: var(--success-color);
 }
 
 .stat-card.stat-pending .stat-value {
-  color: #ffc864;
+  color: var(--warning-color);
 }
 
 .stat-card.stat-rejected .stat-value {
-  color: #ff6464;
+  color: var(--error-color);
 }
 
 .stat-card.stat-likes .stat-value {
-  color: #667eea;
+  color: var(--accent-color);
 }
 
 .stat-card.stat-views .stat-value {
-  color: #764ba2;
+  color: var(--purple-color);
 }
 
 .stat-label {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
 }
 
 /* Скетчи */
@@ -548,22 +630,7 @@ const statusText = (status: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.view-all-btn {
-  padding: 0.5rem 1rem;
-  background: rgba(102, 126, 234, 0.2);
-  border: 1px solid rgba(102, 126, 234, 0.3);
-  border-radius: 8px;
-  color: #667eea;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.view-all-btn:hover {
-  background: rgba(102, 126, 234, 0.3);
+  margin-bottom: 1rem;
 }
 
 /* Загрузка */
@@ -573,51 +640,56 @@ const statusText = (status: string) => {
   align-items: center;
   justify-content: center;
   padding: 3rem;
-  gap: 1rem;
+  gap: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .loading-spinner {
-  font-size: 3rem;
-  animation: pulse 1.5s ease-in-out infinite;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.1); }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Сетка скетчей */
 .sketches-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
 }
 
 .sketch-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
 }
 
 .sketch-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(102, 126, 234, 0.5);
-  transform: translateY(-5px);
+  border-color: var(--accent-color);
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
 }
 
 .sketch-thumbnail {
-  height: 160px;
+  height: 140px;
   overflow: hidden;
+  background: var(--bg-card);
 }
 
 .thumbnail-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s;
+  transition: transform 0.3s ease;
 }
 
 .sketch-card:hover .thumbnail-image {
@@ -627,22 +699,22 @@ const statusText = (status: string) => {
 .thumbnail-placeholder {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--accent-color) 0%, var(--purple-color) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 3rem;
+  font-size: 2rem;
 }
 
 .sketch-info {
-  padding: 1rem;
+  padding: 0.875rem;
 }
 
 .sketch-title {
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  margin: 0 0 0.75rem 0;
-  color: #fff;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -652,87 +724,73 @@ const statusText = (status: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 500;
 }
 
 .status-approved {
-  background: rgba(100, 200, 100, 0.2);
-  color: #64c864;
+  background: var(--success-bg);
+  color: var(--success-color);
 }
 
 .status-pending {
-  background: rgba(255, 200, 100, 0.2);
-  color: #ffc864;
+  background: var(--warning-bg);
+  color: var(--warning-color);
 }
 
 .status-rejected {
-  background: rgba(255, 100, 100, 0.2);
-  color: #ff6464;
+  background: var(--error-bg);
+  color: var(--error-color);
 }
 
 .status-draft {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
 }
 
 .sketch-date {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.625rem;
+  color: var(--text-muted);
 }
 
 .sketch-stats {
   display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 /* Нет скетчей */
 .no-sketches {
   text-align: center;
   padding: 3rem 2rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
 }
 
 .no-sketches-icon {
-  font-size: 4rem;
+  font-size: 3rem;
   display: block;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .no-sketches h3 {
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   margin: 0 0 0.5rem 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .no-sketches p {
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 1.5rem;
-}
-
-.create-btn {
-  padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.create-btn:hover {
-  transform: scale(1.05);
+  color: var(--text-secondary);
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
 }
 
 /* Галерея */
@@ -742,35 +800,36 @@ const statusText = (status: string) => {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
 }
 
 .gallery-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
 }
 
 .gallery-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(102, 126, 234, 0.5);
-  transform: translateY(-5px);
+  border-color: var(--accent-color);
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
 }
 
 .gallery-thumbnail {
-  height: 140px;
+  height: 120px;
   overflow: hidden;
+  background: var(--bg-card);
 }
 
 .gallery-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s;
+  transition: transform 0.3s ease;
 }
 
 .gallery-card:hover .gallery-image {
@@ -780,31 +839,31 @@ const statusText = (status: string) => {
 .gallery-placeholder {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--accent-color) 0%, var(--purple-color) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 3rem;
+  font-size: 2rem;
 }
 
 .gallery-info {
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 .gallery-title {
-  font-size: 0.95rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  margin: 0 0 0.5rem 0;
-  color: #fff;
+  color: var(--text-primary);
+  margin: 0 0 0.375rem 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .gallery-author {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin: 0 0 0.75rem 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -812,9 +871,9 @@ const statusText = (status: string) => {
 
 .gallery-stats {
   display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
 }
 
 /* Не авторизован */
@@ -829,65 +888,37 @@ const statusText = (status: string) => {
 }
 
 .not-auth-icon {
-  font-size: 5rem;
+  font-size: 4rem;
 }
 
 .not-auth h2 {
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .not-auth p {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin: 0;
-  font-size: 1.1rem;
-}
-
-.login-btn {
-  margin-top: 1rem;
-  padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.login-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  font-size: 0.875rem;
 }
 
 /* Адаптивность */
-@media (max-width: 1024px) {
-  .dashboard-header {
-    padding: 1.5rem;
-  }
-
-  .dashboard-content {
-    padding: 1.5rem;
-  }
-
-  .sketches-grid,
-  .gallery-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  }
-}
-
 @media (max-width: 768px) {
   .dashboard-header {
     flex-direction: column;
     gap: 1rem;
     text-align: center;
+    padding: 1rem;
   }
 
   .header-actions {
     width: 100%;
     justify-content: center;
+  }
+
+  .dashboard-content {
+    padding: 1rem;
   }
 
   .quick-actions {

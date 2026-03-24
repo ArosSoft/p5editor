@@ -240,12 +240,18 @@ onMounted(async () => {
   window.addEventListener('mousemove', onGlobalMouseMove)
   window.addEventListener('mouseup', onGlobalMouseUp)
   window.addEventListener('keydown', handleKeyDown)
-  
+
   // Обработка изменения localStorage из других вкладок/окон
   window.addEventListener('storage', handleStorageChange)
 
+  // Загрузка темы из localStorage
+  const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    theme.value = savedTheme
+  }
+
   console.log('[EditorPage] onMounted')
-  
+
   // Проверка параметра auth:required для открытия модального окна входа
   if (route.query.auth === 'required') {
     showAuthModal.value = true
@@ -458,6 +464,7 @@ function decreaseFontSize() {
 
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  localStorage.setItem('p5editor-theme', theme.value)
   addMessage(`🎨 Тема изменена на ${theme.value === 'dark' ? 'тёмную' : 'светлую'}`)
 }
 
@@ -475,6 +482,34 @@ function copyToClipboard() {
   }).catch(() => {
     addMessage('❌ Не удалось скопировать код')
   })
+}
+
+// Сохранение холста
+function saveCanvas() {
+  try {
+    const iframe = canvasRef.value?.$el?.querySelector('iframe')
+    if (!iframe || !iframe.contentWindow) {
+      addMessage('❌ Не удалось найти холст')
+      return
+    }
+
+    const canvas = iframe.contentWindow.document.querySelector('canvas')
+    if (!canvas) {
+      addMessage('❌ Холст не найден')
+      return
+    }
+
+    // Получаем данные из canvas
+    const dataURL = canvas.toDataURL('image/png')
+    const link = document.createElement('a')
+    link.download = `${sketchName.value || 'sketch'}.png`
+    link.href = dataURL
+    link.click()
+    addMessage('📸 Холст сохранён')
+  } catch (e) {
+    console.error('Ошибка сохранения холста:', e)
+    addMessage('❌ Ошибка сохранения: ' + (e as Error).message)
+  }
 }
 
 function formatCode() {
@@ -898,6 +933,9 @@ function navigateToDashboard() {
           <div class="canvas-container">
             <div class="canvas-header">
               <span class="canvas-title">Холст p5.js</span>
+              <button @click="saveCanvas" class="canvas-btn" title="Сохранить холст">
+                📸
+              </button>
               <div class="mouse-coordinates">
                 <span class="coord-item">X = {{ mouseX }}</span>
                 <span class="coord-separator">/</span>
@@ -1437,10 +1475,11 @@ function navigateToDashboard() {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
+  min-height: 36px;
 }
 
 .app.theme-light .editor-header,
@@ -1475,6 +1514,28 @@ function navigateToDashboard() {
 .editor-title, .canvas-title {
   font-size: 12px;
   opacity: 0.7;
+}
+
+/* Кнопка сохранения холста */
+.canvas-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app.theme-light .canvas-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .canvas-indicator {
