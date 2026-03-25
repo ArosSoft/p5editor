@@ -112,8 +112,7 @@ function start(userCode: string) {
       }
     });
 
-    // ✅ НОВОЕ: Исправление путей к ресурсам
-    // /images/file.png → /p5editor/images/file.png
+    // ✅ Исправление путей к ресурсам для работы с изображениями
     var APP_BASE = "${basePath}";
 
     function fixResourcePath(path) {
@@ -123,6 +122,10 @@ function start(userCode: string) {
       // Абсолютный путь /... → добавляем базовый путь
       if (path.charAt(0) === '/' && path.indexOf(APP_BASE) !== 0) {
         return APP_BASE + path.substring(1);
+      }
+      // Относительный путь (без / в начале) → добавляем базовый путь
+      if (path.charAt(0) !== '/' && path.indexOf(APP_BASE) !== 0) {
+        return APP_BASE + path;
       }
       return path;
     }
