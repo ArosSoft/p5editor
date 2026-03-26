@@ -208,6 +208,13 @@ CREATE POLICY "Users can insert own profile"
 -- 8. RLS политики для sketches
 -- ============================================================
 
+-- Пользователи могут видеть свои собственные скетчи (включая черновики и ожидающие модерации)
+DROP POLICY IF EXISTS "Users can view own sketches" ON public.sketches;
+CREATE POLICY "Users can view own sketches"
+  ON public.sketches FOR SELECT
+  USING ((SELECT auth.uid()) = user_id);
+
+-- Все могут видеть только одобренные скетчи
 DROP POLICY IF EXISTS "Approved sketches are viewable by everyone" ON public.sketches;
 CREATE POLICY "Approved sketches are viewable by everyone"
   ON public.sketches FOR SELECT

@@ -31,9 +31,11 @@ function start(userCode: string) {
   const textColor = isDark ? '#ffffff' : '#333333'
   const gridColor = isDark ? 'rgba(100, 108, 255, 0.1)' : 'rgba(100, 108, 255, 0.05)'
 
-  // ✅ ИСПРАВЛЕНО: используем BASE_URL из Vite
+  // ✅ Исправление для GitHub Pages
+  // BASE_URL из Vite (например, '/p5editor/') или '/' для корня
   const basePath = import.meta.env.BASE_URL || '/'
-  const baseHref = window.location.origin + basePath
+  // Убираем trailing slash для baseHref
+  const baseHref = window.location.origin + (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath)
 
   const encodedCode = JSON.stringify(userCode)
     .replace(/\u2028/g, '\\u2028')
@@ -110,8 +112,7 @@ function start(userCode: string) {
       }
     });
 
-    // ✅ НОВОЕ: Исправление путей к ресурсам
-    // /images/file.png → /p5editor/images/file.png
+    // ✅ Исправление путей к ресурсам для работы с изображениями
     var APP_BASE = "${basePath}";
 
     function fixResourcePath(path) {
@@ -121,6 +122,10 @@ function start(userCode: string) {
       // Абсолютный путь /... → добавляем базовый путь
       if (path.charAt(0) === '/' && path.indexOf(APP_BASE) !== 0) {
         return APP_BASE + path.substring(1);
+      }
+      // Относительный путь (без / в начале) → добавляем базовый путь
+      if (path.charAt(0) !== '/' && path.indexOf(APP_BASE) !== 0) {
+        return APP_BASE + path;
       }
       return path;
     }

@@ -2,7 +2,7 @@ let img; // Переменная для хранения изображения
 
 function preload() {
   // Загружаем изображение (замените URL на свой)
-  img = loadImage('/images/snowman.png');
+  img = loadImage('images/snowman.png');
 }
 
 function setup() {

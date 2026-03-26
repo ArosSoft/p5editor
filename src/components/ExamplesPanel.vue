@@ -440,6 +440,35 @@ function toggleMarkdownView() {
   showRawMarkdown.value = !showRawMarkdown.value
 }
 
+function scrollToTop() {
+  setTimeout(() => {
+    // Прокручиваем внешний контейнер
+    const scrollContainer = document.querySelector('.scroll.detail')
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0
+    }
+    
+    // Прокручиваем markdown-body (если есть)
+    const markdownBody = document.querySelector('.scroll.detail .markdown-body')
+    if (markdownBody) {
+      markdownBody.scrollTop = 0
+    }
+    
+    // Прокручиваем code блок (если есть)
+    const codeBlock = document.querySelector('.scroll.detail .code')
+    if (codeBlock) {
+      codeBlock.scrollTop = 0
+    }
+  }, 50)
+}
+
+// Следим за изменением текущего шага и прокручиваем вверх
+watch(currentStep, () => {
+  nextTick(() => {
+    scrollToTop()
+  })
+})
+
 const filteredExamples = computed(() => {
   if (!searchQuery.value) return examples.value
   const q = searchQuery.value.toLowerCase()
@@ -453,18 +482,22 @@ function handleClose() {
   emit('close')
 }
 
-// Навигация по шагам
+// Навигация по шагам (исключая Демо)
+const stepsWithoutDemo = computed(() => steps.value.filter(s => s.title !== 'Демо'))
+
 const currentStepIndex = computed(() => {
   if (!currentStep.value) return -1
-  return steps.value.findIndex(s => s.file === currentStep.value!.file)
+  return stepsWithoutDemo.value.findIndex(s => s.file === currentStep.value!.file)
 })
 
 const hasPrevStep = computed(() => currentStepIndex.value > 0)
-const hasNextStep = computed(() => currentStepIndex.value < steps.value.length - 1)
+const hasNextStep = computed(() => {
+  return currentStepIndex.value < stepsWithoutDemo.value.length - 1
+})
 
 function goToPrevStep() {
   if (hasPrevStep.value) {
-    const prevStep = steps.value[currentStepIndex.value - 1]
+    const prevStep = stepsWithoutDemo.value[currentStepIndex.value - 1]
     if (prevStep) {
       loadStep(prevStep)
     }
@@ -473,7 +506,7 @@ function goToPrevStep() {
 
 function goToNextStep() {
   if (hasNextStep.value) {
-    const nextStep = steps.value[currentStepIndex.value + 1]
+    const nextStep = stepsWithoutDemo.value[currentStepIndex.value + 1]
     if (nextStep) {
       loadStep(nextStep)
     }
@@ -573,7 +606,7 @@ function goToNextStep() {
           ← Назад
         </button>
         <span class="step-counter">
-          {{ currentStepIndex + 1 }} / {{ steps.length }}
+          {{ currentStepIndex + 1 }} / {{ stepsWithoutDemo.length }}
         </span>
         <button
           class="btn btn-nav"
