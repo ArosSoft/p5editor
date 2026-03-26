@@ -213,7 +213,7 @@ onUnmounted(() => {
   <div class="iframe-container" :class="{ 'theme-dark': theme === 'dark', 'theme-light': theme === 'light' }">
     <iframe
       ref="iframeRef"
-      sandbox="allow-scripts allow-same-origin allow-popups"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
       style="width:100%; height:100%; border:none;"
     ></iframe>
   </div>
