@@ -21,86 +21,104 @@ watch(() => props.modelValue, (newVal) => {
   value.value = newVal
 })
 
+// Создаем тему для светлой темы
+const lightTheme = EditorView.theme({
+  '&': {
+    backgroundColor: '#ffffff',
+    color: '#333333',
+  },
+  '.cm-content': {
+    backgroundColor: 'transparent',  // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+    color: '#333333',
+    caretColor: '#333333',
+  },
+  '.cm-line': {
+    backgroundColor: 'transparent',  // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+    color: '#333333',
+  },
+  '.cm-gutters': {
+    backgroundColor: '#f5f5f5',
+    color: '#666666',
+    borderRight: '1px solid #e0e0e0',
+  },
+  '.cm-cursor': {
+    borderLeftColor: '#333333',
+  },
+  '.cm-selectionBackground': {
+    backgroundColor: '#b0d0ff !important',
+  },
+  '&.cm-focused .cm-selectionBackground': {
+    backgroundColor: '#90c0ff !important',
+  },
+}, { dark: false })
+
+// Создаем тему для темной темы
+const darkTheme = oneDark
+
 // Используем computed для динамического обновления расширений
 const extensions = computed(() => {
   const fontSize = props.fontSize || 15
   const fontFamily = props.fontFamily || 'Consolas, Monaco, monospace'
-  const isDark = props.theme !== 'light'
-  
-  console.log('Применяем шрифт:', fontFamily, 'размер:', fontSize) // для отладки
-  
+  const isDark = props.theme === 'dark'
+
+  console.log('Применяем шрифт:', fontFamily, 'размер:', fontSize, 'тема:', isDark ? 'dark' : 'light')
+
   // Базовая тема
-  const themeExtension = isDark ? oneDark : EditorView.theme({
-    '&': {
-      backgroundColor: '#ffffff',
-      color: '#333333',
-    },
-    '.cm-content': {
-      backgroundColor: '#ffffff',
-      color: '#333333',
-      fontFamily: fontFamily, // Явно указываем шрифт для содержимого
-    },
-    '.cm-line': {
-      backgroundColor: '#ffffff',
-      color: '#333333',
-      fontFamily: fontFamily, // Явно указываем шрифт для строк
-    },
-    '.cm-gutters': {
-      backgroundColor: '#f5f5f5',
-      color: '#666666',
-      borderRight: '1px solid #e0e0e0',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: '#e8e8e8',
-    },
-    '.cm-activeLine': {
-      backgroundColor: '#f0f0f0',
-    },
-    '.cm-cursor': {
-      borderLeftColor: '#333333',
-    },
-    '.cm-selectionBackground': {
-      backgroundColor: '#b0d0ff',
-    },
-  })
-  
+const baseTheme = EditorView.theme({
+  '&': {
+    fontSize: `${fontSize}px`,
+    fontFamily: fontFamily,
+    height: '100%',
+  },
+  '.cm-content': {
+    fontFamily: fontFamily + ' !important',
+    fontSize: `${fontSize}px`,
+    minHeight: '100%',
+    backgroundColor: 'transparent',  // ← ДОБАВИТЬ
+  },
+  '.cm-line': {
+    fontFamily: fontFamily + ' !important',
+    backgroundColor: 'transparent',  // ← ДОБАВИТЬ
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontFamily: fontFamily,
+  },
+  '.cm-gutter': {
+    fontFamily: fontFamily,
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'transparent',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+  },
+  '.cm-selectionBackground': {
+    backgroundColor: (isDark ? '#3e4451' : '#b0d0ff') + ' !important',
+  },
+  '&.cm-focused .cm-selectionBackground': {
+    backgroundColor: (isDark ? '#3e4451' : '#90c0ff') + ' !important',
+  },
+}, { dark: isDark })
+
   return [
     javascript(),
-    themeExtension,
-    EditorView.theme({
-      '&': {
-        fontSize: `${fontSize}px`,
-        fontFamily: fontFamily,
-        height: '100%',
-      },
-      '.cm-content': {
-        fontFamily: fontFamily + ' !important', // Принудительно применяем шрифт
-        fontSize: `${fontSize}px`,
-        minHeight: '100%',
-      },
-      '.cm-line': {
-        fontFamily: fontFamily + ' !important', // Принудительно применяем шрифт к строкам
-      },
-      '.cm-scroller': {
-        overflow: 'auto',
-        fontFamily: fontFamily,
-      },
-      '.cm-gutter': {
-        fontFamily: fontFamily,
-      }
-    })
+    isDark ? darkTheme : lightTheme,
+    baseTheme
   ]
 })
 
 // Следим за изменениями шрифта для принудительного обновления
-watch(() => [props.fontFamily, props.fontSize], () => {
+watch(() => [props.fontFamily, props.fontSize, props.theme], () => {
   // Принудительно обновляем редактор
-  // Эта функция может быть недоступна в некоторых версиях vue-codemirror6
 }, { deep: true })
 </script>
 
 <template>
-  <div class="code-editor-wrapper" :style="{ fontFamily: fontFamily, fontSize: fontSize + 'px' }">
+  <div
+    class="code-editor-wrapper"
+    :class="{ 'theme-light': theme === 'light', 'theme-dark': theme === 'dark' }"
+  >
     <CodeMirror
       ref="editorRef"
       v-model="value"
@@ -119,57 +137,9 @@ watch(() => [props.fontFamily, props.fontSize], () => {
   width: 100%;
 }
 
-.cm-editor {
-  height: 100%;
-}
-
-.cm-scroller {
-  overflow: auto;
-}
-
-/* Стили для CodeMirror */
-.cm-editor .cm-content {
-  caret-color: currentColor;
-  padding: 10px 0;
-  line-height: 1.5;
-}
-
-.cm-editor .cm-line {
-  padding: 0 8px;
-}
-
-/* Стили для светлой темы */
-.light-theme .cm-editor {
-  background-color: #ffffff;
-}
-
-/* Принудительное применение шрифта ко всем элементам */
-.cm-editor, 
-.cm-content,
-.cm-line,
-.cm-gutter,
-.cm-gutterElement,
-.cm-activeLine,
-.cm-activeLineGutter {
-  font-family: inherit !important;
-}
-
 /* Стили для скроллбара в светлой теме */
 .theme-light .cm-editor ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
-}
-
-.theme-light .cm-editor ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.theme-light .cm-editor ::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 5px;
-}
-
-.theme-light .cm-editor ::-webkit-scrollbar-thumb:hover {
-  background: #555;
 }
 </style>

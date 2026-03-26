@@ -455,7 +455,7 @@ function handleFileUpload(event: Event) {
 }
 
 function increaseFontSize() {
-  fontSize.value = Math.min(32, fontSize.value + 1)
+  fontSize.value = Math.min(40, fontSize.value + 1)
 }
 
 function decreaseFontSize() {
