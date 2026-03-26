@@ -933,7 +933,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -941,7 +941,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
 }
 
 .modal {
-  background: var(--bg-card);
+  background: #000000;
   border-radius: 8px;
   max-width: 480px;
   width: 90%;
