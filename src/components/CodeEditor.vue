@@ -3,9 +3,14 @@ import { ref, computed, watch } from 'vue'
 import CodeMirror from 'vue-codemirror6'
 import { javascript } from '@codemirror/lang-javascript'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { EditorView } from '@codemirror/view'
+import type { EditorState, Transaction } from '@codemirror/state'
+import { StateField } from '@codemirror/state'
+import type { Range } from '@codemirror/state'
+import { EditorView, Decoration, type DecorationSet } from '@codemirror/view'
+import { syntaxTree } from '@codemirror/language'
+import { UNIQUE_P5_KEYWORDS } from '../lib/p5-keywords'
 
-const props = defineProps<{ 
+const props = defineProps<{
   modelValue: string,
   fontSize?: number,
   fontFamily?: string,
@@ -15,6 +20,83 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
 
 const value = ref(props.modelValue)
 const editorRef = ref<InstanceType<typeof CodeMirror> | null>(null)
+
+// Создаем расширение для подсветки ключевых слов p5.js
+function p5KeywordsHighlight() {
+  const keywordSet = new Set(UNIQUE_P5_KEYWORDS)
+  
+  // Создаем поле состояния для декораций
+  const p5KeywordsField = StateField.define<DecorationSet>({
+    create(state: EditorState) {
+      return highlightKeywords(state)
+    },
+    update(decorations: DecorationSet, transaction: Transaction) {
+      // Пересоздаем декорации при изменении документа
+      if (transaction.docChanged) {
+        return highlightKeywords(transaction.state)
+      }
+      return decorations.map(transaction.changes)
+    },
+    provide: (field: StateField<DecorationSet>) => EditorView.decorations.from(field),
+  })
+
+  // Функция для подсветки ключевых слов
+  function highlightKeywords(state: EditorState): DecorationSet {
+    const decorations: Range<Decoration>[] = []
+    const tree = syntaxTree(state)
+    
+    // Проходим по всем токенам в документе
+    tree.iterate({
+      enter: (node: any) => {
+        // Проверяем, является ли узел идентификатором
+        if (node.name === 'VariableName' || node.name === 'PropertyName') {
+          const text = state.sliceDoc(node.from, node.to)
+          
+          // Если это ключевое слово p5.js, добавляем декорацию
+          if (keywordSet.has(text)) {
+            decorations.push(
+              Decoration.mark({
+                class: 'cm-p5-keyword',
+                attributes: {
+                  style: 'color: #61afef; font-weight: bold;',
+                },
+              }).range(node.from, node.to)
+            )
+          }
+        }
+        
+        // Также проверяем имена функций
+        if (node.name === 'VariableName') {
+          const text = state.sliceDoc(node.from, node.to)
+          
+          // Проверяем, является ли это функцией p5.js (setup, draw, и т.д.)
+          const isP5Function = [
+            'setup', 'draw', 'preload',
+            'mousePressed', 'mouseDragged', 'mouseMoved', 'mouseReleased', 'mouseClicked',
+            'touchStarted', 'touchMoved', 'touchEnded',
+            'keyPressed', 'keyReleased', 'keyTyped',
+            'windowResized'
+          ].includes(text)
+          
+          if (isP5Function) {
+            decorations.push(
+              Decoration.mark({
+                class: 'cm-p5-function',
+                attributes: {
+                  style: 'color: #e5c07b; font-weight: bold;',
+                },
+              }).range(node.from, node.to)
+            )
+          }
+        }
+      },
+    })
+    
+    return Decoration.set(decorations)
+  }
+
+  return [p5KeywordsField]
+}
 
 // Следим за изменениями modelValue
 watch(() => props.modelValue, (newVal) => {
@@ -104,7 +186,8 @@ const baseTheme = EditorView.theme({
   return [
     javascript(),
     isDark ? darkTheme : lightTheme,
-    baseTheme
+    baseTheme,
+    ...p5KeywordsHighlight()
   ]
 })
 
@@ -141,5 +224,27 @@ watch(() => [props.fontFamily, props.fontSize, props.theme], () => {
 .theme-light .cm-editor ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
+}
+
+/* Стили для ключевых слов p5.js */
+.cm-p5-keyword {
+  color: #61afef !important;
+  font-weight: bold !important;
+}
+
+.cm-p5-function {
+  color: #e5c07b !important;
+  font-weight: bold !important;
+}
+
+/* Дополнительные стили для темной темы */
+.theme-dark .cm-p5-keyword {
+  color: #61afef !important;
+  font-weight: bold !important;
+}
+
+.theme-dark .cm-p5-function {
+  color: #e5c07b !important;
+  font-weight: bold !important;
 }
 </style>

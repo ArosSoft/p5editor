@@ -469,10 +469,25 @@ function toggleTheme() {
 }
 
 function resetToExample() {
-  if (confirm('Восстановить пример кода?')) {
+  if (confirm('Восстановить стартовый шаблон?')) {
     saveToHistory()
-    code.value = originalCode.value
-    addMessage('🔄 Восстановлен пример кода')
+    // Сбрасываем ID скетча, чтобы не сохранять в облако
+    currentSketchId.value = null
+    localStorage.removeItem('p5editor_current_sketch_id')
+    // Восстанавливаем стартовый шаблон
+    code.value = `function setup() {
+  createCanvas(400, 400);
+}
+
+function draw() {
+  background(220);
+  ellipse(mouseX, mouseY, 50, 50);
+}`
+    originalCode.value = code.value
+    // Устанавливаем название "Шаблон"
+    sketchName.value = 'Шаблон'
+    localStorage.setItem('p5editor_current_name', 'Шаблон')
+    addMessage('🔄 Скетч сброшен к стартовому шаблону')
   }
 }
 
@@ -814,12 +829,6 @@ function navigateToDashboard() {
           <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
         </button>
 
-        <button @click="resetToExample" class="menu-item" title="Восстановить пример"
-                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
-          <span class="menu-icon">🔄</span>
-          <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
-        </button>
-
         <button @click="clearConsole" class="menu-item" title="Очистить консоль"
                 @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">🧹</span>
@@ -842,6 +851,12 @@ function navigateToDashboard() {
                 @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">⌨️</span>
           <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
+        </button>
+
+        <button @click="resetToExample" class="menu-item" title="Восстановить пример"
+                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">🔄</span>
+          <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
         </button>
 
         <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
@@ -1479,7 +1494,7 @@ function navigateToDashboard() {
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
-  min-height: 36px;
+  min-height: 26px;
 }
 
 .app.theme-light .editor-header,

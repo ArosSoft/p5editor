@@ -108,7 +108,13 @@ export function useSketches() {
       const to = from + limit - 1
       query = query.range(from, to)
 
-      const { data, error: fetchError, count } = await query
+      // Добавляем таймаут для запроса
+      const queryPromise = query
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут запроса (10 секунд)')), 10000)
+      })
+
+      const { data, error: fetchError, count } = await Promise.race([queryPromise, timeoutPromise])
 
       if (fetchError) throw fetchError
 

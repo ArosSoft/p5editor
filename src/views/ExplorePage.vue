@@ -72,7 +72,7 @@ async function loadSketches() {
     sketches.value = result.data || []
     total.value = result.total || 0
     console.log('[ExplorePage] Загружено скетчей:', sketches.value.length)
-    
+
     if (sketches.value.length === 0) {
       console.warn('[ExplorePage] В галерее нет одобренных скетчей!')
       console.warn('[ExplorePage] Проверьте Supabase: есть ли скетчи со status=approved?')
@@ -83,6 +83,11 @@ async function loadSketches() {
   }
 
   loading.value = false
+}
+
+// Повторить загрузку при ошибке
+function retryLoad() {
+  loadSketches()
 }
 
 // Отслеживание изменений фильтров
@@ -294,7 +299,7 @@ const pages = computed(() => {
       <span class="error-icon">⚠️</span>
       <h3>Ошибка загрузки</h3>
       <p>{{ error }}</p>
-      <button @click="loadSketches" class="retry-btn">
+      <button @click="retryLoad" class="retry-btn">
         🔄 Попробовать снова
       </button>
     </div>
