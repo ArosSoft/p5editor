@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSketches } from '../composables/useSketches'
 import { useAuth } from '../composables/useAuth'
 import type { SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
-const { getGallerySketches, getCategories } = useSketches()
+const { getGallerySketches, getCategories, loading: sketchesLoading } = useSketches()
 const { user, isAuthenticated } = useAuth()
 
 // Состояние
 const sketches = ref<SketchWithProfile[]>([])
-const loading = ref(false)
 const error = ref<string | null>(null)
 const total = ref(0)
 
@@ -40,8 +39,13 @@ async function loadCategories() {
 
 // Загрузка скетчей
 async function loadSketches() {
+  // Защита от множественных одновременных вызовов
+  if (sketchesLoading.value) {
+    console.log('[ExplorePage] loadSketches - уже загружается, пропускаем')
+    return
+  }
+
   console.log('[ExplorePage] loadSketches вызвана')
-  loading.value = true
   error.value = null
 
   const difficultyValue = selectedDifficulty.value !== 'Все'
@@ -56,33 +60,37 @@ async function loadSketches() {
     search: searchQuery.value
   })
 
-  const result = await getGallerySketches({
-    page: currentPage.value,
-    limit: itemsPerPage.value,
-    category: selectedCategory.value !== 'Все' ? selectedCategory.value : undefined,
-    difficulty: difficultyValue,
-    search: searchQuery.value || undefined,
-    sortBy: sortBy.value,
-    sortOrder: sortBy.value === 'title' ? 'asc' : 'desc'
-  })
+  try {
+    const result = await getGallerySketches({
+      page: currentPage.value,
+      limit: itemsPerPage.value,
+      category: selectedCategory.value !== 'Все' ? selectedCategory.value : undefined,
+      difficulty: difficultyValue,
+      search: searchQuery.value || undefined,
+      sortBy: sortBy.value,
+      sortOrder: sortBy.value === 'title' ? 'asc' : 'desc'
+    })
 
-  console.log('[ExplorePage] Результат загрузки:', result)
+    console.log('[ExplorePage] Результат загрузки:', result)
 
-  if (result.success) {
-    sketches.value = result.data || []
-    total.value = result.total || 0
-    console.log('[ExplorePage] Загружено скетчей:', sketches.value.length)
+    if (result.success) {
+      sketches.value = result.data || []
+      total.value = result.total || 0
+      console.log('[ExplorePage] Загружено скетчей:', sketches.value.length)
 
-    if (sketches.value.length === 0) {
-      console.warn('[ExplorePage] В галерее нет одобренных скетчей!')
-      console.warn('[ExplorePage] Проверьте Supabase: есть ли скетчи со status=approved?')
+      if (sketches.value.length === 0) {
+        console.warn('[ExplorePage] В галерее нет одобренных скетчей!')
+        console.warn('[ExplorePage] Проверьте Supabase: есть ли скетчи со status=approved?')
+      }
+    } else {
+      error.value = result.error || 'Ошибка загрузки скетчей'
+      console.error('[ExplorePage] Ошибка:', error.value)
     }
-  } else {
-    error.value = result.error || 'Ошибка загрузки скетчей'
-    console.error('[ExplorePage] Ошибка:', error.value)
+  } catch (err) {
+    error.value = 'Произошла непредвиденная ошибка при загрузке'
+    console.error('[ExplorePage] Исключение:', err)
+    sketchesLoading.value = false
   }
-
-  loading.value = false
 }
 
 // Повторить загрузку при ошибке
@@ -96,10 +104,22 @@ watch([searchQuery, selectedCategory, selectedDifficulty, sortBy], () => {
   loadSketches()
 })
 
-// Загрузка при монтировании
+// Загрузка при монтировании и активации компонента
 onMounted(() => {
+  console.log('[ExplorePage] onMounted - инициализация')
   loadCategories()
   loadSketches()
+})
+
+// При возврате на страницу (keep-alive)
+onActivated(() => {
+  console.log('[ExplorePage] onActivated - перезагрузка')
+  loadSketches()
+})
+
+// При уходе со страницы
+onDeactivated(() => {
+  console.log('[ExplorePage] onDeactivated - сброс')
 })
 
 // Переключение тега
@@ -289,13 +309,13 @@ const pages = computed(() => {
     </div>
 
     <!-- Загрузка -->
-    <div v-if="loading && sketches.length === 0" class="loading-state">
+    <div v-if="sketchesLoading" class="loading-state">
       <span class="loading-spinner">⏳</span>
       <p>Загрузка скетчей...</p>
     </div>
 
     <!-- Ошибка -->
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && sketches.length === 0" class="error-state">
       <span class="error-icon">⚠️</span>
       <h3>Ошибка загрузки</h3>
       <p>{{ error }}</p>
@@ -313,7 +333,7 @@ const pages = computed(() => {
         class="sketch-card"
         @click="openSketch(sketch.id)"
       >
-        <!-- Превью -->
+        <!-- Превью с информацией поверх изображения -->
         <div class="sketch-thumbnail">
           <img
             v-if="sketch.thumbnail_url"
@@ -324,72 +344,65 @@ const pages = computed(() => {
           <div v-else class="thumbnail-placeholder" :style="{ background: `linear-gradient(135deg, ${sketch.id.slice(0, 6)} 0%, ${sketch.id.slice(-6)} 100%)` }">
             <span class="thumbnail-icon">🎨</span>
           </div>
+          
+          <!-- Название в левом верхнем углу -->
+          <div class="sketch-title-overlay">
+            <h3 class="sketch-title-compact">{{ sketch.title }}</h3>
+          </div>
+          
+          <!-- Статистика в правом нижнем углу -->
+          <div class="sketch-stats-overlay">
+            <div class="sketch-stats-compact">
+              <span class="stat-item-compact" title="Лайки">
+                ❤️ {{ sketch.likes }}
+              </span>
+              <span class="stat-item-compact" title="Просмотры">
+                👁️ {{ sketch.views }}
+              </span>
+            </div>
+          </div>
+          
+          <!-- Оверлей при наведении -->
           <div class="sketch-overlay">
             <span class="view-btn">👁️ Просмотр</span>
           </div>
         </div>
 
         <!-- Информация -->
-        <div class="sketch-info">
-          <h3 class="sketch-title">{{ sketch.title }}</h3>
-          <p class="sketch-description">{{ sketch.description }}</p>
-
-          <!-- Автор -->
-          <div class="sketch-author">
-            <img
-              v-if="sketch.profiles?.avatar_url"
-              :src="sketch.profiles.avatar_url"
-              class="author-avatar-img"
-              alt="Аватар автора"
-            />
-            <span v-else class="author-avatar">👤</span>
-            <span class="author-name">{{ sketch.profiles?.display_name || sketch.profiles?.email?.split('@')[0] || 'Аноним' }}</span>
-          </div>
-
-          <!-- Теги -->
-          <div class="sketch-tags">
-            <span
-              v-for="tag in (sketch.tags || []).slice(0, 3)"
-              :key="tag"
-              class="sketch-tag"
-            >
-              {{ tag }}
-            </span>
-          </div>
-
-          <!-- Статистика и дата -->
-          <div class="sketch-meta">
-            <div class="sketch-stats">
-              <span class="stat-item" title="Лайки">
-                ❤️ {{ sketch.likes }}
-              </span>
-              <span class="stat-item" title="Просмотры">
-                👁️ {{ sketch.views }}
-              </span>
+        <div class="sketch-info-compact">
+          <!-- Автор и кнопка редактирования -->
+          <div class="sketch-author-row">
+            <div class="sketch-author-compact">
+              <img
+                v-if="sketch.profiles?.avatar_url"
+                :src="sketch.profiles.avatar_url"
+                class="author-avatar-img-compact"
+                alt="Аватар автора"
+              />
+              <span v-else class="author-avatar-compact">👤</span>
+              <span class="author-name-compact">{{ sketch.profiles?.display_name || sketch.profiles?.email?.split('@')[0] || 'Аноним' }}</span>
             </div>
-            <span class="sketch-date">{{ formatDate(sketch.created_at) }}</span>
-          </div>
 
-          <!-- Кнопка редактирования (только для автора) -->
-          <div class="sketch-actions" v-if="isAuthenticated && user">
+            <!-- Кнопка редактирования -->
             <button
+              v-if="isAuthenticated && user"
               @click.stop="openSketchInEditor(sketch)"
-              class="edit-in-editor-btn"
+              class="edit-icon-btn"
               :title="sketch.user_id === user.id ? 'Редактировать в редакторе' : 'Открыть копию в редакторе'"
             >
-              {{ sketch.user_id === user.id ? '✏️ Редактировать' : '📋 Открыть копию' }}
+              {{ sketch.user_id === user.id ? '✏️' : '📋' }}
             </button>
           </div>
 
           <!-- Бейджи -->
-          <div class="sketch-badges">
+          <div class="sketch-badges-compact">
             <span
-              class="difficulty-badge"
+              class="difficulty-badge-compact"
               :class="`difficulty-${sketch.difficulty?.toLowerCase() || 'средняя'}`"
             >
               {{ sketch.difficulty || 'Средняя' }}
             </span>
-            <span class="category-badge">
+            <span class="category-badge-compact">
               {{ sketch.category || 'Другое' }}
             </span>
           </div>
@@ -397,7 +410,7 @@ const pages = computed(() => {
       </div>
 
       <!-- Нет результатов -->
-      <div v-if="!loading && sketches.length === 0" class="no-results">
+      <div v-if="!sketchesLoading && sketches.length === 0" class="no-results">
         <span class="no-results-icon">😕</span>
         <h3>Ничего не найдено</h3>
         <p>Попробуйте изменить параметры поиска или фильтры</p>
@@ -724,8 +737,8 @@ const pages = computed(() => {
 /* Сетка скетчей */
 .sketches-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
   padding: 2rem 3rem;
 }
 
@@ -733,22 +746,22 @@ const pages = computed(() => {
 .sketch-card {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .sketch-card:hover {
-  transform: translateY(-8px);
+  transform: translateY(-6px);
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(102, 126, 234, 0.5);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
 }
 
 .sketch-thumbnail {
   position: relative;
-  height: 200px;
+  height: 220px;
   overflow: hidden;
 }
 
@@ -760,7 +773,7 @@ const pages = computed(() => {
 }
 
 .sketch-card:hover .thumbnail-image {
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .thumbnail-placeholder {
@@ -773,19 +786,71 @@ const pages = computed(() => {
 }
 
 .thumbnail-icon {
-  font-size: 4rem;
+  font-size: 3.5rem;
   opacity: 0.5;
 }
 
+/* Название поверх изображения */
+.sketch-title-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 100%, transparent 100%);
+  z-index: 2;
+}
+
+.sketch-title-compact {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Статистика поверх изображения */
+.sketch-stats-overlay {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  padding: 0.75rem 1rem;
+  z-index: 2;
+}
+
+.sketch-stats-compact {
+  display: flex;
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  padding: 0.4rem 0.75rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-item-compact {
+  font-size: 0.8rem;
+  cursor: default;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Оверлей при наведении */
 .sketch-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   transition: opacity 0.3s;
+  z-index: 3;
 }
 
 .sketch-card:hover .sketch-overlay {
@@ -793,151 +858,119 @@ const pages = computed(() => {
 }
 
 .view-btn {
-  padding: 0.75rem 1.5rem;
+  padding: 0.6rem 1.25rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.sketch-info {
-  padding: 1.5rem;
-}
-
-.sketch-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem 0;
-  color: #fff;
-}
-
-.sketch-description {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin: 0 0 1rem 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight: 600;
 }
 
-.sketch-author {
+/* Компактная информация */
+.sketch-info-compact {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Строка автора с кнопкой */
+.sketch-author-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Автор */
+.sketch-author-compact {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
+  flex: 1;
+  min-width: 0;
 }
 
-.author-avatar-img {
-  width: 24px;
-  height: 24px;
+.author-avatar-img-compact {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
 }
 
-.author-avatar {
-  font-size: 1.2rem;
+.author-avatar-compact {
+  font-size: 1.1rem;
 }
 
-.sketch-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.sketch-tag {
-  padding: 0.25rem 0.6rem;
-  background: rgba(102, 126, 234, 0.2);
-  border-radius: 12px;
-  font-size: 0.75rem;
-  color: #667eea;
-}
-
-.sketch-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sketch-actions {
-  margin-bottom: 1rem;
-}
-
-.edit-in-editor-btn {
-  width: 100%;
-  padding: 0.6rem 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
+.author-name-compact {
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Кнопка-иконка редактирования */
+.edit-icon-btn {
+  width: 28px;
+  height: 28px;
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 6px;
+  color: #667eea;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
-.edit-in-editor-btn:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.edit-icon-btn:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+  color: #fff;
+  transform: scale(1.05);
 }
 
-.sketch-stats {
+/* Бейджи */
+.sketch-badges-compact {
   display: flex;
-  gap: 1rem;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
-.stat-item {
-  font-size: 0.85rem;
-  cursor: default;
-}
-
-.sketch-date {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.sketch-badges {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.difficulty-badge,
-.category-badge {
-  padding: 0.25rem 0.6rem;
+.difficulty-badge-compact,
+.category-badge-compact {
+  padding: 0.2rem 0.5rem;
   border-radius: 6px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
 }
 
 .difficulty-лёгкая {
-  background: rgba(100, 200, 100, 0.2);
+  background: rgba(100, 200, 100, 0.25);
   color: #64c864;
+  border: 1px solid rgba(100, 200, 100, 0.3);
 }
 
 .difficulty-средняя {
-  background: rgba(255, 200, 100, 0.2);
+  background: rgba(255, 200, 100, 0.25);
   color: #ffc864;
+  border: 1px solid rgba(255, 200, 100, 0.3);
 }
 
 .difficulty-тяжёлая {
-  background: rgba(255, 100, 100, 0.2);
+  background: rgba(255, 100, 100, 0.25);
   color: #ff6464;
+  border: 1px solid rgba(255, 100, 100, 0.3);
 }
 
-.category-badge {
+.category-badge-compact {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* Нет результатов */

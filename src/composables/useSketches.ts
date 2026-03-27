@@ -43,7 +43,7 @@ export function useSketches() {
       const sketchData = data as any
       const logs = sketchData.sketch_moderation_logs || []
       const lastLog = logs.length > 0
-        ? logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        ? logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
         : null
 
       const sketchWithLog = {
@@ -137,7 +137,7 @@ export function useSketches() {
       // Добавляем таймаут для запроса
       const queryPromise = query
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут запроса (10 секунд)')), 10000)
+        setTimeout(() => reject(new Error('Таймаут запроса (5 секунд)')), 5000)
       })
 
       const { data, error: fetchError, count } = await Promise.race([queryPromise, timeoutPromise])
@@ -191,8 +191,8 @@ export function useSketches() {
       // Обрабатываем данные: берём последний лог модерации для каждого скетча
       sketches.value = ((data as any[]) || []).map(sketch => {
         const logs = sketch.sketch_moderation_logs || []
-        const lastLog = logs.length > 0 
-          ? logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        const lastLog = logs.length > 0
+          ? logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
           : null
         
         return {
