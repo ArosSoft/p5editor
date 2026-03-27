@@ -10,6 +10,11 @@ const { user, profile, isAuthenticated } = useAuth()
 const { createSketch } = useSketches()
 const { uploadFile, uploading } = useStorage()
 
+// Вспомогательная функция для сообщений
+function addMessage(msg: string) {
+  console.log('[SharePage] ' + msg)
+}
+
 // Состояние формы
 const title = ref('')
 const description = ref('')
@@ -34,19 +39,39 @@ const categories = [
   'Другое'
 ]
 
-// Проверка авторизации при загрузке
+// Проверка авторизации и инициализация данных при загрузке
 onMounted(() => {
   // Проверяем localStorage, так как initAuth может ещё работать
   const userRole = localStorage.getItem('user_role')
   const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
-  
+
   if (!isAuth) {
     alert('Для публикации скетча необходимо войти в систему')
     router.push('/')
+    return
+  }
+
+  // Инициализируем название скетча из localStorage
+  const savedName = localStorage.getItem('p5editor_current_name')
+  if (savedName && !title.value) {
+    title.value = savedName
+  }
+  
+  // Автоматически загружаем сохранённое изображение холста (если есть)
+  const savedSnapshot = localStorage.getItem('p5editor_canvas_snapshot')
+  if (savedSnapshot) {
+    thumbnail.value = savedSnapshot
+    // Создаём File из base64 для загрузки
+    fetch(savedSnapshot)
+      .then(res => res.blob())
+      .then(blob => {
+        thumbnailFile.value = new File([blob], 'thumbnail.png', { type: 'image/png' })
+      })
+      .catch(() => {})
   }
 })
 
-// Получение кода из localStorage (если есть)
+// Получение кода и названия из localStorage (для предпросмотра)
 const sharedCode = computed(() => {
   return localStorage.getItem('p5editor_current_code') || ''
 })
@@ -54,11 +79,6 @@ const sharedCode = computed(() => {
 const sharedName = computed(() => {
   return localStorage.getItem('p5editor_current_name') || ''
 })
-
-// Если есть общий код, используем его название
-if (sharedName.value && !title.value) {
-  title.value = sharedName.value
-}
 
 // Загрузка thumbnail из файла
 function handleThumbnailUpload(event: Event) {
@@ -91,6 +111,26 @@ function handleThumbnailUpload(event: Event) {
 
 // Создание thumbnail из canvas
 function captureFromCanvas() {
+  // Сначала пробуем получить изображение из localStorage (если было сохранено в редакторе)
+  const savedSnapshot = localStorage.getItem('p5editor_canvas_snapshot')
+  if (savedSnapshot) {
+    thumbnail.value = savedSnapshot
+    delete formErrors.value.thumbnail
+    
+    // Создаём File из base64 для загрузки
+    fetch(savedSnapshot)
+      .then(res => res.blob())
+      .then(blob => {
+        thumbnailFile.value = new File([blob], 'thumbnail.png', { type: 'image/png' })
+        addMessage('📷 Изображение загружено из памяти')
+      })
+      .catch(() => {
+        addMessage('⚠️ Не удалось создать файл из памяти')
+      })
+    return
+  }
+  
+  // Если нет сохранённого изображения, пробуем сделать скриншот из canvas
   const canvas = document.querySelector('canvas')
   if (canvas) {
     canvas.toBlob((blob) => {
@@ -99,10 +139,11 @@ function captureFromCanvas() {
         thumbnailFile.value = file
         thumbnail.value = canvas.toDataURL('image/png')
         delete formErrors.value.thumbnail
+        addMessage('📷 Скриншот сделан из canvas')
       }
     }, 'image/png')
   } else {
-    alert('Сначала запустите скетч в редакторе!')
+    alert('Сначала запустите скетч в редакторе и нажмите "Сохранить холст"!')
   }
 }
 
@@ -145,11 +186,17 @@ async function submitSketch() {
   try {
     let thumbnailUrl: string | null = null
 
-    // Загрузка thumbnail в Storage
+    // Загрузка thumbnail в Storage с таймаутом
     if (thumbnailFile.value) {
-      const uploadResult = await uploadFile(thumbnailFile.value, 'thumbnails')
-      if (uploadResult.success && uploadResult.url) {
-        thumbnailUrl = uploadResult.url
+      try {
+        const uploadResult = await uploadFile(thumbnailFile.value, 'thumbnails')
+        if (uploadResult.success && uploadResult.url) {
+          thumbnailUrl = uploadResult.url
+        } else if (uploadResult.error) {
+          console.warn('Thumbnail не загрузился, но продолжаем без него:', uploadResult.error)
+        }
+      } catch (uploadError) {
+        console.warn('Ошибка загрузки thumbnail, продолжаем без него:', uploadError)
       }
     }
 
@@ -179,19 +226,21 @@ async function submitSketch() {
       // Очистка localStorage
       localStorage.removeItem('p5editor_shared_code')
       localStorage.removeItem('p5editor_shared_name')
+      localStorage.removeItem('p5editor_canvas_snapshot')
 
       // Перенаправление через 2 секунды
       setTimeout(() => {
         router.push('/explore')
       }, 2000)
     } else {
+      isSubmitting.value = false
       alert(`Ошибка при сохранении: ${result.error}`)
     }
   } catch (error) {
     console.error('Submit error:', error)
-    alert('Произошла ошибка при публикации скетча')
-  } finally {
     isSubmitting.value = false
+    const errorMessage = error instanceof Error ? error.message : 'Произошла ошибка при публикации скетча'
+    alert(errorMessage)
   }
 }
 

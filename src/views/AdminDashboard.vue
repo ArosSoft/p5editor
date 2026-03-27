@@ -15,6 +15,8 @@ const showRejectModal = ref(false)
 const rejectReason = ref('')
 const approveComment = ref('')
 const showApproveModal = ref(false)
+const isRejecting = ref(false)
+const isApproving = ref(false)
 const notification = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
 // Тема (синхронизация с редактором)
@@ -65,37 +67,47 @@ function openRejectModal() {
 // Одобрение скетча
 async function handleApprove() {
   if (!selectedSketch.value || !profile.value) return
-  
-  const result = await approveSketch(selectedSketch.value.id, profile.value.id, approveComment.value || undefined)
-  
-  if (result.success) {
-    showNotification('Скетч одобрен!', 'success')
-    showApproveModal.value = false
-    selectedSketch.value = null
-    await loadPendingSketches()
-  } else {
-    showNotification(result.error || 'Ошибка одобрения', 'error')
+
+  isApproving.value = true
+  try {
+    const result = await approveSketch(selectedSketch.value.id, profile.value.id, approveComment.value || undefined)
+
+    if (result.success) {
+      showNotification('Скетч одобрен!', 'success')
+      showApproveModal.value = false
+      selectedSketch.value = null
+      await loadPendingSketches()
+    } else {
+      showNotification(result.error || 'Ошибка одобрения', 'error')
+    }
+  } finally {
+    isApproving.value = false
   }
 }
 
 // Отклонение скетча
 async function handleReject() {
   if (!selectedSketch.value || !profile.value) return
-  
+
   if (!rejectReason.value.trim()) {
     showNotification('Укажите причину отклонения', 'error')
     return
   }
-  
-  const result = await rejectSketch(selectedSketch.value.id, profile.value.id, rejectReason.value)
-  
-  if (result.success) {
-    showNotification('Скетч отклонён', 'success')
-    showRejectModal.value = false
-    selectedSketch.value = null
-    await loadPendingSketches()
-  } else {
-    showNotification(result.error || 'Ошибка отклонения', 'error')
+
+  isRejecting.value = true
+  try {
+    const result = await rejectSketch(selectedSketch.value.id, profile.value.id, rejectReason.value)
+
+    if (result.success) {
+      showNotification('Скетч отклонён', 'success')
+      showRejectModal.value = false
+      selectedSketch.value = null
+      await loadPendingSketches()
+    } else {
+      showNotification(result.error || 'Ошибка отклонения', 'error')
+    }
+  } finally {
+    isRejecting.value = false
   }
 }
 
@@ -325,7 +337,9 @@ const hasSketches = computed(() => sketches.value.length > 0)
             </div>
             <div class="modal-footer">
               <button class="btn btn-secondary" @click="closeApproveModal">Отмена</button>
-              <button class="btn btn-approve" @click="handleApprove">Одобрить</button>
+              <button class="btn btn-approve" @click="handleApprove" :disabled="isApproving">
+                {{ isApproving ? '⏳ Одобрение...' : 'Одобрить' }}
+              </button>
             </div>
           </div>
         </div>
@@ -367,8 +381,8 @@ const hasSketches = computed(() => sketches.value.length > 0)
             </div>
             <div class="modal-footer">
               <button class="btn btn-secondary" @click="closeRejectModal">Отмена</button>
-              <button class="btn btn-reject" @click="handleReject" :disabled="!rejectReason.trim()">
-                Отклонить
+              <button class="btn btn-reject" @click="handleReject" :disabled="!rejectReason.trim() || isRejecting">
+                {{ isRejecting ? '⏳ Отклонение...' : 'Отклонить' }}
               </button>
             </div>
           </div>

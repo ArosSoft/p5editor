@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed, shallowRef, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import CodeEditor from '../components/CodeEditor.vue'
 import P5Canvas from '../components/P5Canvas.vue'
 import ConsoleOutput from '../components/ConsoleOutput.vue'
-import ExamplesPanel from '../components/ExamplesPanel.vue'
 import AuthModal from '../components/AuthModal.vue'
 import UserProfile from '../components/UserProfile.vue'
 import { useAuth } from '../composables/useAuth'
 import { useSketches } from '../composables/useSketches'
 import { saveAs } from 'file-saver'
 import beautify from 'js-beautify'
-import AIChat from '../components/AIChat.vue'
+
+// Ленивая загрузка тяжёлых компонентов
+const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
+const ExamplesPanel = defineAsyncComponent(() => import('../components/ExamplesPanel.vue'))
+const AIChat = defineAsyncComponent(() => import('../components/AIChat.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -520,7 +522,15 @@ function saveCanvas() {
     link.download = `${sketchName.value || 'sketch'}.png`
     link.href = dataURL
     link.click()
-    addMessage('📸 Холст сохранён')
+    
+    // Сохраняем изображение в localStorage для страницы "Поделиться"
+    try {
+      localStorage.setItem('p5editor_canvas_snapshot', dataURL)
+      addMessage('📸 Холст сохранён и скопирован в память')
+    } catch (e) {
+      // Если localStorage переполнен (DataURL может быть большим)
+      addMessage('📸 Холст сохранён. Изображение слишком большое для автосохранения')
+    }
   } catch (e) {
     console.error('Ошибка сохранения холста:', e)
     addMessage('❌ Ошибка сохранения: ' + (e as Error).message)
@@ -684,7 +694,9 @@ function navigateToExplore() {
 
 // Навигация к странице «Поделиться»
 function navigateToShare() {
-  // Код уже сохранён в localStorage через saveCodeToStorage()
+  // Явно сохраняем текущий код и название в localStorage перед переходом
+  localStorage.setItem('p5editor_current_code', code.value)
+  localStorage.setItem('p5editor_current_name', sketchName.value)
   router.push('/share')
 }
 

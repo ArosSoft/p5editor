@@ -193,6 +193,30 @@ const authorAvatar = computed(() => {
 
     <!-- Контент -->
     <div v-else-if="sketch" class="detail-content">
+      <!-- Ответ модератора (в начале страницы) -->
+      <div v-if="sketch.moderation_log" class="moderation-section moderation-section-top">
+        <h3 class="moderation-title">📋 Информация о модерации</h3>
+        
+        <div class="moderation-log">
+          <div class="moderation-status">
+            <span :class="['status-badge', sketch.moderation_log.action === 'approved' ? 'approved' : 'rejected']">
+              {{ sketch.moderation_log.action === 'approved' ? '✅ Одобрено' : '❌ Отклонено' }}
+            </span>
+            <span class="moderation-date">{{ formatDate(sketch.moderation_log.created_at) }}</span>
+          </div>
+          
+          <div v-if="sketch.moderation_log.comment" class="moderation-comment">
+            <span class="comment-label">📝 Комментарий модератора:</span>
+            <p class="comment-text">{{ sketch.moderation_log.comment }}</p>
+          </div>
+          
+          <div class="moderator-info">
+            <span class="moderator-label">👤 Модератор:</span>
+            <span class="moderator-name">{{ sketch.moderation_log.moderator_name }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Основная информация -->
       <div class="sketch-main">
         <!-- Превью -->
@@ -723,6 +747,104 @@ const authorAvatar = computed(() => {
   color: #e0e0e0;
   margin: 0;
   white-space: pre;
+}
+
+/* Ответ модератора */
+.moderation-section {
+  margin-top: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+/* Ответ модератора в начале страницы */
+.moderation-section-top {
+  margin-top: 0;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.moderation-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: #fff;
+}
+
+.moderation-log {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.moderation-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.status-badge.approved {
+  background: rgba(100, 200, 100, 0.2);
+  color: #64c864;
+}
+
+.status-badge.rejected {
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff6464;
+}
+
+.moderation-date {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.moderation-comment {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+.comment-label {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.comment-text {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  margin: 0;
+  font-style: italic;
+}
+
+.moderator-info {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.moderator-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.moderator-name {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
 }
 
 /* Не найдено */

@@ -235,4 +235,10 @@ export interface SketchWithProfile extends Sketch {
     email: string
     avatar_url: string | null
   } | null
+  moderation_log?: {
+    action: ModerationAction
+    comment: string | null
+    moderator_name: string
+    created_at: string
+  } | null
 }

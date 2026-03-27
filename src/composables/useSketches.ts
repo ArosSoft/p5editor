@@ -23,6 +23,15 @@ export function useSketches() {
             id,
             display_name,
             avatar_url
+          ),
+          sketch_moderation_logs (
+            id,
+            action,
+            comment,
+            created_at,
+            profiles:moderator_id (
+              display_name
+            )
           )
         `, { count: 'exact' })
         .eq('id', id)
@@ -30,8 +39,25 @@ export function useSketches() {
 
       if (fetchError) throw fetchError
 
-      sketch.value = data as Sketch
-      return { success: true, data }
+      // Обрабатываем данные: берём последний лог модерации для каждого скетча
+      const sketchData = data as any
+      const logs = sketchData.sketch_moderation_logs || []
+      const lastLog = logs.length > 0
+        ? logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        : null
+
+      const sketchWithLog = {
+        ...sketchData,
+        moderation_log: lastLog ? {
+          action: lastLog.action,
+          comment: lastLog.comment,
+          moderator_name: lastLog.profiles?.display_name || 'Модератор',
+          created_at: lastLog.created_at
+        } : null
+      }
+
+      sketch.value = sketchWithLog as SketchWithProfile
+      return { success: true, data: sketchWithLog }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Ошибка загрузки скетча'
       console.error('Get sketch error:', e)
@@ -139,7 +165,18 @@ export function useSketches() {
 
       let query = supabase
         .from('sketches')
-        .select('*')
+        .select(`
+          *,
+          sketch_moderation_logs (
+            id,
+            action,
+            comment,
+            created_at,
+            profiles:moderator_id (
+              display_name
+            )
+          )
+        `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
 
@@ -151,7 +188,24 @@ export function useSketches() {
 
       if (fetchError) throw fetchError
 
-      sketches.value = (data as Sketch[]) || []
+      // Обрабатываем данные: берём последний лог модерации для каждого скетча
+      sketches.value = ((data as any[]) || []).map(sketch => {
+        const logs = sketch.sketch_moderation_logs || []
+        const lastLog = logs.length > 0 
+          ? logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+          : null
+        
+        return {
+          ...sketch,
+          moderation_log: lastLog ? {
+            action: lastLog.action,
+            comment: lastLog.comment,
+            moderator_name: lastLog.profiles?.display_name || 'Модератор',
+            created_at: lastLog.created_at
+          } : null
+        }
+      }) as SketchWithProfile[]
+      
       return { success: true, data: sketches.value }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Ошибка загрузки скетчей пользователя'
@@ -178,11 +232,18 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const { data, error: createError } = await supabase
+      const insertPromise = supabase
         .from('sketches')
         .insert(sketchData)
         .select()
         .single()
+      
+      // Добавляем таймаут 15 секунд
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут создания скетча (15 секунд)')), 15000)
+      })
+
+      const { data, error: createError } = await Promise.race([insertPromise, timeoutPromise])
 
       if (createError) throw createError
 
@@ -409,32 +470,53 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      // Обновляем статус скетча
-      const { data: sketchData, error: updateError } = await supabase
+      console.log('[approveSketch] Начало одобрения скетча:', sketchId)
+
+      // Обновляем статус скетча с таймаутом
+      const updatePromise = supabase
         .from('sketches')
         .update({ status: 'approved' })
         .eq('id', sketchId)
         .select()
         .single()
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут одобрения скетча (15 секунд)')), 15000)
+      })
 
-      if (updateError) throw updateError
+      const { data: sketchData, error: updateError } = await Promise.race([updatePromise, timeoutPromise])
 
-      // Логируем действие модерации
+      if (updateError) {
+        console.error('[approveSketch] Ошибка обновления скетча:', updateError)
+        throw updateError
+      }
+
+      console.log('[approveSketch] Скетч одобрен успешно')
+
+      // Логируем действие модерации (не критично, если ошибка)
       if (moderatorId) {
-        await supabase
-          .from('sketch_moderation_logs')
-          .insert({
-            sketch_id: sketchId,
-            moderator_id: moderatorId,
-            action: 'approved',
-            comment: comment || null
-          })
+        try {
+          const { error: logError } = await supabase
+            .from('sketch_moderation_logs')
+            .insert({
+              sketch_id: sketchId,
+              moderator_id: moderatorId,
+              action: 'approved',
+              comment: comment || null
+            })
+          
+          if (logError) {
+            console.warn('[approveSketch] Не удалось сохранить лог модерации:', logError)
+          }
+        } catch (logError) {
+          console.warn('[approveSketch] Исключение при логировании:', logError)
+        }
       }
 
       return { success: true, data: sketchData }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Ошибка одобрения скетча'
-      console.error('Approve sketch error:', e)
+      console.error('[approveSketch] Approve sketch error:', e)
       return { success: false, error: error.value }
     } finally {
       loading.value = false
@@ -447,36 +529,91 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      // Обновляем статус скетча
-      const { data: sketchData, error: updateError } = await supabase
+      console.log('[rejectSketch] Начало отклонения скетча:', sketchId)
+      console.log('[rejectSketch] Moderator ID:', moderatorId)
+      console.log('[rejectSketch] Причина:', reason)
+
+      // Проверяем, можем ли вообще получить доступ к скетчу
+      const { data: sketchCheck, error: checkError } = await supabase
         .from('sketches')
-        .update({ 
-          status: 'rejected',
-          rejection_reason: reason
-        })
+        .select('id, status, user_id')
+        .eq('id', sketchId)
+        .single()
+      
+      if (checkError) {
+        console.error('[rejectSketch] Ошибка проверки скетча:', checkError)
+        // Если ошибка 400/401/403 - проблема с RLS
+        if (checkError.code === '400' || checkError.code === '401' || checkError.code === '403') {
+          throw new Error('Нет прав доступа к скетчу. Проверьте RLS политики.')
+        }
+        throw checkError
+      }
+
+      console.log('[rejectSketch] Скетч найден:', sketchCheck)
+
+      // Обновляем статус скетча
+      const updateData: any = { status: 'rejected' }
+      
+      const updatePromise = supabase
+        .from('sketches')
+        .update(updateData)
         .eq('id', sketchId)
         .select()
         .single()
+      
+      // Таймаут 15 секунд
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут отклонения скетча (15 секунд)')), 15000)
+      })
 
-      if (updateError) throw updateError
+      const { data: sketchData, error: updateError } = await Promise.race([updatePromise, timeoutPromise])
 
-      // Логируем действие модерации
+      if (updateError) {
+        console.error('[rejectSketch] Ошибка обновления скетча:', updateError)
+        // Детальная информация об ошибке
+        if ('details' in updateError) {
+          console.error('[rejectSketch] Details:', updateError.details)
+        }
+        if ('hint' in updateError) {
+          console.error('[rejectSketch] Hint:', updateError.hint)
+        }
+        if ('message' in updateError) {
+          console.error('[rejectSketch] Message:', updateError.message)
+        }
+        throw updateError
+      }
+
+      console.log('[rejectSketch] Скетч отклонён успешно')
+
+      // Логируем действие модерации только если таблица существует
       if (moderatorId) {
-        await supabase
-          .from('sketch_moderation_logs')
-          .insert({
-            sketch_id: sketchId,
-            moderator_id: moderatorId,
-            action: 'rejected',
-            comment: reason
-          })
+        try {
+          const { error: logError } = await supabase
+            .from('sketch_moderation_logs')
+            .insert({
+              sketch_id: sketchId,
+              moderator_id: moderatorId,
+              action: 'rejected',
+              comment: reason
+            })
+          
+          if (logError) {
+            console.warn('[rejectSketch] Не удалось сохранить лог модерации:', logError)
+          } else {
+            console.log('[rejectSketch] Лог модерации сохранён')
+          }
+        } catch (logError) {
+          console.warn('[rejectSketch] Исключение при логировании:', logError)
+          // Не прерываем выполнение, так как скетч уже отклонён
+        }
       }
 
       return { success: true, data: sketchData }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Ошибка отклонения скетча'
-      console.error('Reject sketch error:', e)
-      return { success: false, error: error.value }
+      const errorMessage = e instanceof Error ? e.message : 'Ошибка отклонения скетча'
+      error.value = errorMessage
+      console.error('[rejectSketch] Reject sketch error:', e)
+      return { success: false, error: errorMessage }
     } finally {
       loading.value = false
     }

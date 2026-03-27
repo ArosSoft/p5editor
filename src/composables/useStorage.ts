@@ -25,12 +25,19 @@ export function useStorage() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
       const filePath = `${folder}/${fileName}`
 
-      const { data, error: uploadError } = await supabase.storage
+      const uploadPromise = supabase.storage
         .from(BUCKET_NAME)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         })
+      
+      // Таймаут 30 секунд на загрузку
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут загрузки файла (30 секунд)')), 30000)
+      })
+
+      const { data, error: uploadError } = await Promise.race([uploadPromise, timeoutPromise])
 
       if (uploadError) throw uploadError
 

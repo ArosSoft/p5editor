@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useSketches } from '../composables/useSketches'
 import { useStorage } from '../composables/useStorage'
-import type { Sketch } from '../types/supabase'
+import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,7 +15,7 @@ const { uploadAvatar: uploadAvatarStorage, uploading: uploadingAvatar } = useSto
 // Состояние
 const isEditing = ref(false)
 const loading = ref(false)
-const userSketches = ref<Sketch[]>([])
+const userSketches = ref<SketchWithProfile[]>([])
 const activeTab = ref<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all')
 
 // Удаление скетча
@@ -424,12 +424,26 @@ const statusText = (status: string) => {
             <div class="sketch-details">
               <h3 class="sketch-title">{{ sketch.title }}</h3>
               <p class="sketch-description">{{ sketch.description }}</p>
+
               <div class="sketch-meta">
                 <span :class="['status-badge', statusBadgeClass(sketch.status)]">
                   {{ statusText(sketch.status) }}
                 </span>
                 <span class="sketch-date">{{ formatDate(sketch.created_at) }}</span>
               </div>
+
+              <!-- Ответ модератора (только для отклонённых скетчей) -->
+              <div v-if="sketch.status === 'rejected' && sketch.moderation_log && sketch.moderation_log.comment" class="moderation-response rejection-response">
+                <div class="moderation-comment">
+                  <span class="comment-label">📝 Причина отклонения:</span>
+                  <span class="comment-text">{{ sketch.moderation_log.comment }}</span>
+                </div>
+                <div class="moderator-info">
+                  <span class="moderator-name">👤 {{ sketch.moderation_log.moderator_name }}</span>
+                  <span class="moderation-date">{{ formatDate(sketch.moderation_log.created_at) }}</span>
+                </div>
+              </div>
+
               <div class="sketch-stats">
                 <span>❤️ {{ sketch.likes }}</span>
                 <span>👁️ {{ sketch.views }}</span>
@@ -1085,6 +1099,57 @@ const statusText = (status: string) => {
 .status-draft {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.6);
+}
+
+/* Ответ модератора (в личном кабинете - для отклонённых) */
+.rejection-response {
+  padding: 0.75rem;
+  background: rgba(255, 100, 100, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 100, 100, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.moderation-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.comment-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.comment-text {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.moderator-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.25rem;
+}
+
+.moderator-name {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.moderation-date {
+  font-size: 0.68rem;
 }
 
 .sketch-date {
