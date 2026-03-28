@@ -1,6 +1,6 @@
 // ============================================================
 // 🚀 ПОСАДКА НА ПЛАНЕТЫ — Автопилот
-// Версия: 1.59
+// Версия: 1.58
 // Последнее изменение: 28 марта 2026
 // ============================================================
 
@@ -1185,18 +1185,18 @@ function exportTelemetryToClipboard(resultType) {
         precision: { kp: 1.1, ki: 0.001, kd: 0.35 }
       },
       angle: {
-        approach: { kp: 4.0, ki: 0.0, kd: 6.0 },
-        descent: { kp: 3.2, ki: 0.0, kd: 7.0 },
-        final: { kp: 2.4, ki: 0.0, kd: 10.5 },
-        touchdown: { kp: 2.8, ki: 0.0, kd: 12.0 },
-        lowUrgency: { kp: 1.8, ki: 0.0, kd: 9.5 }
+        approach: { kp: 3.5, ki: 0.0, kd: 5.5 },
+        descent: { kp: 2.5, ki: 0.0, kd: 6.0 },
+        final: { kp: 1.2, ki: 0.0, kd: 9.0 },
+        precision: { kp: 1.3, ki: 0.0, kd: 8.5 }
       }
     },
     deadzones: {
-      touchdown: 0.12,
-      final: 0.09,
-      precision: 0.055,
-      default: 0.07
+      touchdown: 0.18,
+      final: 0.14,
+      precision: 0.08,
+      lowUrgency: 0.15,
+      highUrgency: 0.06
     },
     telemetry: telemetryData
   };
@@ -1987,32 +1987,32 @@ function drawLandedScreen(speed, fuelPct) {
   fill(bgC);
   rect(0, 0, width, height);
   fill(0, 0, 0, 175);
-  rect(width / 2 - 190, height / 2, 380, 200, 15);
+  rect(width / 2 - 190, height / 2 - 85, 380, 200, 15);
   textAlign(CENTER);
   textSize(26);
   fill(tC);
-  text(`${em} ${tT}`, width / 2, height / 2 + 35);
+  text(`${em} ${tT}`, width / 2, height / 2 - 45);
   textSize(13);
   fill(145, 175, 215);
-  text(`${P.emoji} ${P.name}`, width / 2, height / 2 + 65);
+  text(`${P.emoji} ${P.name}`, width / 2, height / 2 - 20);
   textSize(14);
   fill(200);
   text(`Скорость: ${speed.toFixed(2)} м/с — ${landingRating}`, width / 2,
-    height / 2 + 90);
-  text(`Топливо: ${(fuelPct * 100).toFixed(0)}%`, width / 2, height / 2 + 110);
+    height / 2 + 5);
+  text(`Топливо: ${(fuelPct * 100).toFixed(0)}%`, width / 2, height / 2 + 25);
   textSize(22);
   let st2 = landingRating === 'ИДЕАЛЬНАЯ' ? '⭐⭐⭐' : landingRating ===
     'НОРМАЛЬНАЯ' ? '⭐⭐' : '⭐';
   fill(255, 255, 0);
-  text(st2, width / 2, height / 2 + 130);
+  text(st2, width / 2, height / 2 + 52);
   if (autopilotOn) {
     textSize(11);
     fill(95, 195, 250);
-    text('Автопилот', width / 2, height / 2 + 150);
+    text('Автопилот', width / 2, height / 2 + 68);
   }
   textSize(12);
   fill(255, 255, 0);
-  text('R — новый полёт | M — выбор планеты', width / 2, height / 2 + 170);
+  text('R — новый полёт | M — выбор планеты', width / 2, height / 2 + 85);
 }
 
 function drawCrashedScreen() {
@@ -2129,113 +2129,114 @@ function drawAutopilotBtn() {
 // ========== ВИЗУАЛИЗАЦИЯ PID ==========
 function drawPIDPanel() {
   if (!autopilotOn || gameState !== 'playing') return;
-
+  
   const panelX = width - 220;
   const panelY = 100;
   const panelW = 200;
-  const panelH = 235;
+  const panelH = 220;   // чуть выше, чтобы всё влезло
   
   // Фон панели
   fill(0, 0, 0, 180);
   stroke(90, 140, 255);
   strokeWeight(1);
   rect(panelX, panelY, panelW, panelH, 8);
-
+  
   // Заголовок
   textSize(11);
   fill(90, 140, 255);
   textAlign(CENTER, TOP);
-  text('📊 PID v1.58', panelX + panelW / 2, panelY + 6);
-
+  text('📊 PID ПАРАМЕТРЫ (v1.58)', panelX + panelW / 2, panelY + 6);
+  
   stroke(90, 140, 255, 100);
   line(panelX + 8, panelY + 20, panelX + panelW - 8, panelY + 20);
-
+  
   textSize(9);
   textAlign(LEFT, TOP);
   let y = panelY + 26;
-  const lh = 14;
+  const lineHeight = 14;
 
   // Фаза
   fill(255);
   text(`Фаза: ${autopilotPhase}`, panelX + 8, y);
-  y += lh;
+  y += lineHeight;
 
   // Вертикальный PID
   fill(100, 200, 255);
-  text('─ ВЕРТИКАЛЬ (vy) ─', panelX + 8, y); 
-  y += lh;
+  text('─ ВЕРТИКАЛЬ (vy) ─', panelX + 8, y);
+  y += lineHeight;
   
   fill(255);
   const vyErr = rocket.vy - getVyTarget();
   text(`P: ${(0.95 * vyErr).toFixed(3)}`, panelX + 8, y);
   text(`I: ${(0.004 * apPID.intVy).toFixed(3)}`, panelX + 85, y);
   text(`D: ${(0.28 * (vyErr - apPID.prevVyErr)).toFixed(3)}`, panelX + 155, y);
-  y += lh;
+  y += lineHeight;
 
   // Горизонтальный PID
   fill(100, 255, 150);
-  text('─ ГОРИЗОНТАЛЬ (vx) ─', panelX + 8, y); 
-  y += lh;
+  text('─ ГОРИЗОНТАЛЬ (vx) ─', panelX + 8, y);
+  y += lineHeight;
   
   fill(255);
   const vxErr = rocket.vx - getVxTarget();
-  const precisionMode = (rocket.y + rocket.height/2 + 12 > landingPad.y - 15 && abs(rocket.x - (landingPad.x + landingPad.w/2)) < 8);
-  const vxKp = precisionMode ? 1.1 : 0.7;
+  const vxKp = (autopilotPhase === 'FINAL' || 
+                (rocket.y + rocket.height/2 + 12 > landingPad.y - 15)) ? 1.1 : 0.7;
   
   text(`P: ${(vxKp * vxErr).toFixed(3)}`, panelX + 8, y);
   text(`I: ${(0.002 * apPID.intVx).toFixed(3)}`, panelX + 85, y);
   text(`D: ${(0.25 * (vxErr - apPID.prevVxErr)).toFixed(3)}`, panelX + 155, y);
-  y += lh;
+  y += lineHeight;
 
-  // Угловой PID — реальные коэффициенты из runAutopilot
+  // Угловой PID (самое важное изменение)
   fill(255, 200, 100);
-  text('─ УГОЛ (angle) ─', panelX + 8, y); 
-  y += lh;
+  text('─ УГОЛ (angle) ─', panelX + 8, y);
+  y += lineHeight;
   
   fill(255);
   const angleErr = normalizeAngleRad(apPID.prevTargetAngle - rocket.angle);
   
-  // Те же коэффициенты что и в runAutopilot
-  let kpAng = 3.5, kdAng = 5.5;
-  if (autopilotPhase === 'TOUCHDOWN') { 
-    kpAng = 1.2; kdAng = 9.0; 
-  } else if (autopilotPhase === 'FINAL') { 
-    kpAng = 1.2; kdAng = 9.0; 
-  } else if (autopilotPhase === 'DESCENT') { 
-    kpAng = 2.5; kdAng = 6.0; 
+  let kpAngDisplay = 3.5;
+  let kdAngDisplay = 5.5;
+  
+  if (autopilotPhase === 'TOUCHDOWN') {
+    kpAngDisplay = 2.8; kdAngDisplay = 12.0;
+  } else if (autopilotPhase === 'FINAL') {
+    kpAngDisplay = 2.4; kdAngDisplay = 10.5;
+  } else if (autopilotPhase === 'DESCENT') {
+    kpAngDisplay = 3.2; kdAngDisplay = 7.0;
   }
-  // APPROACH: kp=3.5, kd=5.5
 
-  text(`P: ${(kpAng * angleErr).toFixed(3)}`, panelX + 8, y);
+  text(`P: ${(kpAngDisplay * angleErr).toFixed(3)}`, panelX + 8, y);
   text(`I: 0.000`, panelX + 85, y);
-  text(`D: ${(-kdAng * rocket.angularVel).toFixed(3)}`, panelX + 155, y);
-  y += lh;
+  text(`D: ${(-kdAngDisplay * rocket.angularVel).toFixed(3)}`, panelX + 155, y);
+  y += lineHeight;
 
-  // Управление
-  y += 4;
+  // Тяга и RCS
+  y += 6;
   fill(255, 150, 150);
-  text('─ УПРАВЛЕНИЕ ─', panelX + 8, y); 
-  y += lh;
+  text('─ УПРАВЛЕНИЕ ─', panelX + 8, y);
+  y += lineHeight;
   
   fill(255);
-  text(`Тяга: ${rocket.thrusting ? 'ВКЛ' : 'ВЫКЛ'}`, panelX + 8, y);
+  const thrustPct = rocket.thrusting ? "ВКЛ" : "ВЫКЛ";
+  text(`Тяга: ${thrustPct}`, panelX + 8, y);
   text(`RCS L: ${rocket.thrustingLeft ? '◀' : '·'}`, panelX + 78, y);
   text(`RCS R: ${rocket.thrustingRight ? '▶' : '·'}`, panelX + 138, y);
-  y += lh;
+  y += lineHeight;
 
   // Топливо
+  fill(255);
   const fuelPct = (rocket.fuel / rocket.fuelMax * 100).toFixed(0);
   text(`Топливо: ${fuelPct}%`, panelX + 8, y);
-  
+
   // Полоска топлива
   const fuelBarX = panelX + 8;
-  const fuelBarY = y + 12;
+  const fuelBarY = y + 10;
   const fuelBarW = panelW - 16;
   const fuelBarH = 6;
-  
-  fill(40); 
+  fill(40);
   rect(fuelBarX, fuelBarY, fuelBarW, fuelBarH, 2);
-  fill(rocket.fuel / rocket.fuelMax > 0.3 ? color(0, 220, 0) : color(255, 180, 0));
+  fill(rocket.fuel / rocket.fuelMax > 0.25 ? color(0, 220, 0) : color(255, 140, 0));
   rect(fuelBarX, fuelBarY, fuelBarW * (rocket.fuel / rocket.fuelMax), fuelBarH, 2);
 }
 
@@ -2289,10 +2290,10 @@ function getVxTarget() {
 
   let vxTarget = dX / tGo;
 
-  // Раннее усиление коррекции по X — чтобы не допускать больших отклонений
+  // Усиленная коррекция по горизонтали в финале и прецизионном режиме
   const precisionMode = (alt < 15 && abs(dX) < 8);
-  if (precisionMode || (autopilotPhase === 'APPROACH' && alt < 300) || autopilotPhase === 'FINAL') {
-    vxTarget *= 1.65;   // чуть сильнее, чем раньше
+  if (precisionMode || (autopilotPhase === 'FINAL' && alt < 25)) {
+    vxTarget *= 1.6;
   }
 
   // Лимит горизонтальной скорости
@@ -2420,25 +2421,27 @@ function drawLandingGraph() {
 function updatePIDHistory() {
   if (!autopilotOn || gameState !== 'playing') return;
   
+  // Запись телеметрии с указанным интервалом
   if (frameCount % TELEMETRY_SAMPLE_RATE !== 0) return;
 
   const padCX = landingPad.x + landingPad.w / 2;
   const padY  = landingPad.y;
-  const currentTime = (frameCount - landingStartTime) / 60;
+  const currentTime = (frameCount - landingStartTime) / 60; // секунды
   const r = rocket;
   
+  // Расчёт текущих параметров
   const rocketBottom = r.y + r.height / 2 + 12;
   const alt = padY - rocketBottom;
   const dX = padCX - r.x;
   const aDX = abs(dX);
-  
   const xUrgency = (alt > 5) ? aDX / alt : (aDX > 3 ? 10 : 0);
   const precisionMode = (alt < 15 && aDX < 8);
-
+  
+  // combinedUrgency для определения коэффициентов PID
   const vxRatio = abs(r.vx) / 2.0;
   const combinedUrgency = max(xUrgency, vxRatio);
 
-  // Фаза (точно как в runAutopilot)
+  // Определение фазы
   let phase;
   if (alt < 3 && aDX < 8 && r.vy > 0 && r.vy < 1.5 && abs(r.angle) < 0.2) {
     phase = 'TOUCHDOWN';
@@ -2450,44 +2453,21 @@ function updatePIDHistory() {
     phase = 'DESCENT';
   }
 
-  // === Актуальные коэффициенты PID ===
-  const vyKp = 0.95, vyKi = 0.004, vyKd = 0.28;
-
-  let vxKp = 0.7, vxKi = 0.002, vxKd = 0.25;
-  if (precisionMode) {
-    vxKp = 1.1;
-    vxKi = 0.001;
-    vxKd = 0.35;
-  }
-
-  let angKp, angKd;
-  if (phase === 'TOUCHDOWN') {
-    angKp = 2.8;  angKd = 12.0;
-  } else if (phase === 'FINAL' || precisionMode) {
-    angKp = 2.4;  angKd = 10.5;
-  } else if (combinedUrgency < 0.3) {
-    angKp = 1.8;  angKd = 9.5;
-  } else if (phase === 'DESCENT') {
-    angKp = 3.2;  angKd = 7.0;
-  } else { // APPROACH — здесь можно будет смягчить позже
-    angKp = 4.0;  angKd = 6.0;
-  }
-  const angKi = 0.0;
-
-  // История для графика
+  // PID история для графика
   pidHistory.push({
     time: currentTime,
     targetX: padCX,
     actualX: r.x,
     error: dX
   });
-  if (pidHistory.length > 400) pidHistory.shift();
-
-  // Полная телеметрия
+  if (pidHistory.length > 360) pidHistory.shift();
+  
+  // Полная телеметрия для анализа
   telemetryData.push({
     t: currentTime,
     frame: frameCount,
     
+    // Позиция и скорость
     x: r.x,
     y: r.y,
     vx: r.vx,
@@ -2495,52 +2475,60 @@ function updatePIDHistory() {
     angle: r.angle,
     angularVel: r.angularVel,
     
+    // Параметры полёта
     alt: alt,
     dX: dX,
     xUrgency: xUrgency,
     phase: phase,
     precisionMode: precisionMode,
     
+    // Состояние систем
     fuel: r.fuel,
     thrusting: r.thrusting,
     thrustingLeft: r.thrustingLeft,
     thrustingRight: r.thrustingRight,
     
+    // Коэффициенты PID (актуальные значения)
     pid: {
       vy: {
-        kp: vyKp,
-        ki: vyKi,
-        kd: vyKd,
+        kp: 0.95,
+        ki: 0.004,
+        kd: 0.28,
         int: apPID.intVy,
-        error: r.vy - getVyTarget()
+        error: r.vy // упрощённо
       },
       vx: {
-        kp: vxKp,
-        ki: vxKi,
-        kd: vxKd,
-        int: apPID.intVx,
-        error: r.vx - getVxTarget()
+        kp: precisionMode ? 1.1 : 0.7,
+        ki: precisionMode ? 0.001 : 0.002,
+        kd: precisionMode ? 0.35 : 0.25,
+        int: apPID.intVx
       },
       angle: {
-        kp: angKp,
-        ki: angKi,
-        kd: angKd,
+        kp: (phase === 'TOUCHDOWN' || phase === 'FINAL') ? 1.2 : 
+            (precisionMode || combinedUrgency < 0.3) ? 1.3 : 
+            (phase === 'DESCENT') ? 2.5 : 3.5,
+        ki: 0.0,
+        kd: (phase === 'TOUCHDOWN' || phase === 'FINAL') ? 9.0 : 
+            (precisionMode || combinedUrgency < 0.3) ? 8.5 : 
+            (phase === 'DESCENT') ? 6.0 : 5.5,
         int: apPID.intAng,
-        error: normalizeAngleRad(apPID.prevTargetAngle - r.angle),
-        deadzone: phase === 'TOUCHDOWN' ? 0.12 :
-                  phase === 'FINAL' ? 0.09 :
-                  precisionMode ? 0.055 : 0.07
+        deadzone: phase === 'TOUCHDOWN' ? 0.18 : 
+                  phase === 'FINAL' ? 0.14 : 
+                  precisionMode ? 0.08 : 
+                  xUrgency < 0.3 ? 0.15 : 0.06
       }
     },
     
+    // Целевые значения
     targets: {
-      vx: getVxTarget(),
-      vy: getVyTarget(),
+      vx: 0, // будет вычислено в runAutopilot
+      vy: 0,
       angle: apPID.prevTargetAngle
     }
   });
-
-  if (telemetryData.length > 15000) {
+  
+  // Ограничиваем размер телеметрии (последние 10 минут)
+  if (telemetryData.length > 12000) {
     telemetryData.shift();
   }
 }

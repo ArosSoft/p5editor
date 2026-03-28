@@ -1987,32 +1987,32 @@ function drawLandedScreen(speed, fuelPct) {
   fill(bgC);
   rect(0, 0, width, height);
   fill(0, 0, 0, 175);
-  rect(width / 2 - 190, height / 2, 380, 200, 15);
+  rect(width / 2 - 190, height / 2 - 85, 380, 200, 15);
   textAlign(CENTER);
   textSize(26);
   fill(tC);
-  text(`${em} ${tT}`, width / 2, height / 2 + 35);
+  text(`${em} ${tT}`, width / 2, height / 2 - 45);
   textSize(13);
   fill(145, 175, 215);
-  text(`${P.emoji} ${P.name}`, width / 2, height / 2 + 65);
+  text(`${P.emoji} ${P.name}`, width / 2, height / 2 - 20);
   textSize(14);
   fill(200);
   text(`Скорость: ${speed.toFixed(2)} м/с — ${landingRating}`, width / 2,
-    height / 2 + 90);
-  text(`Топливо: ${(fuelPct * 100).toFixed(0)}%`, width / 2, height / 2 + 110);
+    height / 2 + 5);
+  text(`Топливо: ${(fuelPct * 100).toFixed(0)}%`, width / 2, height / 2 + 25);
   textSize(22);
   let st2 = landingRating === 'ИДЕАЛЬНАЯ' ? '⭐⭐⭐' : landingRating ===
     'НОРМАЛЬНАЯ' ? '⭐⭐' : '⭐';
   fill(255, 255, 0);
-  text(st2, width / 2, height / 2 + 130);
+  text(st2, width / 2, height / 2 + 52);
   if (autopilotOn) {
     textSize(11);
     fill(95, 195, 250);
-    text('Автопилот', width / 2, height / 2 + 150);
+    text('Автопилот', width / 2, height / 2 + 68);
   }
   textSize(12);
   fill(255, 255, 0);
-  text('R — новый полёт | M — выбор планеты', width / 2, height / 2 + 170);
+  text('R — новый полёт | M — выбор планеты', width / 2, height / 2 + 85);
 }
 
 function drawCrashedScreen() {
@@ -2419,12 +2419,13 @@ function drawLandingGraph() {
 
 function updatePIDHistory() {
   if (!autopilotOn || gameState !== 'playing') return;
-  
+
+  // Записываем данные с заданной частотой
   if (frameCount % TELEMETRY_SAMPLE_RATE !== 0) return;
 
   const padCX = landingPad.x + landingPad.w / 2;
   const padY  = landingPad.y;
-  const currentTime = (frameCount - landingStartTime) / 60;
+  const currentTime = (frameCount - landingStartTime) / 60; // в секундах
   const r = rocket;
   
   const rocketBottom = r.y + r.height / 2 + 12;
@@ -2438,7 +2439,7 @@ function updatePIDHistory() {
   const vxRatio = abs(r.vx) / 2.0;
   const combinedUrgency = max(xUrgency, vxRatio);
 
-  // Фаза (точно как в runAutopilot)
+  // Определение фазы (точно как в runAutopilot)
   let phase;
   if (alt < 3 && aDX < 8 && r.vy > 0 && r.vy < 1.5 && abs(r.angle) < 0.2) {
     phase = 'TOUCHDOWN';
@@ -2450,9 +2451,14 @@ function updatePIDHistory() {
     phase = 'DESCENT';
   }
 
-  // === Актуальные коэффициенты PID ===
-  const vyKp = 0.95, vyKi = 0.004, vyKd = 0.28;
+  // === Определение актуальных коэффициентов PID (синхронизировано с runAutopilot) ===
 
+  // Вертикальный PID — не меняется
+  const vyKp = 0.95;
+  const vyKi = 0.004;
+  const vyKd = 0.28;
+
+  // Горизонтальный PID
   let vxKp = 0.7, vxKi = 0.002, vxKd = 0.25;
   if (precisionMode) {
     vxKp = 1.1;
@@ -2460,21 +2466,27 @@ function updatePIDHistory() {
     vxKd = 0.35;
   }
 
+  // Угловой PID — важнейшая часть
   let angKp, angKd;
   if (phase === 'TOUCHDOWN') {
-    angKp = 2.8;  angKd = 12.0;
+    angKp = 2.8;
+    angKd = 12.0;
   } else if (phase === 'FINAL' || precisionMode) {
-    angKp = 2.4;  angKd = 10.5;
+    angKp = 2.4;
+    angKd = 10.5;
   } else if (combinedUrgency < 0.3) {
-    angKp = 1.8;  angKd = 9.5;
+    angKp = 1.8;
+    angKd = 9.5;
   } else if (phase === 'DESCENT') {
-    angKp = 3.2;  angKd = 7.0;
-  } else { // APPROACH — здесь можно будет смягчить позже
-    angKp = 4.0;  angKd = 6.0;
+    angKp = 3.2;
+    angKd = 7.0;
+  } else { // APPROACH
+    angKp = 4.0;
+    angKd = 6.0;
   }
   const angKi = 0.0;
 
-  // История для графика
+  // Запись в историю для графика
   pidHistory.push({
     time: currentTime,
     targetX: padCX,
@@ -2488,6 +2500,7 @@ function updatePIDHistory() {
     t: currentTime,
     frame: frameCount,
     
+    // Позиция и скорость
     x: r.x,
     y: r.y,
     vx: r.vx,
@@ -2495,17 +2508,20 @@ function updatePIDHistory() {
     angle: r.angle,
     angularVel: r.angularVel,
     
+    // Параметры полёта
     alt: alt,
     dX: dX,
     xUrgency: xUrgency,
     phase: phase,
     precisionMode: precisionMode,
     
+    // Состояние систем
     fuel: r.fuel,
     thrusting: r.thrusting,
     thrustingLeft: r.thrustingLeft,
     thrustingRight: r.thrustingRight,
     
+    // Актуальные коэффициенты PID
     pid: {
       vy: {
         kp: vyKp,
@@ -2533,6 +2549,7 @@ function updatePIDHistory() {
       }
     },
     
+    // Целевые значения
     targets: {
       vx: getVxTarget(),
       vy: getVyTarget(),
@@ -2540,7 +2557,8 @@ function updatePIDHistory() {
     }
   });
 
-  if (telemetryData.length > 15000) {
+  // Ограничение размера массива телеметрии
+  if (telemetryData.length > 12000) {
     telemetryData.shift();
   }
 }
