@@ -1,6 +1,6 @@
 // ============================================================
 // 🚀 ПОСАДКА НА ПЛАНЕТЫ — Автопилот
-// Версия: 1.2
+// Версия: 1.4
 // Последнее изменение: 27 марта 2026
 // ============================================================
 
@@ -143,7 +143,7 @@ let autopilotRequested = false;
 // В p5 кадр = 1 "шаг дискретного времени", поэтому dt не вычисляется явно.
 // Все PID-части ниже работают в дискретном приближении (error[k]-error[k-1]).
 let apPID = {
-  // Вертикальная скорость (vy) — ключевая для “мягкой посадки”
+  // Вертикальная скорость (vy) — ключевая для "мягкой посадки"
   intVy: 0,
   prevVyErr: 0,
 
@@ -155,6 +155,7 @@ let apPID = {
   intAng: 0,
   prevAngErr: 0,
   prevRequiredSin: 0,
+  prevTargetAngle: 0,  // Для корректного rate limiter'а
 }
 
 function resetAutopilotPID() {
@@ -165,6 +166,7 @@ function resetAutopilotPID() {
   apPID.intAng = 0
   apPID.prevAngErr = 0
   apPID.prevRequiredSin = 0
+  apPID.prevTargetAngle = 0
 }
 
 function normalizeAngleRad(a) {
@@ -573,26 +575,28 @@ function runAutopilot() {
   // 1) Оценка состояния
   // =====================
   const padCX = landingPad.x + landingPad.w / 2;
-  const padY = landingPad.y;
-  const rocketBottom = r.y + r.height / 2 + 12; // нижняя точка ракеты для высоты
+  const padY  = landingPad.y;
+  const rocketBottom = r.y + r.height / 2 + 12;
 
-  const alt = padY - rocketBottom; // высота над площадкой (вниз = увеличение vy)
-  const dX = padCX - r.x; // ошибка по горизонтали (положительное => левее центра)
+  const alt = padY - rocketBottom;
+  const dX  = padCX - r.x;
   const aDX = abs(dX);
 
-  const thrust = P.thrustPower;
-  const gravity = P.gravity;
+  const thrust   = P.thrustPower;
+  const gravity  = P.gravity;
   const maxDecel = thrust - gravity;
 
   autopilotDebug = [];
 
   // =====================
-  // 2) Фазирование (как "верхний слой")
+  // 2) Срочность горизонтальной коррекции
+  //    xUrgency > 1 означает: боковое смещение превышает оставшуюся высоту
   // =====================
-  // Фазы влияют на допустимые углы и на "цели" по скоростям.
-  // Вместо одного P-контроля сейчас используем каскад:
-  // - внешний слой: цели vy/vx и ограничение угла
-  // - внутренний слой: PID по vy и PID по vx (через требуемый угол)
+  const xUrgency = (alt > 5) ? aDX / alt : (aDX > 3 ? 10 : 0);
+
+  // =====================
+  // 3) Фазирование
+  // =====================
   let phase;
   if (alt < 3 && aDX < 8 && r.vy > 0 && r.vy < 1.5 && abs(r.angle) < 0.2) {
     phase = 'TOUCHDOWN';
@@ -606,54 +610,38 @@ function runAutopilot() {
   autopilotPhase = phase;
 
   // =====================
-  // 3) Вспомогательные предикторы (feed-forward / опережение)
+  // 4) Цели по скоростям
   // =====================
-  // "Time-to-go" по вертикали: грубая оценка оставшегося времени до площадки,
-  // чтобы целиться не только в скорость, но и в траекторию.
-  // Если ракета летит вверх (vy<0), tGo делаем большим.
-  const vyAbs = max(r.vy, 0.15);
-  const tGoBase = constrain(alt / vyAbs, 1.5, 35);
-  
-  // Упреждение по горизонтали: учитываем текущую vx и инерцию
-  // Чем больше vx, тем раньше нужно начинать коррекцию
-  const vxInertia = abs(r.vx) * 8; // упреждение на инерцию (кадров)
-  const tGo = constrain(tGoBase + vxInertia, 2, 50); // увеличенный диапазон
 
-  // =====================
-  // 4) Цели по скоростям (верхний слой)
-  // =====================
-  // Горизонталь: хотим "свести" ошибку dX к нулю за примерно tGo.
-  // Так как dX' = -vx (dX = padCX - x), то vxTarget ~= dX / tGo.
-  let vxTarget = dX / tGo;
-
-  // Вертикаль: цель по vy подбираем по высоте и фазе.
-  // Обратите внимание: vy в этой физике растёт вниз из-за r.vy += gravity.
+  // --- Вертикаль ---
   let vyTarget;
   if (phase === 'APPROACH') {
-    // На этапе APPROACH главная цель — выйти на X посадочной площадки
-    // vy держим умеренным, чтобы было время на коррекцию горизонтали
-    vyTarget = alt > 200 ? 1.2 : alt > 100 ? 0.7 : 0.35;
+    const baseVy = alt > 200 ? 1.2 : alt > 100 ? 0.8 : 0.5;
+    // При высоком xUrgency снижение замедляется вплоть до зависания/лёгкого подъёма
+    const urgencyFactor = constrain(1.0 - xUrgency, -0.25, 1.0);
+    vyTarget = max(baseVy * urgencyFactor, -0.3);
   } else if (phase === 'DESCENT') {
-    // На этапе DESCENT держим достаточную скорость для контролируемого снижения
-    // Коэффициент 0.65 вместо 0.55 — меньше торможение, больше тяга
     const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.65;
     vyTarget = min(2.0, safeVy);
   } else if (phase === 'FINAL') {
-    // На FINAL снижаем скорость до минимальных пороговых значений
     const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.35;
     vyTarget = min(0.35, safeVy);
   } else {
-    // TOUCHDOWN: скорость в 5 раз меньше предельно допустимой
     vyTarget = P.safeLandingSpeed / 5;
   }
 
-  // Ограничим цели по горизонтали в зависимости от фазы и высоты,
-  // чтобы не требовать слишком большого бокового ускорения.
+  // --- Горизонталь ---
+  const vyForTgo = max(vyTarget, 0.15);
+  const tGo = constrain(alt / vyForTgo, 5, 150);
+
+  let vxTarget = dX / tGo;
+
+  // Динамический лимит горизонтальной скорости
   let maxHSpeed;
   if (phase === 'APPROACH') {
-    // На большой высоте ограничиваем vxTarget, чтобы избежать агрессивного наклона
-    const altFactor = constrain(alt / 250, 0.4, 1); // 0.4 на высоте >250, 1.0 на <100
-    maxHSpeed = 0.5 + 0.7 * altFactor; // 0.7..1.2 в зависимости от высоты
+    if (xUrgency > 1.0)      maxHSpeed = 2.5;
+    else if (xUrgency > 0.5) maxHSpeed = 1.8;
+    else                      maxHSpeed = 1.2;
   } else if (phase === 'DESCENT') {
     maxHSpeed = 0.7;
   } else if (phase === 'FINAL') {
@@ -664,198 +652,156 @@ function runAutopilot() {
   vxTarget = constrain(vxTarget, -maxHSpeed, maxHSpeed);
 
   // =====================
-  // 5) Вертикальный PID (vy -> требуемое net-ускорение)
+  // 5) Вертикальный PID
   // =====================
-  // Мы хотим управлять net-ускорением по vy, чтобы управляемое:
-  //   vy_dot = gravity - cos(angle) * actualThrust
-  // С PID получаем desired vy_dot (выражаем через desired “силу тяги” ниже).
-  const errorVy = r.vy - vyTarget; // + => падаем слишком быстро вниз => нужно больше тяги
-  const dVyErr = errorVy - apPID.prevVyErr;
+  const errorVy = r.vy - vyTarget;
+  const dVyErr  = errorVy - apPID.prevVyErr;
   apPID.prevVyErr = errorVy;
-  apPID.intVy = clamp(apPID.intVy + errorVy, -120, 120); // анти-windup по диапазону
 
-  // Gains подобраны "под" текущие масштабы симуляции (величины из кода).
-  // Если почувствуете, что автопилот стал слишком агрессивным/медленным — эти числа и меняются.
-  const KpVy = 0.9;
-  const KiVy = 0.003;
-  const KdVy = 0.25;
-  // feed-forward: чем выше alt, тем сильнее "просим" net-ускорение вниз уменьшаться
-  // На DESCENT уменьшаем коэффициент, чтобы не сбрасывать тягу излишне агрессивно
-  const KaltVyBase = 0.00085;
-  const KaltVy = (phase === 'DESCENT') ? KaltVyBase * 0.5 : KaltVyBase;
+  // Anti-windup: ужесточаем лимит в режиме зависания
+  const intVyMax = (vyTarget <= 0.1) ? 30 : 100;
+  apPID.intVy = clamp(apPID.intVy + errorVy, -intVyMax, intVyMax);
 
-  // Желаемая скорость изменения vy (vy_dot_des). Знак “-” делает так,
-  // что при большой ошибке vy_dot станет отрицательным (то есть net-ускорение вверх).
+  const KpVy = 0.95;
+  const KiVy = 0.004;
+  const KdVy = 0.28;
+  // Feed-forward по высоте: уменьшен при зависании и на DESCENT
+  const KaltVy = (vyTarget <= 0.1) ? 0.0001
+               : (phase === 'DESCENT') ? 0.0004
+               : 0.0008;
+
   const vyDotDes = -(KaltVy * alt + KpVy * errorVy + KiVy * apPID.intVy + KdVy * dVyErr);
 
   // =====================
-  // 6) Внутренний каскад по углу (vx -> angle)
+  // 6) Горизонтальный PID → требуемый угол
   // =====================
-  // Горизонтальная динамика здесь:
-  //   vx_dot = windAccel + sin(angle) * actualThrust
-  // где windAccel = wind * P.windEffect
-  // Мы подбираем угол так, чтобы sin(angle) * actualThrust компенсировал ошибки по vx.
-  //
-  // Но actualThrust неизвестен, пока не выбран угол.
-  // Поэтому используем двухшаговую оценку:
-  // - сначала прикинем thrustCmd, используя вертикальную часть и cos(angle) текущего угла
-  // - затем по этой оценке выведем требуемый угол
-  // - после получения targetAngle пересчитаем thrustCmd уже с cos(targetAngle)
-
-  // Техническое ограничение: не даём косинусу уйти слишком близко к 0,
-  // иначе вычисления тяги взорвутся. minCos = 0.5 соответствует углу ~60°
-  const minCos = 0.5;
+  const minCos = 0.45;
   let cosCurrent = cos(r.angle);
   if (cosCurrent < minCos) cosCurrent = minCos;
 
-  // Предварительный thrustCmd (0..1), основанный на vertical PID.
-  // Из vy_dot = gravity - cos*actualThrust => actualThrust = (gravity - vy_dot_des)/cos
   const actualThrustGuess = (gravity - vyDotDes) / cosCurrent;
   let thrustCmd = constrain(actualThrustGuess / thrust, 0, 1);
 
-  // Горизонтальный PID по vx (включая "d/dt" через разность ошибки):
-  const errorVx = r.vx - vxTarget; // + => "перелетаем" в сторону положительной vx относительно цели
-  const dVxErr = errorVx - apPID.prevVxErr;
+  const errorVx = r.vx - vxTarget;
+  const dVxErr  = errorVx - apPID.prevVxErr;
   apPID.prevVxErr = errorVx;
-  apPID.intVx = clamp(apPID.intVx + errorVx, -120, 120);
+  apPID.intVx = clamp(apPID.intVx + errorVx, -100, 100);
 
-  // Гейны PID по vx: на большой высоте уменьшаем для предотвращения колебаний
-  let KpVx, KiVx, KdVx;
-  if (phase === 'APPROACH') {
-    const altFactor = constrain(alt / 200, 0, 1); // 0 на <100, 1 на >200
-    // Kp: 0.45 на большой высоте, 0.85 на низкой
-    KpVx = 0.85 - 0.40 * altFactor;
-    // Ki: 0.001 на большой высоте, 0.002 на низкой
-    KiVx = 0.002 - 0.001 * altFactor;
-    // Kd: 0.20 на большой высоте, 0.28 на низкой
-    KdVx = 0.28 - 0.08 * altFactor;
-  } else {
-    KpVx = 0.5;
-    KiVx = 0.0015;
-    KdVx = 0.18;
-  }
+  const KpVx = 0.7;
+  const KiVx = 0.002;
+  const KdVx = 0.25;
 
-  // desired dvx_dot (ускорение по vx, которое хотим получить от суммарных сил)
   const dvxDotDes = -(KpVx * errorVx + KiVx * apPID.intVx + KdVx * dVxErr);
   const windAccel = wind * P.windEffect;
 
-  // Требуемая проекция тяги по X:
-  // dvx_dot = windAccel + sin(angle) * actualThrust
-  // => sin(angle) = (dvx_dot_des - windAccel)/actualThrust
   const actualThrustUsed = max(thrust * thrustCmd, 1e-6);
 
-  // Максимальный допустимый угол в текущей фазе (ограничивает максимальную боковую тягу).
+  // Динамический maxAngle: учитывает и смещение, и текущую скорость
+  const vxRatio = abs(r.vx) / 2.0;
+  const combinedUrgency = max(xUrgency, vxRatio);
+
   let maxAngle;
   if (phase === 'APPROACH') {
-    // На большой высоте угол меньше — это предотвращает агрессивный наклон и колебания
-    // На высоте >200: maxAngle=0.25 (~14°), на <100: maxAngle=0.50 (~29°)
-    const altFactor = constrain(alt / 200, 0, 1);
-    maxAngle = 0.50 - 0.25 * altFactor; // 0.25..0.50 в зависимости от высоты
+    if (combinedUrgency > 1.0)      maxAngle = 0.60;
+    else if (combinedUrgency > 0.5) maxAngle = 0.45;
+    else                             maxAngle = 0.35;
   } else if (phase === 'DESCENT') {
     maxAngle = 0.28;
   } else if (phase === 'FINAL') {
-    maxAngle = 0.10;  // Строгое ограничение для точной посадки
+    maxAngle = 0.10;
   } else {
-    maxAngle = 0.0;  // TOUCHDOWN: угол должен быть нулевым
+    maxAngle = 0.0;
   }
   const sinMax = sin(maxAngle);
 
   let requiredSin = (dvxDotDes - windAccel) / actualThrustUsed;
   requiredSin = constrain(requiredSin, -sinMax, sinMax);
 
-  // Так как угол ограничен, asin стабилен и соответствует требуемой синус-компоненте.
-  // Если requiredSin меняется слишком резко (из-за PID по vx),
-  // то asin превращает малую "дрожь" в заметные колебания угла.
-  // Поэтому применяем сглаживание по requiredSin и ограничиваем скорость изменения targetAngle.
-  // На большой высоте сглаживание сильнее для предотвращения колебаний
-  const sinSmoothingBase = 0.7;
-  const sinSmoothing = phase === 'APPROACH' 
-    ? sinSmoothingBase + 0.2 * constrain(alt / 200, 0, 1)  // 0.7..0.9
-    : sinSmoothingBase;
-  const requiredSinSmoothed = requiredSin * (1 - sinSmoothing) + apPID.prevRequiredSin * sinSmoothing;
+  // Увеличенное сглаживание — меньше дрожь угла, плавная отработка
+  let sinSmoothing;
+  if (combinedUrgency > 1.0)      sinSmoothing = 0.50;  // было 0.25
+  else if (combinedUrgency > 0.5) sinSmoothing = 0.65;  // было 0.40
+  else                             sinSmoothing = 0.75;  // было 0.55
+
+  const requiredSinSmoothed = requiredSin * (1 - sinSmoothing)
+                             + apPID.prevRequiredSin * sinSmoothing;
   apPID.prevRequiredSin = requiredSinSmoothed;
 
   let targetAngle = asin(requiredSinSmoothed);
-  // Ограничиваем приращение targetAngle, чтобы "опорная" цель не скакала
-  // быстрее, чем RCS физически может ее отработать.
-  const maxAngleDelta = (phase === 'APPROACH') ? 0.08 : 0.06; // рад/кадр
-  const prevTargetAngle = r.angle; // грубая привязка: цель не уходит дальше текущего угла слишком быстро
-  targetAngle = prevTargetAngle + constrain(targetAngle - prevTargetAngle, -maxAngleDelta, maxAngleDelta);
 
-  // Если текущий угол далеко от адекватного диапазона, принудительно гасим, чтобы не ловить локальные режимы.
-  if (abs(r.angle) > 0.7) targetAngle = 0;
-  
-  // На TOUCHDOWN угол должен быть строго нулевым
-  if (phase === 'TOUCHDOWN') targetAngle = 0;
+  // Rate limiter: более плавное изменение уставки
+  const maxAngleDelta = (combinedUrgency > 1.0) ? 0.05 : 0.035;  // было 0.10 / 0.07
+  targetAngle = apPID.prevTargetAngle
+    + constrain(targetAngle - apPID.prevTargetAngle, -maxAngleDelta, maxAngleDelta);
+  apPID.prevTargetAngle = targetAngle;
+
+  // Аварийная стабилизация при экстремальном наклоне
+  if (abs(r.angle) > 0.75) {
+    targetAngle = 0;
+    apPID.prevTargetAngle = 0;
+  }
+  if (phase === 'TOUCHDOWN') {
+    targetAngle = 0;
+    apPID.prevTargetAngle = 0;
+  }
 
   // =====================
-  // 7) PID по углу (angle error -> torque)
+  // 7) PID по углу → RCS
   // =====================
-  // Угол меняется дискретно через RCS: angularVel +=/-= ROTATION_SPEED*0.12.
-  // Поэтому мы масштабируем вероятность/интенсивность работы RCS коэффициентом torqueFactor.
   const angleErr = normalizeAngleRad(targetAngle - r.angle);
-  apPID.intAng = clamp(apPID.intAng + angleErr, -12, 12);
-  const dAngErr = angleErr - apPID.prevAngErr;
+  apPID.intAng = clamp(apPID.intAng + angleErr, -10, 10);
   apPID.prevAngErr = angleErr;
 
-  // Гейны углового контура: делаем его устойчивее и менее "нервным".
-  // Причина колебаний обычно в том, что targetAngle вычисляется по синусу,
-  // а RCS дискретен. Поэтому Ki делаем нулевым (или близким к нулю),
-  // а D усиливаем для демпфирования angularVel.
-  // На APPROACH усиливаем P-составляющую для быстрой отработки угла
-  const KpAng = (phase === 'APPROACH') ? 6.5 : 5.0;
+  // Уменьшенная агрессивность, увеличенное демпфирование
+  const KpAng = 3.5;   // было 6.0
   const KiAng = 0.0;
-  const KdAng = (phase === 'APPROACH') ? 4.0 : 3.4;
+  const KdAng = 5.5;   // было 3.8
 
-  // ПИД по угловой динамике. Производную по ошибке удобно приблизить через angularVel.
-  // (потому что angleErr[k]-angleErr[k-1] ~ -angularVel при dt=1)
   const turnCmd = KpAng * angleErr + KiAng * apPID.intAng - KdAng * r.angularVel;
 
-  // Шире мёртвый пояс уменьшает дрожание вокруг целевого угла.
-  const deadzone = 0.03;
-  let torqueFactor = constrain(abs(turnCmd) / 1.2, 0.0, 1.0);
+  // Увеличенная мёртвая зона — не реагировать на малые отклонения
+  const deadzone = 0.06;  // было 0.02
+  let torqueFactor = constrain(abs(turnCmd) / 1.0, 0.0, 1.0);
 
-  r.thrustingLeft = false;
+  r.thrustingLeft  = false;
   r.thrustingRight = false;
 
-  // Условная “интенсивность”: если turnCmd слишком маленький — не стреляем RCS.
-  // РСS в этой модели не тратит fuel, поэтому ротацию позволяем даже при нулевом топливе.
+  // Уменьшенная мощность RCS для плавности
+  const rcsGain = ROTATION_SPEED * 0.09;  // было 0.14
   if (abs(turnCmd) > deadzone) {
     if (turnCmd < 0) {
       r.thrustingLeft = true;
-      r.angularVel -= ROTATION_SPEED * 0.10 * (0.35 + 0.65 * torqueFactor);
+      r.angularVel -= rcsGain * (0.35 + 0.65 * torqueFactor);
     } else {
       r.thrustingRight = true;
-      r.angularVel += ROTATION_SPEED * 0.10 * (0.35 + 0.65 * torqueFactor);
+      r.angularVel += rcsGain * (0.35 + 0.65 * torqueFactor);
     }
   }
 
   // =====================
-  // 8) Опережение направления тяги (predictedAngle)
+  // 8) Пересчёт тяги с predictedAngle
   // =====================
-  // Мы уже могли чуть "подкрутить" angularVel через RCS в этом же кадре.
-  // Чтобы тяга успевала соответствовать ожидаемому углу на физическом шаге,
-  // используем predictedAngle = angle + angularVel.
   const predictedAngle = r.angle + r.angularVel;
   let cosPred = cos(predictedAngle);
   if (cosPred < minCos) cosPred = minCos;
 
-  // Пересчитываем actualThrust с учётом cos(predictedAngle), т.к. угол мог измениться.
-  const actualThrust = (gravity - vyDotDes) / cosPred;
-  thrustCmd = constrain(actualThrust / thrust, 0, 1);
-  
-  // На DESCENT и FINAL обеспечиваем минимальную тягу для стабильного снижения
-  // Это предотвращает полную остановку двигателя и потерю управления
+  const actualThrust2 = (gravity - vyDotDes) / cosPred;
+  thrustCmd = constrain(actualThrust2 / thrust, 0, 1);
+
+  // Минимальная тяга на снижении
   if ((phase === 'DESCENT' || phase === 'FINAL') && thrustCmd < 0.15) {
     thrustCmd = 0.15;
   }
 
+  // В режиме зависания: тяга не ниже уровня компенсации гравитации
+  if (vyTarget <= 0.1 && phase === 'APPROACH') {
+    const hoverThrust = gravity / max(cos(predictedAngle), minCos) / thrust;
+    thrustCmd = max(thrustCmd, constrain(hoverThrust, 0, 1));
+  }
+
   // =====================
-  // 9) Ограничения безопасности (saturation + touchdown rules)
+  // 9) Ограничения безопасности
   // =====================
-  // Если мы уже падаем "слишком быстро" относительно того, что можем затормозить,
-  // то принудительно идём на максимум тяги (это улучшает шансы пережить финал).
-  // На DESCENT увеличиваем порог с 0.7 до 0.85, чтобы не включать торможение преждевременно
   const safeSpeedFactor = (phase === 'DESCENT') ? 0.85 : 0.7;
   const safeSpeed = sqrt(2 * maxDecel * max(alt, 1)) * safeSpeedFactor;
   if (r.vy > safeSpeed && alt < 200 && r.fuel > 0) {
@@ -863,58 +809,49 @@ function runAutopilot() {
     autopilotDebug.push('⚠️ ТОРМОЖЕНИЕ');
   }
 
-  // В финале и на касании стараемся "не подпрыгивать".
   if (phase === 'TOUCHDOWN') {
-    // На касании тягу выключаем, чтобы не подпрыгивать
     if (r.vy < 0.5 && r.vy > 0) thrustCmd = 0;
-    // Если ракета почти у земли и угол не нулевой — всё равно гасим угол
-    if (alt < 2) targetAngle = 0;
+    if (alt < 2) { targetAngle = 0; apPID.prevTargetAngle = 0; }
   }
-  if (r.vy < -0.8 && alt > 50) {
-    // если ракета уже летит вверх (условно "слишком высоко подбросило") — отключаем тягу
-    // Порог -0.8 вместо -0.5 и высота 50м вместо 30м для предотвращения ложных срабатываний
+
+  // Адаптивный порог отсечки тяги при подъёме
+  if (r.vy < vyTarget - 1.5 && alt > 60) {
     thrustCmd = 0;
   }
-  if (abs(predictedAngle) > 0.4) {
-    // сильный наклон опасен в узких фазах (порог увеличен с 0.3 до 0.4)
-    thrustCmd *= 0.5;  // уменьшаем с 0.35 до 0.5 для более плавной стабилизации
+
+  if (abs(predictedAngle) > 0.5) {
+    thrustCmd *= 0.4;
     autopilotDebug.push('⚠️ СТАБИЛИЗАЦИЯ');
   }
 
   // =====================
-  // 10) Применение команд (thrust + RCS particles)
+  // 10) Применение команд
   // =====================
-  const thrustThreshold = 0.12;  // увеличен с 0.08 для предотвращения дрожания
+  const thrustThreshold = 0.10;
   r.thrusting = r.fuel > 0 && thrustCmd > thrustThreshold && gameState === 'playing';
 
   if (r.thrusting) {
     const actualThrustFinal = thrust * min(thrustCmd, 1.0);
-    // Важно: применяем тягу по predictedAngle (опережение на шаг)
     r.vx += sin(predictedAngle) * actualThrustFinal;
     r.vy += -cos(predictedAngle) * actualThrustFinal;
-
     r.fuel -= 0.5;
     spawnThrustParticles(r, actualThrustFinal);
-
-    // Внизу добавляем немного пыли, если тяга активна на низких высотах
     if (alt < 50) spawnDust(r.x, padY - 2, 1, r.vx);
   }
 
-  // RCS (для поворота) не требует тягового consumption в текущей модели,
-  // но мы уже проверили r.fuel > 0 при включении реверса.
   if (r.thrustingLeft || r.thrustingRight) {
     spawnRCS(r, r.thrustingLeft, r.thrustingRight);
   }
 
   // =====================
-  // 11) Отладка для подстройки
+  // 11) Отладка
   // =====================
   autopilotDebug.push(`Фаза: ${phase}`);
-  autopilotDebug.push(`alt: ${alt.toFixed(1)} | dX: ${dX.toFixed(1)}`);
+  autopilotDebug.push(`alt: ${alt.toFixed(1)} | dX: ${dX.toFixed(1)} | urg: ${xUrgency.toFixed(2)}`);
   autopilotDebug.push(`tGo: ${tGo.toFixed(1)} | vx: ${r.vx.toFixed(2)} -> ${vxTarget.toFixed(2)}`);
-  autopilotDebug.push(`vy: ${r.vy.toFixed(2)} -> ${vyTarget.toFixed(2)} | vyDotDes: ${vyDotDes.toFixed(2)}`);
+  autopilotDebug.push(`vy: ${r.vy.toFixed(2)} -> ${vyTarget.toFixed(2)} | vyDot: ${vyDotDes.toFixed(3)}`);
   autopilotDebug.push(`angle: ${degrees(r.angle).toFixed(1)}° -> ${degrees(targetAngle).toFixed(1)}°`);
-  autopilotDebug.push(`thrustCmd: ${(thrustCmd * 100).toFixed(0)}% | fuel: ${((r.fuel / r.fuelMax) * 100).toFixed(0)}%`);
+  autopilotDebug.push(`thrust: ${(thrustCmd * 100).toFixed(0)}% | fuel: ${((r.fuel / r.fuelMax) * 100).toFixed(0)}%`);
 }
 
 function sign(x) {
@@ -2066,24 +2003,19 @@ function simulateOne(seed) {
   let sPadX = 150 + (seed * 73) % 450,
     sPadY = height - 130;
 
-  // Локальная копия PID-параметров для виртуального автопилота.
-  // Важно: тестовый симулятор должен повторять управляющую логику runAutopilot(),
-  // иначе показатели успешности будут сильно отличаться.
   let simPID = {
-    intVy: 0,
-    prevVyErr: 0,
-    intVx: 0,
-    prevVxErr: 0,
-    intAng: 0,
-    prevAngErr: 0,
+    intVy: 0, prevVyErr: 0,
+    intVx: 0, prevVxErr: 0,
+    intAng: 0, prevAngErr: 0,
     prevRequiredSin: 0,
+    prevTargetAngle: 0,
   };
 
   for (let st = 0; st < 8000; st++) {
     let bOff = sim.h / 2 + 12;
-    let alt = sPadY - (sim.y + bOff);
-    let dX = sPadX - sim.x,
-      aDX = abs(dX);
+    let alt  = sPadY - (sim.y + bOff);
+    let dX   = sPadX - sim.x;
+    let aDX  = abs(dX);
 
     if (alt <= 0) {
       let sp = sqrt(sim.vx * sim.vx + sim.vy * sim.vy);
@@ -2093,17 +2025,15 @@ function simulateOne(seed) {
         fuelLeft: sim.fuel / P.fuelMax * 100,
         finalSpeed: sp,
         steps: st,
-        reason: ok ? 'ok' : (aDX >= 50 ? 'miss' : sp >= P.safeLandingSpeed ?
-          'fast' : 'angle')
+        reason: ok ? 'ok' : (aDX >= 50 ? 'miss' : sp >= P.safeLandingSpeed ? 'fast' : 'angle')
       };
     }
-    // Если топлива нет — основную тягу не применяем, но оставляем управление углом (RCS),
-    // чтобы симулятор был максимально похож на реальное поведение.
     if (sim.fuel <= 0) sim.fuel = 0;
 
-    // =====================
-    // Новый автопилот: каскад + PID + feed-forward (как runAutopilot)
-    // =====================
+    // --- xUrgency ---
+    const xUrgency = (alt > 5) ? aDX / alt : (aDX > 3 ? 10 : 0);
+
+    // --- Фаза ---
     let phase;
     if (alt < 3 && aDX < 8 && sim.vy > 0 && sim.vy < 1.5 && abs(sim.angle) < 0.2) {
       phase = 'TOUCHDOWN';
@@ -2115,40 +2045,32 @@ function simulateOne(seed) {
       phase = 'DESCENT';
     }
 
-    // Feed-forward по "time-to-go"
-    const vyAbs = max(sim.vy, 0.15);
-    const tGoBase = constrain(alt / vyAbs, 1.5, 35);
-    
-    // Упреждение по горизонтали: учитываем текущую vx и инерцию
-    const vxInertia = abs(sim.vx) * 8;
-    const tGo = constrain(tGoBase + vxInertia, 2, 50);
-
-    let vxTarget = dX / tGo;
-
-    // Цель по vy подбирается фазой + ограничениями "что можно затормозить"
+    // --- vyTarget ---
     let vyTarget;
     if (phase === 'APPROACH') {
-      // На этапе APPROACH главная цель — выйти на X посадочной площадки
-      vyTarget = alt > 200 ? 1.2 : alt > 100 ? 0.7 : 0.35;
+      const baseVy = alt > 200 ? 1.2 : alt > 100 ? 0.8 : 0.5;
+      const urgencyFactor = constrain(1.0 - xUrgency, -0.25, 1.0);
+      vyTarget = max(baseVy * urgencyFactor, -0.3);
     } else if (phase === 'DESCENT') {
-      // На этапе DESCENT держим достаточную скорость для контролируемого снижения
       const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.65;
       vyTarget = min(2.0, safeVy);
     } else if (phase === 'FINAL') {
-      // На FINAL снижаем скорость до минимальных пороговых значений
       const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.35;
       vyTarget = min(0.35, safeVy);
     } else {
-      // TOUCHDOWN: скорость в 5 раз меньше предельно допустимой
       vyTarget = P.safeLandingSpeed / 5;
     }
 
-    // Ограничим горизонтальную скорость, чтобы не требовать нереалистичного бокового ускорения
+    // --- vxTarget ---
+    const vyForTgo = max(vyTarget, 0.15);
+    const tGo = constrain(alt / vyForTgo, 5, 150);
+    let vxTarget = dX / tGo;
+
     let maxHSpeed;
     if (phase === 'APPROACH') {
-      // На большой высоте ограничиваем vxTarget, чтобы избежать агрессивного наклона
-      const altFactor = constrain(alt / 250, 0.4, 1);
-      maxHSpeed = 0.5 + 0.7 * altFactor;
+      if (xUrgency > 1.0)      maxHSpeed = 2.5;
+      else if (xUrgency > 0.5) maxHSpeed = 1.8;
+      else                      maxHSpeed = 1.2;
     } else if (phase === 'DESCENT') {
       maxHSpeed = 0.7;
     } else if (phase === 'FINAL') {
@@ -2158,70 +2080,45 @@ function simulateOne(seed) {
     }
     vxTarget = constrain(vxTarget, -maxHSpeed, maxHSpeed);
 
-    // =====================
-    // 1) Вертикальный PID
-    // =====================
+    // --- Вертикальный PID ---
     const errorVy = sim.vy - vyTarget;
-    const dVyErr = errorVy - simPID.prevVyErr;
+    const dVyErr  = errorVy - simPID.prevVyErr;
     simPID.prevVyErr = errorVy;
-    simPID.intVy = clamp(simPID.intVy + errorVy, -120, 120);
+    const intVyMax = (vyTarget <= 0.1) ? 30 : 100;
+    simPID.intVy = clamp(simPID.intVy + errorVy, -intVyMax, intVyMax);
 
-    const KpVy = 0.9;
-    const KiVy = 0.003;
-    const KdVy = 0.25;
-    // feed-forward: на DESCENT уменьшаем коэффициент, чтобы не сбрасывать тягу
-    const KaltVyBase = 0.00085;
-    const KaltVy = (phase === 'DESCENT') ? KaltVyBase * 0.5 : KaltVyBase;
+    const KpVy = 0.95, KiVy = 0.004, KdVy = 0.28;
+    const KaltVy = (vyTarget <= 0.1) ? 0.0001
+                 : (phase === 'DESCENT') ? 0.0004 : 0.0008;
 
-    // vy_dot_des: какое значение net-ускорения по vy хотим получить
     const vyDotDes = -(KaltVy * alt + KpVy * errorVy + KiVy * simPID.intVy + KdVy * dVyErr);
 
-    const minCos = 0.5;  // увеличено с 0.3 для стабильности вычислений тяги
+    // --- Горизонтальный PID → угол ---
+    const minCos = 0.45;
     let cosCurrent = cos(sim.angle);
     if (cosCurrent < minCos) cosCurrent = minCos;
 
-    // Предварительная оценка тяги по вертикали (с cos текущего угла)
     const actualThrustGuess = (gravity - vyDotDes) / cosCurrent;
     let thrustCmd = constrain(actualThrustGuess / thrust, 0, 1);
-    
-    // На DESCENT и FINAL обеспечиваем минимальную тягу для стабильного снижения
-    if ((phase === 'DESCENT' || phase === 'FINAL') && thrustCmd < 0.15) {
-      thrustCmd = 0.15;
-    }
 
-    // =====================
-    // 2) Горизонтальный PID (через требуемый угол)
-    // =====================
     const errorVx = sim.vx - vxTarget;
-    const dVxErr = errorVx - simPID.prevVxErr;
+    const dVxErr  = errorVx - simPID.prevVxErr;
     simPID.prevVxErr = errorVx;
-    simPID.intVx = clamp(simPID.intVx + errorVx, -120, 120);
+    simPID.intVx = clamp(simPID.intVx + errorVx, -100, 100);
 
-    // Гейны PID по vx: на большой высоте уменьшаем для предотвращения колебаний
-    let KpVx, KiVx, KdVx;
-    if (phase === 'APPROACH') {
-      const altFactor = constrain(alt / 200, 0, 1);
-      KpVx = 0.85 - 0.40 * altFactor;
-      KiVx = 0.002 - 0.001 * altFactor;
-      KdVx = 0.28 - 0.08 * altFactor;
-    } else {
-      KpVx = 0.5;
-      KiVx = 0.0015;
-      KdVx = 0.18;
-    }
-
-    // dvx_dot_des: какое net-ускорение по vx хотим получить от суммы (wind + боковая компонента тяги)
+    const KpVx = 0.7, KiVx = 0.002, KdVx = 0.25;
     const dvxDotDes = -(KpVx * errorVx + KiVx * simPID.intVx + KdVx * dVxErr);
     const windAccel = sW * P.windEffect;
-
-    // требуемая боковая компонента тяги => требуемый sin(angle)
     const actualThrustUsed = max(thrust * thrustCmd, 1e-6);
+
+    const vxRatio = abs(sim.vx) / 2.0;
+    const combinedUrgency = max(xUrgency, vxRatio);
 
     let maxAngle;
     if (phase === 'APPROACH') {
-      // На большой высоте угол меньше — это предотвращает агрессивный наклон и колебания
-      const altFactor = constrain(alt / 200, 0, 1);
-      maxAngle = 0.50 - 0.25 * altFactor;
+      if (combinedUrgency > 1.0)      maxAngle = 0.60;
+      else if (combinedUrgency > 0.5) maxAngle = 0.45;
+      else                             maxAngle = 0.35;
     } else if (phase === 'DESCENT') {
       maxAngle = 0.28;
     } else if (phase === 'FINAL') {
@@ -2229,82 +2126,88 @@ function simulateOne(seed) {
     } else {
       maxAngle = 0.0;
     }
-
     const sinMax = sin(maxAngle);
+
     let requiredSin = (dvxDotDes - windAccel) / actualThrustUsed;
     requiredSin = constrain(requiredSin, -sinMax, sinMax);
-    // Как и в runAutopilot(): сглаживаем requiredSin, чтобы asin не превращал мелкую дрожь
-    // в резкие переключения targetAngle (частая причина угловых колебаний).
-    const sinSmoothingBase = 0.7;
-    const sinSmoothing = phase === 'APPROACH'
-      ? sinSmoothingBase + 0.2 * constrain(alt / 200, 0, 1)
-      : sinSmoothingBase;
-    const requiredSinSmoothed = requiredSin * (1 - sinSmoothing) + simPID.prevRequiredSin * sinSmoothing;
+
+    // Увеличенное сглаживание — меньше дрожь угла
+    let sinSmoothing;
+    if (combinedUrgency > 1.0)      sinSmoothing = 0.50;
+    else if (combinedUrgency > 0.5) sinSmoothing = 0.65;
+    else                             sinSmoothing = 0.75;
+
+    const requiredSinSmoothed = requiredSin * (1 - sinSmoothing)
+                               + simPID.prevRequiredSin * sinSmoothing;
     simPID.prevRequiredSin = requiredSinSmoothed;
 
     let targetAngle = asin(requiredSinSmoothed);
-    if (abs(sim.angle) > 0.7) targetAngle = 0;
-    
-    // На TOUCHDOWN угол должен быть строго нулевым
-    if (phase === 'TOUCHDOWN') targetAngle = 0;
 
-    // Ограничиваем скорость изменения targetAngle.
-    const maxAngleDelta = (phase === 'APPROACH') ? 0.08 : 0.06;
-    const prevTargetAngle = sim.angle;
-    targetAngle = prevTargetAngle + constrain(targetAngle - prevTargetAngle, -maxAngleDelta, maxAngleDelta);
+    // Rate limiter: более плавное изменение уставки
+    const maxAngleDelta = (combinedUrgency > 1.0) ? 0.05 : 0.035;
+    targetAngle = simPID.prevTargetAngle
+      + constrain(targetAngle - simPID.prevTargetAngle, -maxAngleDelta, maxAngleDelta);
+    simPID.prevTargetAngle = targetAngle;
 
-    // =====================
-    // 3) PID по углу => обновляем angularVel через RCS
-    // =====================
-    const angleErr = normalizeAngleRad(targetAngle - sim.angle);
-    simPID.intAng = clamp(simPID.intAng + angleErr, -12, 12);
-    simPID.prevAngErr = angleErr;
-
-    // То же, что и в runAutopilot(): делаем контур угла более устойчивым.
-    // На APPROACH усиливаем для быстрой отработки угла
-    const KpAng = (phase === 'APPROACH') ? 6.5 : 5.0;
-    const KiAng = 0.0;
-    const KdAng = (phase === 'APPROACH') ? 4.0 : 3.4;
-
-    const turnCmd = KpAng * angleErr + KiAng * simPID.intAng - KdAng * sim.angularVel;
-
-    const deadzone = 0.03;
-    const torqueFactor = constrain(abs(turnCmd) / 1.2, 0.0, 1.0);
-
-    if (abs(turnCmd) > deadzone) {
-      if (turnCmd < 0) {
-        sim.angularVel -= ROTATION_SPEED * 0.10 * (0.35 + 0.65 * torqueFactor);
-      } else {
-        sim.angularVel += ROTATION_SPEED * 0.10 * (0.35 + 0.65 * torqueFactor);
-      }
+    if (abs(sim.angle) > 0.75) {
+      targetAngle = 0;
+      simPID.prevTargetAngle = 0;
+    }
+    if (phase === 'TOUCHDOWN') {
+      targetAngle = 0;
+      simPID.prevTargetAngle = 0;
     }
 
-    // =====================
-    // 4) Oпeрежение тяги: применяем thrust по predictedAngle
-    // =====================
+    // --- PID по углу → RCS ---
+    const angleErr = normalizeAngleRad(targetAngle - sim.angle);
+    simPID.intAng = clamp(simPID.intAng + angleErr, -10, 10);
+    simPID.prevAngErr = angleErr;
+
+    // Уменьшенная агрессивность, увеличенное демпфирование
+    const KpAng = 3.5, KiAng = 0.0, KdAng = 5.5;
+    const turnCmd = KpAng * angleErr + KiAng * simPID.intAng - KdAng * sim.angularVel;
+
+    // Увеличенная мёртвая зона
+    const deadzone = 0.06;
+    const torqueFactor = constrain(abs(turnCmd) / 1.0, 0.0, 1.0);
+    const rcsGain = ROTATION_SPEED * 0.09;
+
+    if (abs(turnCmd) > deadzone) {
+      if (turnCmd < 0) sim.angularVel -= rcsGain * (0.35 + 0.65 * torqueFactor);
+      else             sim.angularVel += rcsGain * (0.35 + 0.65 * torqueFactor);
+    }
+
+    // --- Тяга с predictedAngle ---
     const predictedAngle = sim.angle + sim.angularVel;
     let cosPred = cos(predictedAngle);
     if (cosPred < minCos) cosPred = minCos;
 
-    const actualThrust = (gravity - vyDotDes) / cosPred;
-    thrustCmd = constrain(actualThrust / thrust, 0, 1);
+    const actualThrust2 = (gravity - vyDotDes) / cosPred;
+    thrustCmd = constrain(actualThrust2 / thrust, 0, 1);
 
-    // Safety: тормозим, если слишком быстро для текущей высоты
-    // На DESCENT увеличиваем порог с 0.7 до 0.85, чтобы не включать торможение преждевременно
+    if ((phase === 'DESCENT' || phase === 'FINAL') && thrustCmd < 0.15) {
+      thrustCmd = 0.15;
+    }
+    if (vyTarget <= 0.1 && phase === 'APPROACH') {
+      const hoverThrust = gravity / max(cos(predictedAngle), minCos) / thrust;
+      thrustCmd = max(thrustCmd, constrain(hoverThrust, 0, 1));
+    }
+
     const safeSpeedFactor = (phase === 'DESCENT') ? 0.85 : 0.7;
     const safeSpeed = sqrt(2 * maxDecel * max(alt, 1)) * safeSpeedFactor;
     if (sim.vy > safeSpeed && alt < 200 && sim.fuel > 0) thrustCmd = 1.0;
 
-    // Touchdown rules
     if (phase === 'TOUCHDOWN') {
       if (sim.vy < 0.5 && sim.vy > 0) thrustCmd = 0;
-      if (alt < 2) targetAngle = 0;
+      if (alt < 2) { targetAngle = 0; simPID.prevTargetAngle = 0; }
     }
-    if (sim.vy < -0.8 && alt > 50) thrustCmd = 0;
-    if (abs(predictedAngle) > 0.4) thrustCmd *= 0.5;
+    if (sim.vy < vyTarget - 1.5 && alt > 60) thrustCmd = 0;
+    if (abs(predictedAngle) > 0.5) {
+      thrustCmd *= 0.4;
+    }
 
-    // Основная тяга зависит от топлива
-    const thrustThreshold = 0.12;  // увеличен с 0.08 для предотвращения дрожания
+    // --- Применение тяги ---
+    const thrustThreshold = 0.10;
     if (thrustCmd > thrustThreshold && sim.fuel > 0) {
       const actualThrustFinal = thrust * min(thrustCmd, 1.0);
       sim.vx += sin(predictedAngle) * actualThrustFinal;
@@ -2312,20 +2215,15 @@ function simulateOne(seed) {
       sim.fuel -= 0.5;
     }
 
+    // --- Физика ---
     sim.vy += gravity;
     sim.vx += sW * P.windEffect;
-    sim.x += sim.vx;
-    sim.y += sim.vy;
+    sim.x  += sim.vx;
+    sim.y  += sim.vy;
     sim.angle += sim.angularVel;
     sim.angularVel *= 0.96;
-    if (sim.x < 25) {
-      sim.x = 25;
-      sim.vx *= -0.3;
-    }
-    if (sim.x > width - 25) {
-      sim.x = width - 25;
-      sim.vx *= -0.3;
-    }
+    if (sim.x < 25)         { sim.x = 25;         sim.vx *= -0.3; }
+    if (sim.x > width - 25) { sim.x = width - 25; sim.vx *= -0.3; }
   }
   return {
     success: false,
@@ -2465,8 +2363,9 @@ function toggleAutopilot() {
     rocket.thrustingRight = false;
   }
   if (autopilotOn) {
-    // Сбрасываем PID накопления, иначе интеграл “тащит” старую ошибку после включения.
+    // Сбрасываем PID накопления, иначе интеграл "тащит" старую ошибку после включения.
     resetAutopilotPID();
+    apPID.prevTargetAngle = rocket.angle;  // Инициализируем от текущего угла
     autopilotPhase = 'IDLE';
     autopilotDebug = [];
   }
