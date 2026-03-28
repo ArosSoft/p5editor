@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSketches } from '../composables/useSketches'
 import { useAuth } from '../composables/useAuth'
@@ -39,6 +39,12 @@ async function loadCategories() {
 
 // Загрузка скетчей
 async function loadSketches() {
+  // Защита от множественных одновременных вызовов
+  if (sketchesLoading.value) {
+    console.log('[ExplorePage] loadSketches - уже загружается, пропускаем')
+    return
+  }
+
   console.log('[ExplorePage] loadSketches вызвана')
   error.value = null
 
@@ -51,8 +57,7 @@ async function loadSketches() {
     limit: itemsPerPage.value,
     category: selectedCategory.value,
     difficulty: difficultyValue,
-    search: searchQuery.value,
-    tags: selectedTags.value
+    search: searchQuery.value
   })
 
   try {
@@ -62,7 +67,6 @@ async function loadSketches() {
       category: selectedCategory.value !== 'Все' ? selectedCategory.value : undefined,
       difficulty: difficultyValue,
       search: searchQuery.value || undefined,
-      tags: selectedTags.value.length > 0 ? selectedTags.value : undefined,
       sortBy: sortBy.value,
       sortOrder: sortBy.value === 'title' ? 'asc' : 'desc'
     })
@@ -85,6 +89,7 @@ async function loadSketches() {
   } catch (err) {
     error.value = 'Произошла непредвиденная ошибка при загрузке'
     console.error('[ExplorePage] Исключение:', err)
+    sketchesLoading.value = false
   }
 }
 
@@ -94,13 +99,10 @@ function retryLoad() {
 }
 
 // Отслеживание изменений фильтров
-watch(
-  [() => searchQuery.value, () => selectedCategory.value, () => selectedDifficulty.value, () => sortBy.value, () => selectedTags.value],
-  () => {
-    currentPage.value = 1
-    loadSketches()
-  }
-)
+watch([searchQuery, selectedCategory, selectedDifficulty, sortBy], () => {
+  currentPage.value = 1
+  loadSketches()
+})
 
 // Загрузка при монтировании и активации компонента
 onMounted(() => {
@@ -118,11 +120,6 @@ onActivated(() => {
 // При уходе со страницы
 onDeactivated(() => {
   console.log('[ExplorePage] onDeactivated - сброс')
-})
-
-// При уничтожении компонента
-onBeforeUnmount(() => {
-  console.log('[ExplorePage] onBeforeUnmount - сброс loading')
 })
 
 // Переключение тега
@@ -225,59 +222,84 @@ const pages = computed(() => {
   <div class="explore-page">
     <!-- Заголовок -->
     <header class="explore-header">
-      <div class="header-left">
+      <div class="header-content">
         <h1 class="page-title">
           <span class="title-icon">🌍</span>
           Исследуй
         </h1>
+        <p class="page-subtitle">
+          Галерея скетчей сообщества p5.js
+        </p>
       </div>
-
-      <div class="header-center">
-        <div class="search-wrapper">
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="search-input"
-            placeholder="Название, описание, автор..."
-          />
-        </div>
-
-        <div class="tags-wrapper">
-          <button
-            v-for="tag in allTags.slice(0, 5)"
-            :key="tag"
-            @click="toggleTag(tag)"
-            class="tag-btn"
-            :class="{ 'active': selectedTags.includes(tag) }"
-          >
-            {{ tag }}
-          </button>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <div class="filter-selects">
-          <select v-model="selectedCategory" class="filter-select-compact">
-            <option v-for="cat in categories" :key="cat" :value="cat">
-              {{ cat }}
-            </option>
-          </select>
-          <select v-model="selectedDifficulty" class="filter-select-compact">
-            <option v-for="diff in difficulties" :key="diff" :value="diff">
-              {{ diff }}
-            </option>
-          </select>
-          <select v-model="sortBy" class="filter-select-compact">
-            <option value="popular">Популярные</option>
-            <option value="new">Новые</option>
-            <option value="title">По названию</option>
-          </select>
-        </div>
+      <div class="header-actions">
         <button @click="$router.push('/')" class="back-btn">
-          ← Назад
+          ← Назад к редактору
         </button>
       </div>
     </header>
+
+    <!-- Панель фильтров -->
+    <div class="filters-panel">
+      <!-- Поиск -->
+      <div class="filter-group search-group">
+        <label class="filter-label">🔍 Поиск</label>
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="Название, описание, автор..."
+        />
+      </div>
+
+      <!-- Категория -->
+      <div class="filter-group">
+        <label class="filter-label">📁 Категория</label>
+        <select v-model="selectedCategory" class="filter-select">
+          <option v-for="cat in categories" :key="cat" :value="cat">
+            {{ cat }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Сложность -->
+      <div class="filter-group">
+        <label class="filter-label">📊 Сложность</label>
+        <select v-model="selectedDifficulty" class="filter-select">
+          <option v-for="diff in difficulties" :key="diff" :value="diff">
+            {{ diff }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Сортировка -->
+      <div class="filter-group">
+        <label class="filter-label">🔽 Сортировка</label>
+        <select v-model="sortBy" class="filter-select">
+          <option value="popular">Популярные</option>
+          <option value="new">Новые</option>
+          <option value="title">По названию</option>
+        </select>
+      </div>
+
+      <!-- Кнопка сброса -->
+      <button @click="resetFilters" class="reset-btn" title="Сбросить фильтры">
+        🔄 Сброс
+      </button>
+    </div>
+
+    <!-- Теги -->
+    <div v-if="allTags.length > 0" class="tags-panel">
+      <span class="tags-label">🏷️ Теги:</span>
+      <button
+        v-for="tag in allTags"
+        :key="tag"
+        @click="toggleTag(tag)"
+        class="tag-btn"
+        :class="{ 'active': selectedTags.includes(tag) }"
+      >
+        {{ tag }}
+      </button>
+    </div>
 
     <!-- Счётчик результатов -->
     <div class="results-info">
@@ -456,23 +478,24 @@ const pages = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 2rem;
-  padding: 1rem 3rem;
+  padding: 2rem 3rem;
   background: rgba(0, 0, 0, 0.3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.header-left {
-  flex-shrink: 0;
+.header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .page-title {
-  font-size: 1.5rem;
+  font-size: 2.5rem;
   font-weight: 700;
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -480,29 +503,71 @@ const pages = computed(() => {
 }
 
 .title-icon {
-  font-size: 1.5rem;
+  font-size: 2.5rem;
 }
 
-.header-center {
-  flex: 1;
+.page-subtitle {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}
+
+.header-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
+  gap: 1rem;
 }
 
-.search-wrapper {
-  width: 100%;
-}
-
-.search-input {
-  width: 100%;
-  padding: 0.6rem 1rem;
+.back-btn {
+  padding: 0.75rem 1.5rem;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   color: #fff;
-  font-size: 0.95rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(-2px);
+}
+
+/* Панель фильтров */
+.filters-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1.5rem 3rem;
+  background: rgba(0, 0, 0, 0.2);
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 150px;
+}
+
+.search-group {
+  flex: 1;
+  min-width: 250px;
+}
+
+.filter-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.search-input {
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
   transition: all 0.2s;
 }
 
@@ -516,22 +581,69 @@ const pages = computed(() => {
   color: rgba(255, 255, 255, 0.5);
 }
 
-.tags-wrapper {
+.filter-select {
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.filter-select option {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.reset-btn {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 100, 100, 0.2);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  border-radius: 8px;
+  color: #ff6464;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.reset-btn:hover {
+  background: rgba(255, 100, 100, 0.3);
+}
+
+/* Панель тегов */
+.tags-panel {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 3rem;
+  background: rgba(0, 0, 0, 0.1);
+  align-items: center;
+}
+
+.tags-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+  margin-right: 0.5rem;
 }
 
 .tag-btn {
-  padding: 0.3rem 0.7rem;
+  padding: 0.4rem 0.8rem;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.2s;
-  white-space: nowrap;
 }
 
 .tag-btn:hover {
@@ -543,56 +655,6 @@ const pages = computed(() => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-color: transparent;
   color: #fff;
-}
-
-.header-right {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.filter-selects {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.filter-select-compact {
-  padding: 0.6rem 0.8rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.filter-select-compact:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.filter-select-compact option {
-  background: #1a1a2e;
-  color: #fff;
-}
-
-.back-btn {
-  padding: 0.6rem 1.2rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateX(-2px);
 }
 
 /* Информация о результатах */
@@ -988,50 +1050,30 @@ const pages = computed(() => {
 }
 
 /* Адаптивность */
-@media (max-width: 1024px) {
-  .explore-header {
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding: 1rem 1.5rem;
-  }
-
-  .header-center {
-    order: 3;
-    width: 100%;
-  }
-
-  .header-right {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .filter-selects {
-    flex-wrap: wrap;
-  }
-}
-
 @media (max-width: 768px) {
   .explore-header {
     flex-direction: column;
-    align-items: stretch;
-    padding: 1rem;
+    gap: 1rem;
+    padding: 1.5rem;
   }
 
   .page-title {
-    font-size: 1.25rem;
+    font-size: 1.75rem;
   }
 
-  .title-icon {
-    font-size: 1.25rem;
+  .filters-panel,
+  .tags-panel,
+  .sketches-grid {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 
-  .header-right {
-    justify-content: center;
+  .sketches-grid {
+    grid-template-columns: 1fr;
   }
 
-  .filter-selects {
-    flex-wrap: wrap;
-    justify-content: center;
+  .pagination {
+    padding: 1.5rem;
   }
 }
 </style>

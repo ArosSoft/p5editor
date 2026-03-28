@@ -33,15 +33,34 @@ const avatarInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const notification = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
-// Проверка авторизации
+// Проверка авторизации и загрузка скетчей
 onMounted(async () => {
   // Проверяем localStorage, так как initAuth может ещё работать
   const userRole = localStorage.getItem('user_role')
   const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
-  
+
   if (!isAuth) {
     router.push('/')
     return
+  }
+
+  // Ждём инициализации пользователя из useAuth
+  if (!user.value) {
+    // Если пользователь ещё не загружен, пробуем подождать немного
+    await new Promise<void>((resolve) => {
+      const checkUser = setInterval(() => {
+        if (user.value) {
+          clearInterval(checkUser)
+          resolve()
+        }
+      }, 100)
+      
+      // Таймаут 3 секунды
+      setTimeout(() => {
+        clearInterval(checkUser)
+        resolve()
+      }, 3000)
+    })
   }
 
   await loadUserSketches()
@@ -151,6 +170,26 @@ function openSketchInEditor(id: string) {
   console.log('[ProfilePage] sketch_id сохранён в localStorage:', localStorage.getItem('p5editor_current_sketch_id'))
   // Переходим в редактор с query параметром
   router.push({ path: '/', query: { sketch: id, t: Date.now() } })
+}
+
+// Копировать ссылку на скетч в буфер обмена
+async function copySketchLink(id: string) {
+  const baseUrl = window.location.origin + window.location.pathname
+  const sketchUrl = `${baseUrl}#/sketch/${id}`
+  
+  try {
+    await navigator.clipboard.writeText(sketchUrl)
+    showNotification('Ссылка скопирована в буфер обмена', 'success')
+  } catch (err) {
+    // Fallback для старых браузеров
+    const textarea = document.createElement('textarea')
+    textarea.value = sketchUrl
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    showNotification('Ссылка скопирована в буфер обмена', 'success')
+  }
 }
 
 // Открыть модальное окно удаления
@@ -404,70 +443,65 @@ const statusText = (status: string) => {
         </div>
 
         <!-- Список скетчей -->
-        <div v-else-if="userSketches.length > 0" class="sketches-list">
+        <div v-else-if="userSketches.length > 0" class="sketches-table">
+          <!-- Заголовок таблицы -->
+          <div class="table-header">
+            <div class="col-thumbnail">Изображение</div>
+            <div class="col-title">Название</div>
+            <div class="col-status">Статус</div>
+            <div class="col-date">Дата</div>
+            <div class="col-stats">👁️❤️</div>
+            <div class="col-actions">Действия</div>
+          </div>
+          
+          <!-- Строки скетчей -->
           <div
             v-for="sketch in userSketches"
             :key="sketch.id"
-            class="sketch-item"
+            class="table-row"
           >
-            <div class="sketch-preview" @click="openSketch(sketch.id)">
-              <img
-                v-if="sketch.thumbnail_url"
-                :src="sketch.thumbnail_url"
-                :alt="sketch.title"
-                class="sketch-thumbnail"
-              />
-              <div v-else class="thumbnail-placeholder">
-                <span>🎨</span>
+            <div class="col-thumbnail">
+              <div class="thumbnail-square" @click="openSketch(sketch.id)">
+                <img
+                  v-if="sketch.thumbnail_url"
+                  :src="sketch.thumbnail_url"
+                  :alt="sketch.title"
+                  class="thumbnail-image"
+                />
+                <div v-else class="thumbnail-placeholder-square">
+                  <span>🎨</span>
+                </div>
               </div>
             </div>
-            <div class="sketch-details">
-              <h3 class="sketch-title">{{ sketch.title }}</h3>
-              <p class="sketch-description">{{ sketch.description }}</p>
-
-              <div class="sketch-meta">
-                <span :class="['status-badge', statusBadgeClass(sketch.status)]">
-                  {{ statusText(sketch.status) }}
-                </span>
-                <span class="sketch-date">{{ formatDate(sketch.created_at) }}</span>
+            <div class="col-title">
+              <div class="title-content" @click="openSketch(sketch.id)">
+                <h3 class="row-title">{{ sketch.title }}</h3>
+                <p class="row-description">{{ sketch.description }}</p>
               </div>
-
-              <!-- Ответ модератора (только для отклонённых скетчей) -->
-              <div v-if="sketch.status === 'rejected' && sketch.moderation_log && sketch.moderation_log.comment" class="moderation-response rejection-response">
-                <div class="moderation-comment">
-                  <span class="comment-label">📝 Причина отклонения:</span>
-                  <span class="comment-text">{{ sketch.moderation_log.comment }}</span>
-                </div>
-                <div class="moderator-info">
-                  <span class="moderator-name">👤 {{ sketch.moderation_log.moderator_name }}</span>
-                  <span class="moderation-date">{{ formatDate(sketch.moderation_log.created_at) }}</span>
-                </div>
+            </div>
+            <div class="col-status">
+              <span :class="['status-badge', statusBadgeClass(sketch.status)]">
+                {{ statusText(sketch.status) }}
+              </span>
+              <!-- Ответ модератора для отклонённых -->
+              <div v-if="sketch.status === 'rejected' && sketch.moderation_log && sketch.moderation_log.comment" class="moderation-tooltip">
+                <span class="tooltip-icon">⚠️</span>
+                <span class="tooltip-text">{{ sketch.moderation_log.comment }}</span>
               </div>
-
-              <div class="sketch-stats">
-                <span>❤️ {{ sketch.likes }}</span>
-                <span>👁️ {{ sketch.views }}</span>
-              </div>
-              <div class="sketch-actions">
-                <button @click="openSketch(sketch.id)" class="action-btn view-btn" title="Просмотр">
-                  👁️
-                </button>
-                <button
-                  v-if="sketch.status === 'approved' || sketch.status === 'draft'"
-                  @click="openSketchInEditor(sketch.id)"
-                  class="action-btn edit-btn"
-                  title="Открыть в редакторе"
-                >
-                  ✏️ Редактировать
-                </button>
-                <button
-                  @click="confirmDelete(sketch.id)"
-                  class="action-btn delete-btn"
-                  title="Удалить скетч"
-                >
-                  🗑️
-                </button>
-              </div>
+            </div>
+            <div class="col-date">{{ formatDate(sketch.created_at) }}</div>
+            <div class="col-stats">
+              <span class="stat-icon">❤️ {{ sketch.likes }}</span>
+              <span class="stat-icon">👁️ {{ sketch.views }}</span>
+            </div>
+            <div class="col-actions">
+              <button
+                @click="copySketchLink(sketch.id)"
+                class="icon-btn link-btn"
+                title="Скопировать ссылку на скетч"
+              >
+                🔗
+              </button>
             </div>
           </div>
         </div>
@@ -947,259 +981,281 @@ const statusText = (status: string) => {
   50% { opacity: 0.5; transform: scale(1.1); }
 }
 
-/* Список скетчей */
-.sketches-list {
+/* Список скетчей - таблица */
+.sketches-table {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0;
 }
 
-.sketch-item {
+.table-header {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 1.5rem;
+  grid-template-columns: 100px 1fr 140px 120px 100px 140px;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 140px 120px 100px 140px;
+  gap: 1rem;
   padding: 1rem;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: none;
   transition: all 0.2s;
+  align-items: center;
 }
 
-.sketch-item:hover {
+.table-row:first-of-type {
+  border-radius: 0 0 8px 8px;
+}
+
+.table-row + .table-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.table-row:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(102, 126, 234, 0.5);
-  transform: translateX(5px);
+  border-color: rgba(102, 126, 234, 0.3);
 }
 
-.sketch-preview {
-  flex-shrink: 0;
+/* Квадратное изображение 1:1 */
+.thumbnail-square {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
 }
 
-.sketch-thumbnail {
+.thumbnail-square:hover {
+  transform: scale(1.05);
+}
+
+.thumbnail-image {
   width: 100%;
-  height: 120px;
+  height: 100%;
   object-fit: cover;
-  border-radius: 8px;
 }
 
-.thumbnail-placeholder {
+.thumbnail-placeholder-square {
   width: 100%;
-  height: 120px;
+  height: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.5rem;
+  font-size: 2rem;
 }
 
-.sketch-details {
+/* Название и описание */
+.title-content {
+  cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
-.sketch-title {
-  font-size: 1.1rem;
+.row-title {
+  font-size: 0.95rem;
   font-weight: 600;
   margin: 0;
   color: #fff;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.sketch-description {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+.row-description {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  line-height: 1.3;
 }
 
-.sketch-meta {
+/* Статус */
+.col-status {
   display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: auto;
-}
-
-.sketch-actions {
-  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  align-items: flex-start;
 }
 
-.action-btn {
-  padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
+/* Тултип с комментарием модератора */
+.moderation-tooltip {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #ff6464;
+  cursor: pointer;
 }
 
-.view-btn {
+.tooltip-icon {
+  font-size: 0.9rem;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  max-width: 250px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  z-index: 10;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+.moderation-tooltip:hover .tooltip-text {
+  visibility: visible;
+}
+
+/* Дата */
+.col-date {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Статистика */
+.col-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Действия - выровненные кнопки */
+.col-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.icon-btn.view-btn {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.view-btn:hover {
+.icon-btn.view-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-.edit-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
+.icon-btn.edit-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.edit-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.icon-btn.edit-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-.delete-btn {
+.icon-btn.delete-btn {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-.delete-btn:hover {
+.icon-btn.delete-btn:hover {
   background: rgba(239, 68, 68, 0.3);
   border-color: #ef4444;
 }
 
+.icon-btn.link-btn {
+  background: rgba(102, 126, 234, 0.2);
+  color: #667eea;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.icon-btn.link-btn:hover {
+  background: rgba(102, 126, 234, 0.3);
+  border-color: #667eea;
+}
+
+/* Статусы */
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
   font-size: 0.8rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-approved {
   background: rgba(100, 200, 100, 0.2);
   color: #64c864;
+  border: 1px solid rgba(100, 200, 100, 0.3);
 }
 
 .status-pending {
   background: rgba(255, 200, 100, 0.2);
   color: #ffc864;
+  border: 1px solid rgba(255, 200, 100, 0.3);
 }
 
 .status-rejected {
   background: rgba(255, 100, 100, 0.2);
   color: #ff6464;
+  border: 1px solid rgba(255, 100, 100, 0.3);
 }
 
 .status-draft {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.6);
-}
-
-/* Ответ модератора (в личном кабинете - для отклонённых) */
-.rejection-response {
-  padding: 0.75rem;
-  background: rgba(255, 100, 100, 0.1);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 100, 100, 0.2);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.moderation-comment {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.comment-label {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.comment-text {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.8);
-  line-height: 1.4;
-  font-style: italic;
-}
-
-.moderator-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 0.25rem;
-}
-
-.moderator-name {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.moderation-date {
-  font-size: 0.68rem;
-}
-
-.sketch-date {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.sketch-stats {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.sketch-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.action-btn {
-  padding: 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.view-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.view-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.edit-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-}
-
-.edit-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* Нет скетчей */
@@ -1286,6 +1342,15 @@ const statusText = (status: string) => {
 }
 
 /* Адаптивность */
+@media (max-width: 1100px) {
+  /* На экранах меньше 1100px - уменьшаем ширину колонок */
+  .table-header,
+  .table-row {
+    grid-template-columns: 80px 1fr 120px 100px 80px 120px;
+    gap: 0.75rem;
+  }
+}
+
 @media (max-width: 900px) {
   .profile-card {
     grid-template-columns: 1fr;
@@ -1304,17 +1369,25 @@ const statusText = (status: string) => {
     align-self: center;
   }
 
-  .sketch-item {
-    grid-template-columns: 1fr;
+  /* На планшетах - скрываем некоторые колонки */
+  .table-header,
+  .table-row {
+    grid-template-columns: 80px 1fr 100px 80px;
+    gap: 0.5rem;
   }
 
-  .sketch-preview {
-    width: 100%;
+  .col-date,
+  .col-stats {
+    display: none;
   }
 
-  .sketch-thumbnail,
-  .thumbnail-placeholder {
-    height: 180px;
+  .thumbnail-square {
+    width: 60px;
+    height: 60px;
+  }
+
+  .thumbnail-placeholder-square {
+    font-size: 1.5rem;
   }
 }
 
@@ -1345,6 +1418,59 @@ const statusText = (status: string) => {
   .tab-btn {
     flex: 1;
     text-align: center;
+  }
+
+  /* На мобильных - превращаем в карточки */
+  .table-header {
+    display: none;
+  }
+
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .col-thumbnail {
+    display: flex;
+    justify-content: center;
+  }
+
+  .thumbnail-square {
+    width: 120px;
+    height: 120px;
+  }
+
+  .col-title {
+    text-align: center;
+  }
+
+  .row-title {
+    font-size: 1.1rem;
+  }
+
+  .row-description {
+    font-size: 0.85rem;
+  }
+
+  .col-status {
+    align-items: center;
+    text-align: center;
+  }
+
+  .col-actions {
+    justify-content: center;
+  }
+
+  .col-date,
+  .col-stats {
+    display: flex;
+    justify-content: center;
+    text-align: center;
+    gap: 0.75rem;
   }
 }
 

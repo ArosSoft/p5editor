@@ -8,6 +8,9 @@ export function useSketches() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const total = ref(0)
+  
+  // AbortController для отмены предыдущих запросов
+  let currentAbortController: AbortController | null = null
 
   // Получение скетча по ID
   async function getSketchById(id: string) {
@@ -74,6 +77,7 @@ export function useSketches() {
     category,
     difficulty,
     search,
+    tags,
     sortBy = 'created_at',
     sortOrder = 'desc'
   }: {
@@ -82,10 +86,17 @@ export function useSketches() {
     category?: string
     difficulty?: SketchDifficulty
     search?: string
+    tags?: string[]
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
   } = {}) {
     try {
+      // Отменяем предыдущий запрос, если он ещё выполняется
+      if (currentAbortController) {
+        currentAbortController.abort()
+      }
+      currentAbortController = new AbortController()
+
       loading.value = true
       error.value = null
 
@@ -109,6 +120,14 @@ export function useSketches() {
       // Фильтр по сложности
       if (difficulty) {
         query = query.eq('difficulty', difficulty)
+      }
+
+      // Фильтр по тэгам (если выбраны тэги, ищем скетчи, содержащие хотя бы один из них)
+      if (tags && tags.length > 0) {
+        // Используем contains для поиска по JSON-массиву tags
+        // Для нескольких тэгов - используем or с contains для каждого
+        const tagFilters = tags.map(tag => `tags.cs.{${JSON.stringify(tag)}}`).join(',')
+        query = query.or(tagFilters)
       }
 
       // Поиск по названию, описанию
@@ -154,6 +173,7 @@ export function useSketches() {
       return { success: false, error: error.value }
     } finally {
       loading.value = false
+      currentAbortController = null
     }
   }
 
