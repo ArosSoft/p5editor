@@ -1,6 +1,6 @@
 // ============================================================
 // 🚀 ПОСАДКА НА ПЛАНЕТЫ — Автопилот
-// Версия: 1.51
+// Версия: 1.4
 // Последнее изменение: 27 марта 2026
 // ============================================================
 
@@ -138,10 +138,6 @@ let autopilotOn = false;
 let autopilotPhase = 'IDLE';
 let autopilotDebug = [];
 let autopilotRequested = false;
-
-// ========== ВИЗУАЛИЗАЦИЯ PID ==========
-let pidHistory = []; // История для графика: {time, targetX, actualX, error}
-let landingStartTime = 0;
 
 // ========== СИСТЕМА УПРАВЛЕНИЯ (PID + feed-forward) ==========
 // В p5 кадр = 1 "шаг дискретного времени", поэтому dt не вычисляется явно.
@@ -438,8 +434,6 @@ function initGame() {
   showTestPanel = false;
   testResults = null;
   engineGlow = 0;
-  pidHistory = [];
-  landingStartTime = frameCount;
 }
 
 function generateTerrain() {
@@ -547,14 +541,11 @@ function drawGame() {
   drawAutopilotBtn();
   drawTestBtn();
   drawMenuBtn();
-  drawPIDPanel();
-  drawLandingGraph();
   if (showTestPanel && testResults) drawTestPanel();
   pop();
 
   if (autopilotOn && gameState === 'playing') {
     runAutopilot();
-    updatePIDHistory();
   }
 
   if (gameState === 'playing') {
@@ -1920,277 +1911,6 @@ function drawAutopilotBtn() {
         text(autopilotDebug[i], bx - 22, by + bh + 36 + i * 11);
       }
     }
-  }
-}
-
-// ========== ВИЗУАЛИЗАЦИЯ PID ==========
-function drawPIDPanel() {
-  if (!autopilotOn || gameState !== 'playing') return;
-  
-  const panelX = width - 220;
-  const panelY = 100;
-  const panelW = 200;
-  const panelH = 200;
-  
-  // Фон панели
-  fill(0, 0, 0, 180);
-  stroke(90, 140, 255);
-  strokeWeight(1);
-  rect(panelX, panelY, panelW, panelH, 8);
-  
-  // Заголовок
-  textSize(11);
-  fill(90, 140, 255);
-  textAlign(CENTER, TOP);
-  text('📊 ПАРАМЕТРЫ PID', panelX + panelW / 2, panelY + 6);
-  
-  // Линия разделительная
-  stroke(90, 140, 255, 100);
-  line(panelX + 8, panelY + 20, panelX + panelW - 8, panelY + 20);
-  
-  // Данные PID
-  textSize(9);
-  textAlign(LEFT, TOP);
-  let y = panelY + 26;
-  const lineHeight = 14;
-  
-  // Фаза автопилота
-  fill(255, 255, 255);
-  text(`Фаза: ${autopilotPhase}`, panelX + 8, y);
-  y += lineHeight;
-  
-  // Вертикальный PID (vy)
-  fill(100, 200, 255);
-  text('─ ВЕРТИКАЛЬ (vy) ─', panelX + 8, y);
-  y += lineHeight;
-  
-  fill(255, 255, 255);
-  const vyErr = rocket.vy - getVyTarget();
-  text(`P: ${(0.95 * vyErr).toFixed(3)}`, panelX + 8, y);
-  text(`I: ${(0.004 * apPID.intVy).toFixed(3)}`, panelX + 80, y);
-  text(`D: ${(0.28 * (vyErr - apPID.prevVyErr)).toFixed(3)}`, panelX + 150, y);
-  y += lineHeight;
-  
-  // Горизонтальный PID (vx)
-  fill(100, 255, 150);
-  text('─ ГОРИЗОНТАЛЬ (vx) ─', panelX + 8, y);
-  y += lineHeight;
-  
-  fill(255, 255, 255);
-  const vxErr = rocket.vx - getVxTarget();
-  text(`P: ${(0.7 * vxErr).toFixed(3)}`, panelX + 8, y);
-  text(`I: ${(0.002 * apPID.intVx).toFixed(3)}`, panelX + 80, y);
-  text(`D: ${(0.25 * (vxErr - apPID.prevVxErr)).toFixed(3)}`, panelX + 150, y);
-  y += lineHeight;
-  
-  // PID угла
-  fill(255, 200, 100);
-  text('─ УГОЛ (angle) ─', panelX + 8, y);
-  y += lineHeight;
-  
-  fill(255, 255, 255);
-  const padCX = landingPad.x + landingPad.w / 2;
-  const angleErr = normalizeAngleRad(getTargetAngle() - rocket.angle);
-  text(`P: ${(3.5 * angleErr).toFixed(3)}`, panelX + 8, y);
-  text(`I: ${(0.0 * apPID.intAng).toFixed(3)}`, panelX + 80, y);
-  text(`D: ${(-5.5 * rocket.angularVel).toFixed(3)}`, panelX + 150, y);
-  y += lineHeight;
-  
-  // Тяга
-  y += 4;
-  fill(255, 150, 150);
-  text('─ ТЯГА ─', panelX + 8, y);
-  y += lineHeight;
-  
-  fill(255, 255, 255);
-  const thrustPct = rocket.thrusting ? Math.round(100 * (rocket.fuel > 0 ? 1 : 0)) : 0;
-  text(`Тяга: ${rocket.thrusting ? 'ВКЛ' : 'ВЫКЛ'}`, panelX + 8, y);
-  text(`RCS L: ${rocket.thrustingLeft ? '◀' : '·'}`, panelX + 70, y);
-  text(`RCS R: ${rocket.thrustingRight ? '▶' : '·'}`, panelX + 130, y);
-  y += lineHeight;
-  
-  // Топливо
-  fill(255, 255, 255);
-  text(`Топливо: ${Math.round(rocket.fuel / rocket.fuelMax * 100)}%`, panelX + 8, y);
-  
-  // Полоска топлива
-  const fuelBarX = panelX + 8;
-  const fuelBarY = y + 10;
-  const fuelBarW = panelW - 16;
-  const fuelBarH = 6;
-  fill(40);
-  noStroke();
-  rect(fuelBarX, fuelBarY, fuelBarW, fuelBarH, 2);
-  const fuelPct = rocket.fuel / rocket.fuelMax;
-  fill(fuelPct > 0.3 ? color(0, 195, 0) : fuelPct > 0.1 ? color(255, 195, 0) : color(255, 45, 0));
-  rect(fuelBarX, fuelBarY, fuelBarW * fuelPct, fuelBarH, 2);
-}
-
-// Вспомогательные функции для получения целевых значений
-function getVyTarget() {
-  const padY = landingPad.y;
-  const rocketBottom = rocket.y + rocket.height / 2 + 12;
-  const alt = padY - rocketBottom;
-  const thrust = P.thrustPower;
-  const gravity = P.gravity;
-  const maxDecel = thrust - gravity;
-  
-  let vyTarget;
-  if (autopilotPhase === 'APPROACH') {
-    const baseVy = alt > 200 ? 1.2 : alt > 100 ? 0.8 : 0.5;
-    vyTarget = max(baseVy, -0.3);
-  } else if (autopilotPhase === 'DESCENT') {
-    const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.65;
-    vyTarget = min(2.0, safeVy);
-  } else if (autopilotPhase === 'FINAL') {
-    const safeVy = sqrt(2 * maxDecel * max(alt, 1)) * 0.35;
-    vyTarget = min(0.35, safeVy);
-  } else {
-    vyTarget = P.safeLandingSpeed / 5;
-  }
-  return vyTarget;
-}
-
-function getVxTarget() {
-  const padCX = landingPad.x + landingPad.w / 2;
-  const padY = landingPad.y;
-  const rocketBottom = rocket.y + rocket.height / 2 + 12;
-  const alt = padY - rocketBottom;
-  const dX = padCX - rocket.x;
-  
-  const vyTarget = getVyTarget();
-  const vyForTgo = max(vyTarget, 0.15);
-  const tGo = constrain(alt / vyForTgo, 5, 150);
-  let vxTarget = dX / tGo;
-  
-  let maxHSpeed;
-  if (autopilotPhase === 'APPROACH') maxHSpeed = 1.2;
-  else if (autopilotPhase === 'DESCENT') maxHSpeed = 0.7;
-  else if (autopilotPhase === 'FINAL') maxHSpeed = 0.25;
-  else maxHSpeed = 0.08;
-  
-  return constrain(vxTarget, -maxHSpeed, maxHSpeed);
-}
-
-function getTargetAngle() {
-  return apPID.prevTargetAngle;
-}
-
-function drawLandingGraph() {
-  if (!autopilotOn || gameState !== 'playing') return;
-  
-  const graphX = width - 220;
-  const graphY = 325;
-  const graphW = 200;
-  const graphH = 120;
-  const padding = 25;
-  
-  // Фон графика
-  fill(0, 0, 0, 180);
-  stroke(90, 140, 255);
-  strokeWeight(1);
-  rect(graphX, graphY, graphW, graphH, 8);
-  
-  // Заголовок
-  textSize(11);
-  fill(90, 140, 255);
-  textAlign(CENTER, TOP);
-  text('📈 ГРАФИК ПОСАДКИ', graphX + graphW / 2, graphY + 6);
-  
-  // Оси
-  const plotX = graphX + padding;
-  const plotY = graphY + padding + 15;
-  const plotW = graphW - padding * 2;
-  const plotH = graphH - padding * 2 - 10;
-  
-  stroke(100, 100, 120);
-  strokeWeight(1);
-  // Ось Y (отклонение -100 до +100)
-  line(plotX, plotY, plotX, plotY + plotH);
-  // Ось X (время)
-  line(plotX, plotY + plotH, plotX + plotW, plotY + plotH);
-  // Центральная линия (нулевое отклонение)
-  stroke(100, 100, 120, 150);
-  line(plotX, plotY + plotH / 2, plotX + plotW, plotY + plotH / 2);
-  
-  // Подписи осей
-  textSize(8);
-  fill(150, 150, 170);
-  textAlign(RIGHT, CENTER);
-  text('+50м', plotX - 2, plotY);
-  text('0м', plotX - 2, plotY + plotH / 2);
-  text('-50м', plotX - 2, plotY + plotH);
-  
-  textAlign(CENTER, TOP);
-  text('Время (с)', plotX + plotW / 2, plotY + plotH + 2);
-  
-  // Если есть история - рисуем графики
-  if (pidHistory.length > 1) {
-    const maxTime = max(60, pidHistory[pidHistory.length - 1].time);
-    
-    noFill();
-    strokeWeight(1.5);
-    
-    // Отклонение (красная линия)
-    stroke(255, 50, 50);
-    beginShape();
-    for (let i = 0; i < pidHistory.length; i++) {
-      const h = pidHistory[i];
-      const x = plotX + (4 * h.time / maxTime ) * plotW;
-      // Нормализуем отклонение: -50..+50 -> plotH
-      const normalizedError = constrain(h.error / 50, -1, 1);
-      const y = plotY + plotH / 2 - normalizedError * (plotH / 2);
-      vertex(x, y);
-    }
-    endShape();
-    
-    // Целевая точка (зелёная точка на нуле)
-    stroke(0, 255, 100);
-    beginShape();
-    for (let i = 0; i < pidHistory.length; i++) {
-      const h = pidHistory[i];
-      const x = plotX + (4 * h.time / maxTime) * plotW;
-      vertex(x, plotY + plotH / 2);
-    }
-    endShape();
-    
-    // Легенда
-    noStroke();
-    fill(0, 255, 100);
-    rect(graphX + 10, graphY + 22, 8, 8);
-    fill(255, 50, 50);
-    rect(graphX + 50, graphY + 22, 8, 8);
-    textSize(8);
-    fill(255, 255, 255);
-    textAlign(LEFT, TOP);
-    text('Цель', graphX + 22, graphY + 22);
-    text('Отклон.', graphX + 62, graphY + 22);
-    
-    // Текущее отклонение
-    const lastH = pidHistory[pidHistory.length - 1];
-    const error = abs(lastH.error);
-    fill(error < 10 ? color(0, 255, 100) : error < 30 ? color(255, 200, 0) : color(255, 50, 50));
-    textAlign(RIGHT, TOP);
-    text(`Δ: ${lastH.error.toFixed(1)}м`, graphX + graphW - 8, graphY + 22);
-  }
-}
-
-function updatePIDHistory() {
-  if (!autopilotOn || gameState !== 'playing') return;
-  
-  const padCX = landingPad.x + landingPad.w / 2;
-  const currentTime = (frameCount - landingStartTime) / 60; // секунды
-  
-  pidHistory.push({
-    time: currentTime,
-    targetX: padCX,
-    actualX: rocket.x,
-    error: rocket.x - padCX
-  });
-  
-  // Ограничиваем историю (последние 60 секунд)
-  if (pidHistory.length > 360) {
-    pidHistory.shift();
   }
 }
 
