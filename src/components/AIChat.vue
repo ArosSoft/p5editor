@@ -302,7 +302,7 @@ function onDrop(event: DragEvent) {
   background: linear-gradient(135deg, #646cff, #9089fc);
   border: none;
   cursor: pointer;
-  display: flex;
+  display: none; /* Скрыто, но не удалено */
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 20px rgba(100, 108, 255, 0.4);

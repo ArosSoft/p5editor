@@ -21,13 +21,14 @@ const checkNetworkSpeed = () => {
 // Имитация загрузки с проверкой сети
 const simulateLoading = () => {
   checkNetworkSpeed()
-  
-  // Панель показывается минимум 3 секунды всегда
-  const loadTime = 3000
-  
+
+  // Прогресс длится 4 секунды, затем 1 секунда на плавное исчезновение
+  const progressTime = 4000
+  const fadeTime = 1000
+
   setTimeout(() => {
     isLoading.value = false
-  }, loadTime)
+  }, progressTime + fadeTime)
 }
 
 onMounted(() => {

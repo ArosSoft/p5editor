@@ -88,7 +88,7 @@ onMounted(() => {
   currentJokeIndex.value = getRandomJokeIndex()
 
   progressInterval = window.setInterval(() => {
-    progress.value = Math.min(progress.value + Math.random() * 3, 95)
+    progress.value = Math.min(progress.value + 5, 100)
   }, 200)
 
   jokeInterval = window.setInterval(() => {
@@ -116,7 +116,7 @@ watch(() => props.visible, (newVal) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.7) url('/images/lighthouse.png') left center / contain no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,6 +135,8 @@ watch(() => props.visible, (newVal) => {
   gap: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
   min-width: 400px;
+  margin-left: auto;
+  margin-right: 10%;
 }
 
 .loading-spinner {
@@ -154,14 +156,14 @@ watch(() => props.visible, (newVal) => {
   width: 80px;
   height: 80px;
   border-top-color: #42b883;
-  animation-delay: 0s;
+  animation: spin 2s linear infinite;
 }
 
 .spinner-ring:nth-child(2) {
   width: 60px;
   height: 60px;
   border-right-color: #36a76f;
-  animation-delay: -0.4s;
+  animation: spin-reverse 1.5s linear infinite;
   top: 10px;
   left: 10px;
 }
@@ -170,7 +172,7 @@ watch(() => props.visible, (newVal) => {
   width: 40px;
   height: 40px;
   border-bottom-color: #42b883;
-  animation-delay: -0.8s;
+  animation: spin 1s linear infinite;
   top: 20px;
   left: 20px;
 }
@@ -178,6 +180,12 @@ watch(() => props.visible, (newVal) => {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse {
+  to {
+    transform: rotate(-360deg);
   }
 }
 
@@ -201,7 +209,6 @@ watch(() => props.visible, (newVal) => {
   align-items: center;
   gap: 12px;
   background: rgba(66, 184, 131, 0.1);
-  border: 1px solid rgba(66, 184, 131, 0.2);
   border-radius: 8px;
   padding: 12px 16px;
   width: 100%;
@@ -252,7 +259,7 @@ watch(() => props.visible, (newVal) => {
 /* Transitions */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 1s ease;
 }
 
 .fade-enter-from,
