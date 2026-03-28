@@ -48,7 +48,7 @@ onMounted(async () => {
 
 // Навигация назад
 function goBack() {
-  router.push('/explore')
+  router.back()
 }
 
 // Копирование кода
