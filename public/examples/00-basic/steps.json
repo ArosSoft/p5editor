@@ -1,0 +1,12 @@
+[
+  { "title": "Шаг 1: Переменные", "file": "step1.md" },
+  { "title": "Шаг 2: Условные операторы", "file": "step2.md" },
+  { "title": "Шаг 3: Цикл for", "file": "step3.md" },
+  { "title": "Шаг 4: Цикл while", "file": "step4.md" },
+  { "title": "Шаг 5: Функции", "file": "step5.md" },
+  { "title": "Шаг 6: Массивы", "file": "step6.md" },
+  { "title": "Шаг 7: Сортировка", "file": "step7.md" },
+  { "title": "Шаг 8: Рекурсия", "file": "step8.md" },
+  { "title": "Шаг 9: Алгоритм Евклида", "file": "step9.md" },
+  { "title": "Шаг 10: Поиск", "file": "step10.md" }
+]

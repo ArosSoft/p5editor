@@ -111,7 +111,7 @@ function drawBackgroundHills() {
 
 Получается холмистая линия горизонта!
 
-![Небо солнце холмы](/images/sky-sun-hills.png)
+![Небо солнце холмы](images/sky-sun-hills.png)
 
 ### Задание
 Попробуй изменить:

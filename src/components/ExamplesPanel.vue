@@ -829,6 +829,8 @@ function goToNextStep() {
   flex: 1;
   overflow-y: auto;
   font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -932,6 +934,8 @@ function goToNextStep() {
 /* Inline code */
 .markdown-body :deep(code) {
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
   font-size: 0.88em;
   padding: 2px 6px;
   background: rgba(91, 91, 214, 0.15);
@@ -964,6 +968,8 @@ function goToNextStep() {
   font-size: 13px;
   line-height: 1.5;
   color: #d4d4d4;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
 }
 .panel.light .markdown-body :deep(pre code) {
   color: #333;
@@ -1049,6 +1055,72 @@ function goToNextStep() {
 }
 .panel.light .markdown-body :deep(.code-block-wrapper pre) {
   background: #f5f5f7;
+}
+
+/* Details/Summary (спойлеры) */
+.markdown-body :deep(details) {
+  margin: 12px 0;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(91, 91, 214, 0.05);
+}
+
+.panel.light .markdown-body :deep(details) {
+  border-color: #e0e0e0;
+  background: rgba(91, 91, 214, 0.03);
+}
+
+.markdown-body :deep(summary) {
+  padding: 10px 14px;
+  background: rgba(91, 91, 214, 0.15);
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.panel.light .markdown-body :deep(summary) {
+  background: rgba(91, 91, 214, 0.08);
+}
+
+.markdown-body :deep(summary:hover) {
+  background: rgba(91, 91, 214, 0.25);
+}
+
+.panel.light .markdown-body :deep(summary:hover) {
+  background: rgba(91, 91, 214, 0.15);
+}
+
+.markdown-body :deep(summary::-webkit-details-marker) {
+  display: none;
+}
+
+.markdown-body :deep(summary::before) {
+  content: '▶';
+  font-size: 10px;
+  color: #9b9bf0;
+  transition: transform 0.2s;
+}
+
+.markdown-body :deep(details[open] summary::before) {
+  transform: rotate(90deg);
+}
+
+.markdown-body :deep(details[open] summary) {
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.panel.light .markdown-body :deep(details[open] summary) {
+  border-bottom-color: #e0e0e0;
+}
+
+.markdown-body :deep(.details-content) {
+  padding: 14px;
 }
 
 /* Highlight.js syntax highlighting */
