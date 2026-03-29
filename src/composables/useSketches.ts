@@ -137,13 +137,15 @@ export function useSketches() {
 
       // Маппинг имени сортировки на реальные колонки
       const sortColumnMap: Record<string, string> = {
-        'popular': 'likes',
         'new': 'created_at',
         'title': 'title',
         'views': 'views',
         'created_at': 'created_at'
       }
-      const sortColumn = sortColumnMap[sortBy] || 'created_at'
+      
+      // Для сортировки "popular" используем комбинированный рейтинг
+      const isPopularSort = sortBy === 'popular'
+      const sortColumn = isPopularSort ? 'created_at' : (sortColumnMap[sortBy] || 'created_at')
 
       // Сортировка
       query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
@@ -163,7 +165,20 @@ export function useSketches() {
 
       if (fetchError) throw fetchError
 
-      sketches.value = (data as SketchWithProfile[]) || []
+      let resultData = (data as SketchWithProfile[]) || []
+      
+      // Для сортировки "popular" используем комбинированный рейтинг на клиенте
+      // Формула: рейтинг = (просмотры * 0.7) + (лайки * 10 * 0.3)
+      // Приоритет отдаётся просмотрам (70%), лайки влияют на 30%
+      if (isPopularSort) {
+        resultData = resultData.sort((a, b) => {
+          const scoreA = (a.views || 0) * 0.7 + (a.likes || 0) * 10 * 0.3
+          const scoreB = (b.views || 0) * 0.7 + (b.likes || 0) * 10 * 0.3
+          return sortOrder === 'asc' ? scoreA - scoreB : scoreB - scoreA
+        })
+      }
+
+      sketches.value = resultData
       total.value = count || 0
 
       return { success: true, data: sketches.value as SketchWithProfile[], total: total.value }

@@ -138,6 +138,10 @@ function toggleTag(tag: string) {
 
 // Навигация к скетчу
 function openSketch(id: string) {
+  // Сохраняем текущий маршрут для возврата после удаления скетча
+  // Убираем '#' из начала чтобы получить чистый путь
+  const currentHash = window.location.hash.replace('#', '') || '/explore'
+  sessionStorage.setItem('sketch_previous_route', currentHash)
   router.push(`/sketch/${id}`)
 }
 

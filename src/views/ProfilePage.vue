@@ -158,6 +158,10 @@ function showNotification(message: string, type: 'success' | 'error') {
 
 // Переход к скетчу
 function openSketch(id: string) {
+  // Сохраняем текущий маршрут для возврата после удаления скетча
+  // Убираем '#' из начала чтобы получить чистый путь
+  const currentHash = window.location.hash.replace('#', '') || '/profile'
+  sessionStorage.setItem('sketch_previous_route', currentHash)
   router.push(`/sketch/${id}`)
 }
 

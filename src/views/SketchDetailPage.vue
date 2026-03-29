@@ -16,6 +16,7 @@ const isLoading = ref(true)
 const isCopied = ref(false)
 const hasLiked = ref(false)
 const localLikes = ref(0)
+const previousRoute = ref<string>('')
 
 // Удаление скетча
 const showDeleteModal = ref(false)
@@ -25,15 +26,20 @@ const isDeleting = ref(false)
 onMounted(async () => {
   const id = route.params.id as string
   
+  // Сохраняем предыдущий маршрут для возврата после удаления
+  // Используем sessionStorage чтобы сохранить между переходами
+  const savedPreviousRoute = sessionStorage.getItem('sketch_previous_route')
+  previousRoute.value = savedPreviousRoute || document.referrer
+
   const result = await getSketchById(id)
-  
+
   if (result.success && result.data) {
     sketch.value = result.data as SketchWithProfile
     localLikes.value = sketch.value.likes
-    
+
     // Увеличиваем счётчик просмотров
     await incrementViews(id)
-    
+
     // Проверяем, лайкнул ли текущий пользователь
     if (user.value) {
       const likeResult = await checkLike(id, user.value.id)
@@ -42,7 +48,7 @@ onMounted(async () => {
   } else {
     sketch.value = null
   }
-  
+
   isLoading.value = false
 })
 
@@ -75,15 +81,24 @@ function closeDeleteModal() {
 // Удаление скетча
 async function handleDeleteSketch() {
   if (!sketch.value || !user.value) return
-  
+
   isDeleting.value = true
   try {
     const result = await deleteSketch(sketch.value.id)
-    
+
     if (result.success) {
-      // Закрываем модальное окно и переходим в галерею
+      // Закрываем модальное окно
       closeDeleteModal()
-      router.push('/explore')
+
+      // Возвращаемся на предыдущую страницу или на галерею
+      // previousRoute.value уже содержит чистый путь без '#'
+      const targetRoute = previousRoute.value || '/explore'
+      console.log('[SketchDetailPage] Возврат на:', targetRoute)
+
+      // Очищаем сохранённый маршрут
+      sessionStorage.removeItem('sketch_previous_route')
+
+      router.push(targetRoute)
     } else {
       alert(result.error || 'Ошибка удаления скетча')
     }

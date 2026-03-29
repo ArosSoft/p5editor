@@ -25,16 +25,17 @@ export function useStorage() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
       const filePath = `${folder}/${fileName}`
 
+      // Загрузка через стандартный метод Supabase с увеличенным таймаутом
       const uploadPromise = supabase.storage
         .from(BUCKET_NAME)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         })
-      
-      // Таймаут 30 секунд на загрузку
+
+      // Таймаут 60 секунд на загрузку (для медленного соединения)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут загрузки файла (30 секунд)')), 30000)
+        setTimeout(() => reject(new Error('Таймаут загрузки файла (60 секунд)')), 60000)
       })
 
       const { data, error: uploadError } = await Promise.race([uploadPromise, timeoutPromise])

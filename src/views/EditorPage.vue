@@ -489,6 +489,14 @@ function draw() {
     // Устанавливаем название "Шаблон"
     sketchName.value = 'Шаблон'
     localStorage.setItem('p5editor_current_name', 'Шаблон')
+    
+    // Очищаем адресную строку от ID скетча
+    // Это нужно чтобы случайно не перезаписать сохранённый скетч
+    if (route.params.id || route.query.sketch) {
+      router.replace({ path: '/', query: {} })
+      console.log('[EditorPage] Адресная строка очищена от ID скетча')
+    }
+    
     addMessage('🔄 Скетч сброшен к стартовому шаблону')
   }
 }
@@ -693,10 +701,40 @@ function navigateToExplore() {
 }
 
 // Навигация к странице «Поделиться»
-function navigateToShare() {
-  // Явно сохраняем текущий код и название в localStorage перед переходом
-  localStorage.setItem('p5editor_current_code', code.value)
-  localStorage.setItem('p5editor_current_name', sketchName.value)
+async function navigateToShare() {
+  console.log('[EditorPage] navigateToShare: начинаем переход на SharePage')
+  console.log('[EditorPage] currentSketchId:', currentSketchId.value)
+  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
+  
+  // Если скетч загружен из БД и пользователь авторизован — сохраняем в БД
+  if (currentSketchId.value && isAuthenticated.value && user.value) {
+    console.log('[EditorPage] Сохраняем код в БД перед переходом...')
+    addMessage('💾 Сохранение перед публикацией...')
+    try {
+      const result = await updateSketch(currentSketchId.value, {
+        code: code.value
+      })
+      if (result.success) {
+        lastSavedCode = code.value
+        console.log('[EditorPage] Код сохранён в БД перед публикацией')
+        addMessage('✅ Скетч сохранён в облако')
+      } else {
+        console.warn('[EditorPage] Не удалось сохранить в БД:', result.error)
+        addMessage('⚠️ Не удалось сохранить в облако, но переходим на публикацию')
+      }
+    } catch (e) {
+      console.error('[EditorPage] Ошибка сохранения в БД:', e)
+      addMessage('⚠️ Ошибка сохранения, но переходим на публикацию')
+    }
+  }
+  
+  // Сохраняем код в localStorage (синхронно, без задержки)
+  if (code.value !== lastSavedCode) {
+    localStorage.setItem('p5editor_current_code', code.value)
+    localStorage.setItem('p5editor_current_name', sketchName.value)
+    lastSavedCode = code.value
+  }
+  console.log('[EditorPage] Код сохранён в localStorage перед переходом на SharePage')
   router.push('/share')
 }
 

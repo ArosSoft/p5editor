@@ -8,5 +8,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Используем упрощённый клиент без строгих типов
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Создаем кастомный fetch с таймаутом для работы на медленном соединении
+const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => {
+    controller.abort()
+  }, 60000) // 60 секунд таймаут на любой запрос
+
+  const fetchInit: RequestInit = {
+    ...init,
+    signal: controller.signal
+  }
+
+  return fetch(input, fetchInit).finally(() => {
+    clearTimeout(timeout)
+  })
+}
+
+// Используем упрощённый клиент с настройками таймаутов
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  },
+  // @ts-ignore - кастомный fetch для таймаутов
+  fetch: customFetch
+})

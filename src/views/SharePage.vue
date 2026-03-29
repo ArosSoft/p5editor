@@ -223,9 +223,8 @@ async function submitSketch() {
     if (result.success) {
       submitSuccess.value = true
 
-      // Очистка localStorage
-      localStorage.removeItem('p5editor_shared_code')
-      localStorage.removeItem('p5editor_shared_name')
+      // Очистка только временных данных (thumbnail)
+      // Код и название оставляем для возможности возврата в редактор
       localStorage.removeItem('p5editor_canvas_snapshot')
 
       // Перенаправление через 2 секунды
