@@ -22,5 +22,5 @@ for (let fishy of fish) {
 
 `fishy.x = -50` — появляется слева.
 
-![картинка_7.1](/images/47.png)
+![картинка_7.1](images/47.png)
 

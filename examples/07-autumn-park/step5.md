@@ -174,7 +174,7 @@ function drawTreeCrown(tree) {
 
 Это удобно, чтобы не запутаться в координатах!
 
-![Дерево с кронами](/images/autumn-trees.png)
+![Дерево с кронами](images/autumn-trees.png)
 
 ### Задание
 Попробуй изменить дерево:

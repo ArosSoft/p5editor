@@ -143,7 +143,7 @@ function drawRealisticLeaf(leaf) {
 
 Получается форма, похожая на настоящий лист!
 
-![Падающие листья](/images/falling-leaves.png)
+![Падающие листья](images/falling-leaves.png)
 
 ### Задание
 Попробуй изменить анимацию:

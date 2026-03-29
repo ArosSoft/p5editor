@@ -31,4 +31,4 @@ for (let i = bubbles.length - 1; i >= 0; i--) {
 
 `bubbles.splice(i, 1)` — удаляем его.
 
-![картинка_6.1](/images/46.png)
+![картинка_6.1](images/46.png)

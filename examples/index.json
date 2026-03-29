@@ -1,5 +1,20 @@
 [
   {
+    "id": "00-basic",
+    "title": "🔢 Основы алгоритмов",
+    "description": "Изучаем переменные, циклы, функции и алгоритмы на JavaScript",
+    "theme": "Программирование",
+    "difficulty": "Лёгкая",
+    "tags": [
+      "алгоритмы",
+      "javascript",
+      "основы"
+    ],
+    "icon": "🔢",
+    "color": "#4CAF50",
+    "codePath": "/examples/00-basic/sketch.js"
+  },
+  {
     "id": "01-snowman",
     "title": "☃️ Снеговик",
     "description": "Весёлый снеговик со шляпой",

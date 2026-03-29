@@ -62,7 +62,7 @@ print(firstTree.type);     // 'oak'
 print(firstTree.crownWidth); // 90
 ```
 
-![Дерево свойства](/images/tree-properties.png)
+![Дерево свойства](images/tree-properties.png)
 
 ### Задание
 Попробуй изменить первое дерево:
