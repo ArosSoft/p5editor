@@ -8,7 +8,7 @@ import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
 const route = useRoute()
-const { user, profile, isAuthenticated, updateProfile, uploadAvatar } = useAuth()
+const { user, profile, isAuthenticated, updateProfile, uploadAvatar, isReady, readyPromise } = useAuth()
 const { getUserSketches, deleteSketch } = useSketches()
 const { uploadAvatar: uploadAvatarStorage, uploading: uploadingAvatar } = useStorage()
 
@@ -35,32 +35,15 @@ const notification = ref<{ message: string; type: 'success' | 'error' } | null>(
 
 // Проверка авторизации и загрузка скетчей
 onMounted(async () => {
-  // Проверяем localStorage, так как initAuth может ещё работать
-  const userRole = localStorage.getItem('user_role')
-  const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
-
-  if (!isAuth) {
-    router.push('/')
-    return
+  // Ждём готовности авторизации
+  if (!isReady.value && readyPromise.value) {
+    await readyPromise.value
   }
 
-  // Ждём инициализации пользователя из useAuth
+  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
   if (!user.value) {
-    // Если пользователь ещё не загружен, пробуем подождать немного
-    await new Promise<void>((resolve) => {
-      const checkUser = setInterval(() => {
-        if (user.value) {
-          clearInterval(checkUser)
-          resolve()
-        }
-      }, 100)
-      
-      // Таймаут 3 секунды
-      setTimeout(() => {
-        clearInterval(checkUser)
-        resolve()
-      }, 3000)
-    })
+    router.push('/')
+    return
   }
 
   await loadUserSketches()

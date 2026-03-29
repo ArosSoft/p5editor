@@ -2,15 +2,35 @@ import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import type { Sketch, SketchDifficulty, SketchStatus, SketchWithProfile } from '../types/supabase'
 
+// Настраиваемые таймауты (в миллисекундах)
+const DEFAULT_TIMEOUT = 8000
+const LONG_TIMEOUT = 15000
+
+// Вспомогательная функция для выполнения запроса с таймаутом
+async function withTimeout<T>(
+  queryBuilder: any,
+  timeoutMs: number = DEFAULT_TIMEOUT,
+  timeoutMessage: string = 'Таймаут запроса'
+): Promise<{ data: T | null; error: any; count?: number | null }> {
+  const queryPromise = queryBuilder.then((result: any) => result)
+  const timeoutPromise = new Promise<{ data: T | null; error: any; count?: number | null }>((_, reject) => {
+    setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+  })
+
+  return Promise.race([queryPromise, timeoutPromise])
+}
+
 export function useSketches() {
   const sketches = ref<SketchWithProfile[]>([])
   const sketch = ref<Sketch | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const total = ref(0)
-  
+
   // AbortController для отмены предыдущих запросов
   let currentAbortController: AbortController | null = null
+  let pendingSketchesAbortController: AbortController | null = null
+  let userSketchesAbortController: AbortController | null = null
 
   // Получение скетча по ID
   async function getSketchById(id: string) {
@@ -18,7 +38,7 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const { data, error: fetchError } = await supabase
+      const query = supabase
         .from('sketches')
         .select(`
           *,
@@ -39,6 +59,8 @@ export function useSketches() {
         `, { count: 'exact' })
         .eq('id', id)
         .single()
+
+      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Ошибка загрузки скетча (таймаут)')
 
       if (fetchError) throw fetchError
 
@@ -155,13 +177,7 @@ export function useSketches() {
       const to = from + limit - 1
       query = query.range(from, to)
 
-      // Добавляем таймаут для запроса
-      const queryPromise = query
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут запроса (5 секунд)')), 5000)
-      })
-
-      const { data, error: fetchError, count } = await Promise.race([queryPromise, timeoutPromise])
+      const { data, error: fetchError, count } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки галереи')
 
       if (fetchError) throw fetchError
 
@@ -195,6 +211,12 @@ export function useSketches() {
   // Получение скетчей пользователя
   async function getUserSketches(userId: string, status?: SketchStatus) {
     try {
+      // Отменяем предыдущий запрос, если он ещё выполняется
+      if (userSketchesAbortController) {
+        userSketchesAbortController.abort()
+      }
+      userSketchesAbortController = new AbortController()
+
       loading.value = true
       error.value = null
 
@@ -219,7 +241,7 @@ export function useSketches() {
         query = query.eq('status', status)
       }
 
-      const { data, error: fetchError } = await query
+      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки скетчей пользователя')
 
       if (fetchError) throw fetchError
 
@@ -229,7 +251,7 @@ export function useSketches() {
         const lastLog = logs.length > 0
           ? logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
           : null
-        
+
         return {
           ...sketch,
           moderation_log: lastLog ? {
@@ -240,7 +262,7 @@ export function useSketches() {
           } : null
         }
       }) as SketchWithProfile[]
-      
+
       return { success: true, data: sketches.value }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Ошибка загрузки скетчей пользователя'
@@ -248,6 +270,7 @@ export function useSketches() {
       return { success: false, error: error.value }
     } finally {
       loading.value = false
+      userSketchesAbortController = null
     }
   }
 
@@ -267,18 +290,13 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const insertPromise = supabase
+      const query = supabase
         .from('sketches')
         .insert(sketchData)
         .select()
         .single()
-      
-      // Добавляем таймаут 15 секунд
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут создания скетча (15 секунд)')), 15000)
-      })
 
-      const { data, error: createError } = await Promise.race([insertPromise, timeoutPromise])
+      const { data, error: createError } = await withTimeout(query, LONG_TIMEOUT, 'Таймаут создания скетча')
 
       if (createError) throw createError
 
@@ -470,10 +488,16 @@ export function useSketches() {
   // Получение скетчей на модерацию (для админов и модераторов)
   async function getPendingSketches() {
     try {
+      // Отменяем предыдущий запрос, если он ещё выполняется
+      if (pendingSketchesAbortController) {
+        pendingSketchesAbortController.abort()
+      }
+      pendingSketchesAbortController = new AbortController()
+
       loading.value = true
       error.value = null
 
-      const { data, error: fetchError } = await supabase
+      const query = supabase
         .from('sketches')
         .select(`
           *,
@@ -486,6 +510,8 @@ export function useSketches() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
 
+      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки скетчей на модерацию')
+
       if (fetchError) throw fetchError
 
       sketches.value = (data as Sketch[]) || []
@@ -496,6 +522,7 @@ export function useSketches() {
       return { success: false, error: error.value }
     } finally {
       loading.value = false
+      pendingSketchesAbortController = null
     }
   }
 
@@ -508,18 +535,14 @@ export function useSketches() {
       console.log('[approveSketch] Начало одобрения скетча:', sketchId)
 
       // Обновляем статус скетча с таймаутом
-      const updatePromise = supabase
+      const query = supabase
         .from('sketches')
         .update({ status: 'approved' })
         .eq('id', sketchId)
         .select()
         .single()
-      
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут одобрения скетча (15 секунд)')), 15000)
-      })
 
-      const { data: sketchData, error: updateError } = await Promise.race([updatePromise, timeoutPromise])
+      const { data: sketchData, error: updateError } = await withTimeout(query, LONG_TIMEOUT, 'Таймаут одобрения скетча')
 
       if (updateError) {
         console.error('[approveSketch] Ошибка обновления скетча:', updateError)
@@ -539,7 +562,7 @@ export function useSketches() {
               action: 'approved',
               comment: comment || null
             })
-          
+
           if (logError) {
             console.warn('[approveSketch] Не удалось сохранить лог модерации:', logError)
           }
@@ -569,12 +592,14 @@ export function useSketches() {
       console.log('[rejectSketch] Причина:', reason)
 
       // Проверяем, можем ли вообще получить доступ к скетчу
-      const { data: sketchCheck, error: checkError } = await supabase
+      const checkQuery = supabase
         .from('sketches')
         .select('id, status, user_id')
         .eq('id', sketchId)
         .single()
-      
+
+      const { data: sketchCheck, error: checkError } = await withTimeout(checkQuery, DEFAULT_TIMEOUT, 'Таймаут проверки скетча')
+
       if (checkError) {
         console.error('[rejectSketch] Ошибка проверки скетча:', checkError)
         // Если ошибка 400/401/403 - проблема с RLS
@@ -587,21 +612,14 @@ export function useSketches() {
       console.log('[rejectSketch] Скетч найден:', sketchCheck)
 
       // Обновляем статус скетча
-      const updateData: any = { status: 'rejected' }
-      
-      const updatePromise = supabase
+      const updateQuery = supabase
         .from('sketches')
-        .update(updateData)
+        .update({ status: 'rejected' })
         .eq('id', sketchId)
         .select()
         .single()
-      
-      // Таймаут 15 секунд
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут отклонения скетча (15 секунд)')), 15000)
-      })
 
-      const { data: sketchData, error: updateError } = await Promise.race([updatePromise, timeoutPromise])
+      const { data: sketchData, error: updateError } = await withTimeout(updateQuery, LONG_TIMEOUT, 'Таймаут отклонения скетча')
 
       if (updateError) {
         console.error('[rejectSketch] Ошибка обновления скетча:', updateError)
@@ -631,7 +649,7 @@ export function useSketches() {
               action: 'rejected',
               comment: reason
             })
-          
+
           if (logError) {
             console.warn('[rejectSketch] Не удалось сохранить лог модерации:', logError)
           } else {

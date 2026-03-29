@@ -6,7 +6,7 @@ import { useSketches } from '../composables/useSketches'
 import { useStorage } from '../composables/useStorage'
 
 const router = useRouter()
-const { user, profile, isAuthenticated } = useAuth()
+const { user, profile, isAuthenticated, isReady, readyPromise } = useAuth()
 const { createSketch } = useSketches()
 const { uploadFile, uploading } = useStorage()
 
@@ -40,12 +40,14 @@ const categories = [
 ]
 
 // Проверка авторизации и инициализация данных при загрузке
-onMounted(() => {
-  // Проверяем localStorage, так как initAuth может ещё работать
-  const userRole = localStorage.getItem('user_role')
-  const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
+onMounted(async () => {
+  // Ждём готовности авторизации
+  if (!isReady.value && readyPromise.value) {
+    await readyPromise.value
+  }
 
-  if (!isAuth) {
+  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
+  if (!user.value) {
     alert('Для публикации скетча необходимо войти в систему')
     router.push('/')
     return
@@ -56,7 +58,7 @@ onMounted(() => {
   if (savedName && !title.value) {
     title.value = savedName
   }
-  
+
   // Автоматически загружаем сохранённое изображение холста (если есть)
   const savedSnapshot = localStorage.getItem('p5editor_canvas_snapshot')
   if (savedSnapshot) {

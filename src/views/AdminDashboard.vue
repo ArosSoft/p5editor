@@ -6,7 +6,7 @@ import { useSketches } from '../composables/useSketches'
 import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
-const { profile, isAuthenticated, isAdmin, isModerator } = useAuth()
+const { profile, isAuthenticated, isAdmin, isModerator, isReady, readyPromise } = useAuth()
 const { sketches, loading, error, getPendingSketches, approveSketch, rejectSketch } = useSketches()
 
 // Состояние
@@ -31,8 +31,10 @@ onMounted(async () => {
     currentTheme.value = savedTheme
   }
 
-  // Ждём загрузки профиля
-  await new Promise(resolve => setTimeout(resolve, 500))
+  // Ждём готовности авторизации
+  if (!isReady.value && readyPromise.value) {
+    await readyPromise.value
+  }
 
   if (!isModerator.value) {
     router.push('/')

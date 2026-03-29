@@ -9,48 +9,56 @@ const globalProfile = ref<Profile | null>(null)
 const globalSession = ref<Session | null>(null)
 const globalLoading = ref(false)
 const globalError = ref<string | null>(null)
+const authReady = ref(false)
+const readyPromise = ref<Promise<void> | null>(null)
 let authInitialized = false
 let authUnsubscribe: (() => void) | null = null
 
 // Инициализация авторизации (вызывается один раз при старте приложения)
 export async function initAuth() {
   if (authInitialized) {
-    return
+    return readyPromise.value
   }
 
   authInitialized = true
   globalLoading.value = true
 
-  try {
-    // Загрузка текущей сессии
-    const { data: { session } } = await supabase.auth.getSession()
-    globalSession.value = session
-    globalUser.value = session?.user ?? null
+  readyPromise.value = (async () => {
+    try {
+      // Загрузка текущей сессии
+      const { data: { session } } = await supabase.auth.getSession()
+      globalSession.value = session
+      globalUser.value = session?.user ?? null
 
-    if (session?.user) {
-      await loadProfileInternal(session.user.id)
-    }
-
-    // Подписка на изменения авторизации
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      globalSession.value = newSession
-      globalUser.value = newSession?.user ?? null
-
-      if (newSession?.user) {
-        await loadProfileInternal(newSession.user.id)
-      } else {
-        globalProfile.value = null
-        localStorage.removeItem('user_role')
+      if (session?.user) {
+        await loadProfileInternal(session.user.id)
       }
-    })
 
-    authUnsubscribe = authListener.subscription.unsubscribe
-  } catch (e) {
-    globalError.value = e instanceof Error ? e.message : 'Ошибка инициализации сессии'
-    console.error('Session init error:', e)
-  } finally {
-    globalLoading.value = false
-  }
+      // Подписка на изменения авторизации
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        globalSession.value = newSession
+        globalUser.value = newSession?.user ?? null
+
+        if (newSession?.user) {
+          await loadProfileInternal(newSession.user.id)
+        } else {
+          globalProfile.value = null
+          localStorage.removeItem('user_role')
+        }
+      })
+
+      authUnsubscribe = authListener.subscription.unsubscribe
+      authReady.value = true
+    } catch (e) {
+      globalError.value = e instanceof Error ? e.message : 'Ошибка инициализации сессии'
+      console.error('Session init error:', e)
+      authReady.value = true // Всё равно помечаем как готовую, даже с ошибкой
+    } finally {
+      globalLoading.value = false
+    }
+  })()
+
+  await readyPromise.value
 }
 
 // Очистка подписки при закрытии приложения
@@ -295,6 +303,8 @@ export function useAuth() {
     isAuthenticated,
     isAdmin,
     isModerator,
+    isReady: computed(() => authReady.value),
+    readyPromise: computed(() => readyPromise.value),
     login,
     register,
     logout,

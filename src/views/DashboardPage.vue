@@ -6,7 +6,7 @@ import { useSketches } from '../composables/useSketches'
 import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
-const { user, profile, isAuthenticated, isAdmin, isModerator } = useAuth()
+const { user, profile, isAuthenticated, isAdmin, isModerator, isReady, readyPromise } = useAuth()
 const { getGallerySketches, getUserSketches, getPendingSketches } = useSketches()
 
 // Состояние
@@ -27,11 +27,13 @@ onMounted(async () => {
     currentTheme.value = savedTheme
   }
 
-  // Проверяем localStorage, так как initAuth может ещё работать
-  const userRole = localStorage.getItem('user_role')
-  const isAuth = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
+  // Ждём готовности авторизации
+  if (!isReady.value && readyPromise.value) {
+    await readyPromise.value
+  }
 
-  if (!isAuth) {
+  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
+  if (!user.value) {
     router.push('/')
     return
   }

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 // Lazy loading компонентов
 const EditorPage = () => import('../views/EditorPage.vue')
@@ -67,10 +68,16 @@ const router = createRouter({
 })
 
 // Обновление заголовка страницы при навигации и защита маршрутов
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const title = to.meta.title as string
   if (title) {
     document.title = `${title} — p5editor`
+  }
+
+  // Ждём готовности авторизации перед проверкой прав
+  const { isReady, readyPromise } = useAuth()
+  if (!isReady.value && readyPromise.value) {
+    await readyPromise.value
   }
 
   // Проверка авторизации через localStorage (роль сохраняется при входе)

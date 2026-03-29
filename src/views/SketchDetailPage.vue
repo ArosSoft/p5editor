@@ -485,9 +485,9 @@ const authorAvatar = computed(() => {
 
 .preview-image {
   width: 100%;
-  height: 400px;
-  object-fit: cover;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
 }
 
 .preview-placeholder {
