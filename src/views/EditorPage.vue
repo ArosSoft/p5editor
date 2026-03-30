@@ -238,6 +238,13 @@ watch(
   { immediate: true } // Вызвать сразу при создании watch
 )
 
+// Watch для автосохранения названия скетча в localStorage
+watch(sketchName, (newVal) => {
+  if (newVal) {
+    localStorage.setItem('p5editor_current_name', newVal)
+  }
+})
+
 onMounted(async () => {
   window.addEventListener('mousemove', onGlobalMouseMove)
   window.addEventListener('mouseup', onGlobalMouseUp)
@@ -728,10 +735,10 @@ async function navigateToShare() {
     }
   }
   
-  // Сохраняем код в localStorage (синхронно, без задержки)
+  // Сохраняем код и название в localStorage (синхронно, без задержки)
+  localStorage.setItem('p5editor_current_code', code.value)
+  localStorage.setItem('p5editor_current_name', sketchName.value)
   if (code.value !== lastSavedCode) {
-    localStorage.setItem('p5editor_current_code', code.value)
-    localStorage.setItem('p5editor_current_name', sketchName.value)
     lastSavedCode = code.value
   }
   console.log('[EditorPage] Код сохранён в localStorage перед переходом на SharePage')

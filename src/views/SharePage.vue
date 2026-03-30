@@ -55,8 +55,11 @@ onMounted(async () => {
 
   // Инициализируем название скетча из localStorage
   const savedName = localStorage.getItem('p5editor_current_name')
-  if (savedName && !title.value) {
+  if (savedName) {
     title.value = savedName
+    addMessage(`📝 Название загружено: "${savedName}"`)
+  } else {
+    addMessage('⚠️ Название скетча не найдено в localStorage')
   }
 
   // Автоматически загружаем сохранённое изображение холста (если есть)
