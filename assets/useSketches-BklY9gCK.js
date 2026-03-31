@@ -1,4 +1,4 @@
-import{L as i,r as p}from"./index-Dkp_h2A4.js";const y=8e3,j=15e3;async function v(h,f=y,c="Таймаут запроса"){const o=new AbortController,k=setTimeout(()=>{o.abort()},f);try{const _=await h.abortSignal(o.signal);return clearTimeout(k),_}catch(m){throw clearTimeout(k),m.name==="AbortError"||o.signal.aborted?new Error(c):m}}function Y(){const h=p([]),f=p(null),c=p(!1),o=p(null),k=p(0);let m=null,_=null,w=null;async function L(t){try{c.value=!0,o.value=null;const e=i.from("sketches").select(`
+import{L as i,r as p}from"./index-T735K8rD.js";const y=8e3,j=15e3;async function v(h,f=y,c="Таймаут запроса"){const o=new AbortController,k=setTimeout(()=>{o.abort()},f);try{const _=await h.abortSignal(o.signal);return clearTimeout(k),_}catch(m){throw clearTimeout(k),m.name==="AbortError"||o.signal.aborted?new Error(c):m}}function Y(){const h=p([]),f=p(null),c=p(!1),o=p(null),k=p(0);let m=null,_=null,w=null;async function L(t){try{c.value=!0,o.value=null;const e=i.from("sketches").select(`
           *,
           profiles:user_id (
             id,
