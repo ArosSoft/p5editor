@@ -9,6 +9,9 @@ const router = useRouter()
 const { getGallerySketches, getCategories, loading: sketchesLoading } = useSketches()
 const { user, isAuthenticated } = useAuth()
 
+// === Защитный таймаут страницы (на случай, если composable всё равно завис) ===
+let pageLoadTimeout: ReturnType<typeof setTimeout> | null = null
+
 // Состояние
 const sketches = ref<SketchWithProfile[]>([])
 const error = ref<string | null>(null)
@@ -40,6 +43,9 @@ async function loadCategories() {
 // Загрузка скетчей
 async function loadSketches() {
   console.log('[ExplorePage] loadSketches вызвана')
+
+  if (pageLoadTimeout) clearTimeout(pageLoadTimeout)
+
   error.value = null
 
   const difficultyValue = selectedDifficulty.value !== 'Все'
@@ -54,6 +60,14 @@ async function loadSketches() {
     search: searchQuery.value,
     tags: selectedTags.value
   })
+
+  // Защитный таймаут страницы — 10 секунд
+  pageLoadTimeout = setTimeout(() => {
+    if (sketchesLoading.value) {
+      console.warn('[ExplorePage] 🚨 Критический таймаут (10 сек) — перезагружаем страницу')
+      window.location.reload()
+    }
+  }, 10000)
 
   try {
     const result = await getGallerySketches({
@@ -85,6 +99,11 @@ async function loadSketches() {
   } catch (err) {
     error.value = 'Произошла непредвиденная ошибка при загрузке'
     console.error('[ExplorePage] Исключение:', err)
+  } finally {
+    if (pageLoadTimeout) {
+      clearTimeout(pageLoadTimeout)
+      pageLoadTimeout = null
+    }
   }
 }
 

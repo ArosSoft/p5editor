@@ -6,18 +6,35 @@ import type { Sketch, SketchDifficulty, SketchStatus, SketchWithProfile } from '
 const DEFAULT_TIMEOUT = 8000
 const LONG_TIMEOUT = 15000
 
-// Вспомогательная функция для выполнения запроса с таймаутом
+// Вспомогательная функция для выполнения запроса с таймаутом + настоящей отменой
 async function withTimeout<T>(
   queryBuilder: any,
   timeoutMs: number = DEFAULT_TIMEOUT,
   timeoutMessage: string = 'Таймаут запроса'
 ): Promise<{ data: T | null; error: any; count?: number | null }> {
-  const queryPromise = queryBuilder.then((result: any) => result)
-  const timeoutPromise = new Promise<{ data: T | null; error: any; count?: number | null }>((_, reject) => {
-    setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
-  })
+  const controller = new AbortController()
 
-  return Promise.race([queryPromise, timeoutPromise])
+  // Автоматически отменяем запрос по таймауту
+  const timeoutId = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+
+  try {
+    const queryWithSignal = queryBuilder.abortSignal(controller.signal)
+
+    const result = await queryWithSignal
+
+    clearTimeout(timeoutId)
+    return result
+  } catch (err: any) {
+    clearTimeout(timeoutId)
+
+    if (err.name === 'AbortError' || controller.signal.aborted) {
+      throw new Error(timeoutMessage)
+    }
+
+    throw err
+  }
 }
 
 export function useSketches() {
@@ -164,7 +181,7 @@ export function useSketches() {
         'views': 'views',
         'created_at': 'created_at'
       }
-      
+
       // Для сортировки "popular" используем комбинированный рейтинг
       const isPopularSort = sortBy === 'popular'
       const sortColumn = isPopularSort ? 'created_at' : (sortColumnMap[sortBy] || 'created_at')
@@ -177,12 +194,19 @@ export function useSketches() {
       const to = from + limit - 1
       query = query.range(from, to)
 
-      const { data, error: fetchError, count } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки галереи')
+      // Добавляем abortSignal к финальному query
+      const finalQuery = query.abortSignal(currentAbortController.signal)
+
+      const { data, error: fetchError, count } = await withTimeout(
+        finalQuery,
+        DEFAULT_TIMEOUT,
+        'Таймаут загрузки галереи'
+      )
 
       if (fetchError) throw fetchError
 
       let resultData = (data as SketchWithProfile[]) || []
-      
+
       // Для сортировки "popular" используем комбинированный рейтинг на клиенте
       // Формула: рейтинг = (просмотры * 0.7) + (лайки * 10 * 0.3)
       // Приоритет отдаётся просмотрам (70%), лайки влияют на 30%
@@ -198,12 +222,18 @@ export function useSketches() {
       total.value = count || 0
 
       return { success: true, data: sketches.value as SketchWithProfile[], total: total.value }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Ошибка загрузки галереи'
+    } catch (e: any) {
+      // Игнорируем AbortError от нашего собственного таймаута — он уже обработан в withTimeout
+      if (e.message?.includes('Таймаут')) {
+        error.value = e.message
+      } else {
+        error.value = e instanceof Error ? e.message : 'Ошибка загрузки галереи'
+      }
       console.error('Get gallery sketches error:', e)
       return { success: false, error: error.value }
     } finally {
       loading.value = false
+      // Не сбрасываем currentAbortController сразу — он уже aborted
       currentAbortController = null
     }
   }
