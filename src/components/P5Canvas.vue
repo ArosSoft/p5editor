@@ -31,10 +31,7 @@ function start(userCode: string) {
   const textColor = isDark ? '#ffffff' : '#333333'
   const gridColor = isDark ? 'rgba(100, 108, 255, 0.1)' : 'rgba(100, 108, 255, 0.05)'
 
-  // ✅ Исправление для GitHub Pages
-  // BASE_URL из Vite (например, '/p5editor/') или '/' для корня
   const basePath = import.meta.env.BASE_URL || '/'
-  // Убираем trailing slash для baseHref
   const baseHref = window.location.origin + (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath)
 
   const encodedCode = JSON.stringify(userCode)
@@ -50,20 +47,13 @@ function start(userCode: string) {
   <title>p5.js Sketch</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: ${backgroundColor};
-      color: ${textColor};
-    }
+    body { margin: 0; overflow: hidden; background: ${backgroundColor}; color: ${textColor}; }
     canvas { display: block; }
     body::after {
       content: "";
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-image:
-        linear-gradient(${gridColor} 1px, transparent 1px),
-        linear-gradient(90deg, ${gridColor} 1px, transparent 1px);
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background-image: linear-gradient(${gridColor} 1px, transparent 1px),
+                        linear-gradient(90deg, ${gridColor} 1px, transparent 1px);
       background-size: 50px 50px;
       pointer-events: none;
       z-index: -1;
@@ -72,7 +62,7 @@ function start(userCode: string) {
 </head>
 <body>
   <script>
-    // === Проксирование консоли ===
+    // Проксирование консоли
     (function() {
       var _log = console.log, _err = console.error, _warn = console.warn;
       function send(type, args) {
@@ -83,114 +73,154 @@ function start(userCode: string) {
           }, "*");
         } catch(e) {}
       }
-      console.log  = function() { _log.apply(console, arguments);  send("log", arguments); };
-      console.error = function() { _err.apply(console, arguments);  send("error", arguments); };
-      console.warn  = function() { _warn.apply(console, arguments); send("warn", arguments); };
+      console.log = function() { _log.apply(console, arguments); send("log", arguments); };
+      console.error = function() { _err.apply(console, arguments); send("error", arguments); };
+      console.warn = function() { _warn.apply(console, arguments); send("warn", arguments); };
     })();
 
-    // === УЛУЧШЕННАЯ ОБРАБОТКА ОШИБОК ===
-    // Подход 1 (для синтаксических ошибок): парсинг stack-трейса из catch(eval)
-    function getSyntaxErrorLine(error) {
-      if (!error || !error.stack) return 'неизвестно';
-      // Основной поиск для eval-кода (стандартный формат браузеров)
-      const anonMatch = error.stack.match(/<anonymous>:(\\d+)/i);
+    let lastErrorSent = '';
+
+    function getErrorLine(error) {
+      if (!error) return 'неизвестно';
+      let stack = error.stack || '';
+
+      const setupMatch = stack.match(/at setup \\((?:<anonymous>|VM|blob):(\\d+)/i);
+      if (setupMatch && setupMatch[1]) return parseInt(setupMatch[1]);
+
+      const anonMatch = stack.match(/<anonymous>:(\\d+)/i);
       if (anonMatch && anonMatch[1]) return parseInt(anonMatch[1]);
-      // Альтернативный поиск любой строки с номером
-      const lineMatch = error.stack.match(/:(\\d+):/);
+
+      const lineMatch = stack.match(/:(\\d+):/);
       if (lineMatch && lineMatch[1]) return parseInt(lineMatch[1]);
-      // Fallback на нестандартные свойства
+
       return error.lineNumber || error.line || 'неизвестно';
     }
 
-    // Подход 2 (для ошибок выполнения / runtime): используем параметр line из window.onerror
-    window.onerror = function(msg, url, line, col, error) {
-      // Убираем префикс ошибки до первого ":" (например, "Uncaught ReferenceError: ", "Uncaught TypeError: " и т.д.)
-      var cleanMsg = String(msg);
-      var colonIndex = cleanMsg.indexOf(':');
-      if (colonIndex !== -1) {
-        cleanMsg = cleanMsg.substring(colonIndex + 1).trim();
+    function translateError(msg) {
+      let clean = String(msg || '');
+      const colonIndex = clean.indexOf(':');
+      if (colonIndex !== -1) clean = clean.substring(colonIndex + 1).trim();
+
+      clean = clean
+        .replace(/is not defined/g, 'не определена')
+        .replace(/Unexpected end of input/g, 'Неожиданный конец ввода')
+        .replace(/Unexpected token/g, 'Неожиданный токен')
+        .replace(/Cannot read properties of undefined/g, 'Невозможно прочитать свойства undefined');
+
+      return clean;
+    }
+
+    function sendError(prefix, message, line) {
+      const fullMsg = "❌ " + prefix + " " + message + " (строка " + line + ")";
+      if (fullMsg === lastErrorSent) return;
+      lastErrorSent = fullMsg;
+      window.parent.postMessage({ type: "error", message: fullMsg }, "*");
+    }
+
+    // Основной обработчик ошибок
+    window.addEventListener('error', function(e) {
+      const err = e.error || e;
+      const line = getErrorLine(err);
+      const cleanMsg = translateError(e.message || err.message);
+
+      let prefix = 'Ошибка';
+      if ((e.message || '').includes('setup')) prefix = 'Ошибка в setup()';
+      else if ((e.message || '').includes('draw')) prefix = 'Ошибка в draw()';
+
+      sendError(prefix, cleanMsg, line);
+    });
+
+    window.addEventListener('unhandledrejection', function(e) {
+      const line = getErrorLine(e.reason);
+      const cleanMsg = translateError(e.reason?.message || e.reason);
+      sendError('Ошибка', cleanMsg, line);
+    });
+
+    window.onerror = function(msg, url, lineNum) {
+      if (lineNum && lineNum > 0) {
+        const cleanMsg = translateError(msg);
+        sendError('Ошибка выполнения', cleanMsg, lineNum);
       }
-      // Переводим стандартные сообщения об ошибках на русский
-      cleanMsg = cleanMsg.replace(/is not defined/g, 'не определена');
-      let errorMsg = "❌ Ошибка выполнения: " + cleanMsg;
-      if (line && line > 0) {
-        errorMsg += " (строка " + line + ")";
-      } else if (error) {
-        // fallback на парсинг стека (если line не передан)
-        errorMsg += " (строка " + getSyntaxErrorLine(error) + ")";
-      }
-      window.parent.postMessage({
-        type: "error",
-        message: errorMsg
-      }, "*");
       return true;
     };
 
-    // === Координаты мыши ===
+    // Monkey-patch p5 колбэков
+    const p5Callbacks = ['setup', 'draw', 'preload', 'mousePressed', 'mouseReleased', 
+                         'mouseClicked', 'mouseMoved', 'mouseDragged', 'keyPressed', 
+                         'keyReleased', 'keyTyped', 'windowResized'];
+
+    const originalP5 = window.p5;
+    window.p5 = function(...args) {
+      const instance = new originalP5(...args);
+
+      setTimeout(() => {
+        p5Callbacks.forEach(cb => {
+          if (typeof instance[cb] === 'function') {
+            const originalFn = instance[cb];
+            instance[cb] = function(...fnArgs) {
+              try {
+                return originalFn.apply(this, fnArgs);
+              } catch (err) {
+                const line = getErrorLine(err);
+                const cleanMsg = translateError(err.message);
+                sendError("Ошибка в " + cb + "()", cleanMsg, line);
+                throw err;
+              }
+            };
+          }
+        });
+      }, 10);
+
+      return instance;
+    };
+    window.p5.prototype = originalP5.prototype;
+
+    // Координаты мыши
     document.addEventListener("mousemove", function(e) {
-      var c = document.querySelector("canvas");
+      const c = document.querySelector("canvas");
       if (c) {
-        var r = c.getBoundingClientRect();
-        var x = e.clientX - r.left, y = e.clientY - r.top;
+        const r = c.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
         if (x >= 0 && x <= r.width && y >= 0 && y <= r.height) {
-          window.parent.postMessage({
-            type: "mouseMove",
-            x: Math.round(x),
-            y: Math.round(y)
-          }, "*");
+          window.parent.postMessage({ type: "mouseMove", x: Math.round(x), y: Math.round(y) }, "*");
         }
       }
     });
 
-    // ✅ Исправление путей к ресурсам для работы с изображениями
+    // Фикс путей ресурсов
     var APP_BASE = "${basePath}";
-
     function fixResourcePath(path) {
       if (typeof path !== 'string') return path;
-      // Пропускаем URL-ы с протоколом и data-URI
       if (path.indexOf('://') !== -1 || path.indexOf('data:') === 0) return path;
-      // Абсолютный путь /... → добавляем базовый путь
-      if (path.charAt(0) === '/' && path.indexOf(APP_BASE) !== 0) {
-        return APP_BASE + path.substring(1);
-      }
-      // Относительный путь (без / в начале) → добавляем базовый путь
-      if (path.charAt(0) !== '/' && path.indexOf(APP_BASE) !== 0) {
-        return APP_BASE + path;
-      }
+      if (path.startsWith('/') && !path.startsWith(APP_BASE)) return APP_BASE + path.substring(1);
+      if (!path.startsWith('/') && !path.startsWith(APP_BASE)) return APP_BASE + path;
       return path;
     }
 
-    // Патчим ВСЕ функции загрузки p5.js
     if (typeof p5 !== 'undefined') {
-      var loadFunctions = [
-        'loadImage', 'loadFont', 'loadJSON',
-        'loadStrings', 'loadTable', 'loadXML',
-        'loadBytes', 'loadModel', 'loadShader'
-      ];
-      loadFunctions.forEach(function(fnName) {
+      const loadFns = ['loadImage','loadFont','loadJSON','loadStrings','loadTable','loadXML','loadBytes','loadModel','loadShader'];
+      loadFns.forEach(fnName => {
         if (p5.prototype[fnName]) {
-          var original = p5.prototype[fnName];
-          p5.prototype[fnName] = function() {
-            var args = Array.prototype.slice.call(arguments);
+          const orig = p5.prototype[fnName];
+          p5.prototype[fnName] = function(...args) {
             if (args.length > 0 && typeof args[0] === 'string') {
               args[0] = fixResourcePath(args[0]);
             }
-            return original.apply(this, args);
+            return orig.apply(this, args);
           };
         }
       });
     }
 
-    // === Выполнение пользовательского кода ===
+    // Выполнение кода пользователя
     try {
       (0, eval)(${encodedCode});
     } catch(e) {
-      // Подход 1: синтаксическая ошибка (или топ-левел runtime) — парсим stack
-      const lineNum = getSyntaxErrorLine(e);
-      const prefix = (e.name === 'SyntaxError' || e.message.toLowerCase().includes('syntax') || e.message.toLowerCase().includes('unexpected'))
-        ? 'Синтаксическая'
-        : 'Выполнения';
-      console.error(\`❌ \${prefix} ошибка: \${e.message} (строка \${lineNum})\`);
+      const lineNum = getErrorLine(e);
+      const cleanMsg = translateError(e.message);
+      const prefix = e.name === 'SyntaxError' ? 'Синтаксическая ошибка' : 'Ошибка';
+      sendError(prefix, cleanMsg, lineNum);
     }
   <\/script>
 </body>
@@ -205,11 +235,8 @@ function start(userCode: string) {
   }
 }
 
-
 function stop() {
-  if (iframeRef.value) {
-    iframeRef.value.src = 'about:blank'
-  }
+  if (iframeRef.value) iframeRef.value.src = 'about:blank'
   if (currentIframeSrc) {
     URL.revokeObjectURL(currentIframeSrc)
     currentIframeSrc = null
@@ -228,7 +255,7 @@ onMounted(() => {
       } else if (data.type === 'error') {
         props.addMessage(data.message)
       } else if (data.type === 'warn') {
-        props.addMessage(`Предупреждение: ${data.message}`)
+        props.addMessage("Предупреждение: " + data.message)
       } else if (data.type === 'mouseMove') {
         emit('mouseMove', data.x, data.y)
       }
@@ -238,9 +265,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (handler) {
-    window.removeEventListener('message', handler)
-  }
+  if (handler) window.removeEventListener('message', handler)
 })
 </script>
 
@@ -262,13 +287,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
 }
-.iframe-container.theme-dark {
-  background: #1a1a1a;
-}
-.iframe-container.theme-light {
-  background: #f8f9fa;
-}
-iframe {
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1);
-}
+.iframe-container.theme-dark { background: #1a1a1a; }
+.iframe-container.theme-light { background: #f8f9fa; }
+iframe { box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1); }
 </style>
