@@ -1,4 +1,4 @@
-import{L as i,r as p}from"./index-RCQps2K0.js";const _=8e3,j=15e3;async function v(h,f=_,c="Таймаут запроса"){const s=h.then(k=>k),y=new Promise((k,g)=>{setTimeout(()=>g(new Error(c)),f)});return Promise.race([s,y])}function X(){const h=p([]),f=p(null),c=p(!1),s=p(null),y=p(0);let k=null,g=null,w=null;async function A(t){try{c.value=!0,s.value=null;const e=i.from("sketches").select(`
+import{L as i,r as p}from"./index-S5EfEkAn.js";const _=8e3,j=15e3;async function v(h,f=_,c="Таймаут запроса"){const s=h.then(k=>k),y=new Promise((k,g)=>{setTimeout(()=>g(new Error(c)),f)});return Promise.race([s,y])}function X(){const h=p([]),f=p(null),c=p(!1),s=p(null),y=p(0);let k=null,g=null,w=null;async function A(t){try{c.value=!0,s.value=null;const e=i.from("sketches").select(`
           *,
           profiles:user_id (
             id,
