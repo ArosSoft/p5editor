@@ -88,10 +88,40 @@ function start(userCode: string) {
       console.warn  = function() { _warn.apply(console, arguments); send("warn", arguments); };
     })();
 
-    window.onerror = function(msg, url, line) {
+    // === УЛУЧШЕННАЯ ОБРАБОТКА ОШИБОК ===
+    // Подход 1 (для синтаксических ошибок): парсинг stack-трейса из catch(eval)
+    function getSyntaxErrorLine(error) {
+      if (!error || !error.stack) return 'неизвестно';
+      // Основной поиск для eval-кода (стандартный формат браузеров)
+      const anonMatch = error.stack.match(/<anonymous>:(\\d+)/i);
+      if (anonMatch && anonMatch[1]) return parseInt(anonMatch[1]);
+      // Альтернативный поиск любой строки с номером
+      const lineMatch = error.stack.match(/:(\\d+):/);
+      if (lineMatch && lineMatch[1]) return parseInt(lineMatch[1]);
+      // Fallback на нестандартные свойства
+      return error.lineNumber || error.line || 'неизвестно';
+    }
+
+    // Подход 2 (для ошибок выполнения / runtime): используем параметр line из window.onerror
+    window.onerror = function(msg, url, line, col, error) {
+      // Убираем префикс ошибки до первого ":" (например, "Uncaught ReferenceError: ", "Uncaught TypeError: " и т.д.)
+      var cleanMsg = String(msg);
+      var colonIndex = cleanMsg.indexOf(':');
+      if (colonIndex !== -1) {
+        cleanMsg = cleanMsg.substring(colonIndex + 1).trim();
+      }
+      // Переводим стандартные сообщения об ошибках на русский
+      cleanMsg = cleanMsg.replace(/is not defined/g, 'не определена');
+      let errorMsg = "❌ Ошибка выполнения: " + cleanMsg;
+      if (line && line > 0) {
+        errorMsg += " (строка " + line + ")";
+      } else if (error) {
+        // fallback на парсинг стека (если line не передан)
+        errorMsg += " (строка " + getSyntaxErrorLine(error) + ")";
+      }
       window.parent.postMessage({
         type: "error",
-        message: "Ошибка: " + msg + " (строка " + line + ")"
+        message: errorMsg
       }, "*");
       return true;
     };
@@ -155,7 +185,12 @@ function start(userCode: string) {
     try {
       (0, eval)(${encodedCode});
     } catch(e) {
-      console.error("Ошибка выполнения кода: " + e.message);
+      // Подход 1: синтаксическая ошибка (или топ-левел runtime) — парсим stack
+      const lineNum = getSyntaxErrorLine(e);
+      const prefix = (e.name === 'SyntaxError' || e.message.toLowerCase().includes('syntax') || e.message.toLowerCase().includes('unexpected'))
+        ? 'Синтаксическая'
+        : 'Выполнения';
+      console.error(\`❌ \${prefix} ошибка: \${e.message} (строка \${lineNum})\`);
     }
   <\/script>
 </body>
