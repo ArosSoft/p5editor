@@ -20,6 +20,10 @@
             </div>
             <div class="progress-text">{{ progress }}%</div>
           </div>
+          <div class="supabase-status" :class="statusClass">
+            <span class="status-indicator"></span>
+            <span class="status-text">{{ statusText }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -28,12 +32,33 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { supabase } from '../lib/supabase'
 
 const props = defineProps<{
   visible: boolean
 }>()
 
 const progress = ref(0)
+const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
+const avgResponseTime = ref<number | null>(null)
+
+const statusClass = computed(() => ({
+  'status-checking': supabaseStatus.value === 'checking',
+  'status-connected': supabaseStatus.value === 'connected',
+  'status-error': supabaseStatus.value === 'error'
+}))
+
+const statusText = computed(() => {
+  if (supabaseStatus.value === 'checking') {
+    return 'Проверка Supabase...'
+  } else if (supabaseStatus.value === 'connected') {
+    return avgResponseTime.value 
+      ? `Supabase: подключено (${Math.round(avgResponseTime.value)}мс)` 
+      : 'Supabase: подключено'
+  } else {
+    return 'Supabase: ошибка соединения'
+  }
+})
 
 const jokes = [
   { text: 'Не переживай, если не все работает как надо. Если бы все работало хорошо, то ты бы здесь давно уже не работал.', emoji: '😄' },
@@ -74,9 +99,42 @@ const getRandomJokeIndex = () => {
   return newIndex
 }
 
+// Функция проверки доступности Supabase
+const checkSupabaseConnection = async () => {
+  const startTime = Date.now()
+  try {
+    // Пробуем сделать простой запрос к API
+    const { data, error } = await supabase
+      .from('sketches')
+      .select('id')
+      .limit(1)
+    
+    const responseTime = Date.now() - startTime
+    
+    if (error) {
+      // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
+      if (error.status === 400 || error.status === 401 || error.status === 403) {
+        supabaseStatus.value = 'connected'
+        avgResponseTime.value = responseTime
+      } else {
+        supabaseStatus.value = 'error'
+      }
+    } else {
+      supabaseStatus.value = 'connected'
+      avgResponseTime.value = responseTime
+    }
+  } catch (e) {
+    // Ошибка сети или таймаут
+    supabaseStatus.value = 'error'
+  }
+}
+
 onMounted(() => {
   // Выбираем случайную шутку при монтировании
   currentJokeIndex.value = getRandomJokeIndex()
+
+  // Проверяем соединение с Supabase
+  checkSupabaseConnection()
 
   progressInterval = window.setInterval(() => {
     progress.value = Math.min(progress.value + 5, 100)
@@ -245,6 +303,68 @@ watch(() => props.visible, (newVal) => {
   font-weight: 600;
   min-width: 45px;
   text-align: right;
+}
+
+.supabase-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.status-text {
+  color: #999999;
+  font-weight: 500;
+}
+
+.status-checking .status-indicator {
+  background: #ff9800;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-checking .status-text {
+  color: #ff9800;
+}
+
+.status-connected .status-indicator {
+  background: #42b883;
+  box-shadow: 0 0 8px rgba(66, 184, 131, 0.5);
+}
+
+.status-connected .status-text {
+  color: #42b883;
+}
+
+.status-error .status-indicator {
+  background: #f44336;
+  box-shadow: 0 0 8px rgba(244, 67, 54, 0.5);
+}
+
+.status-error .status-text {
+  color: #f44336;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
 }
 
 /* Transitions */
