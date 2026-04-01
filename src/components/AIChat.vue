@@ -20,18 +20,19 @@ const isTyping = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
 const isDragging = ref(false)
 const startY = ref(0)
-const startHeight = ref(400)
-const chatHeight = ref(400)
+const startHeight = ref(560)
+const chatHeight = ref(560)
 const isMinimized = ref(false)
 
-const DEEPSEEK_API_KEY = 'sk-de29f369b0f44d0081ec017c27daae20'
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
+// Временная заглушка - API отключено
+// const DEEPSEEK_API_KEY = 'sk-de29f369b0f44d0081ec017c27daae20'
+// const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 
 onMounted(() => {
   if (messages.value.length === 0) {
     messages.value.push({
       role: 'assistant',
-      content: '👋 Привет! Я Deepseek AI. Я помогу тебе с p5.js скетчами. Задавай вопросы по коду, графике, анимации или интерактивности!'
+      content: '👋 Привет! Я p5.js помощник. Введите ключевое слово (например, "circle", "rect", "color"), и я найду информацию в справочнике p5.js!'
     })
   }
 })
@@ -52,79 +53,247 @@ function toggleMinimize() {
   isMinimized.value = !isMinimized.value
 }
 
-async function callDeepseekAPI(userMessage: string) {
-  try {
-    const systemPrompt = `Ты - эксперт по p5.js и креативному программированию. 
-    Помогай пользователю с кодом, объясняй концепции, предлагай улучшения.
-    Отвечай кратко, но информативно. Если нужно, показывай примеры кода.
-    
-    ${props.code ? `Текущий код пользователя:\n${props.code}` : ''}
-    
-    Отвечай на русском языке.`
+/**
+ * Поиск информации в справочнике p5js_reference.md
+ * @param keyword - ключевое слово для поиска
+ * @returns найденная информация или сообщение об отсутствии результатов
+ */
+function searchInReference(keyword: string): string {
+  const normalizedKeyword = keyword.toLowerCase().trim()
 
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.value.map(m => ({ 
-            role: m.role === 'user' ? 'user' : 'assistant', 
-            content: m.content 
-          })),
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-        stream: false
-      })
-    })
+  // База данных функций p5.js с описаниями
+  const functions: Array<{ name: string; description: string; section: string }> = [
+    // Environment
+    { name: 'createCanvas(w, h)', description: 'Создаёт холст заданной ширины и высоты', section: 'Environment' },
+    { name: 'setup()', description: 'Вызывается один раз при инициализации программы', section: 'Environment' },
+    { name: 'draw()', description: 'Вызывается непрерывно для отрисовки кадров', section: 'Environment' },
+    { name: 'resizeCanvas(w, h)', description: 'Изменяет размер холста', section: 'Environment' },
+    { name: 'frameRate(fps)', description: 'Устанавливает частоту кадров в секунду', section: 'Environment' },
+    { name: 'width', description: 'Ширина холста (свойство)', section: 'Environment' },
+    { name: 'height', description: 'Высота холста (свойство)', section: 'Environment' },
+    { name: 'windowWidth', description: 'Ширина окна браузера (свойство)', section: 'Environment' },
+    { name: 'windowHeight', description: 'Высота окна браузера (свойство)', section: 'Environment' },
+    { name: 'cursor(type)', description: 'Устанавливает тип курсора', section: 'Environment' },
+    { name: 'noCursor()', description: 'Скрывает курсор', section: 'Environment' },
+    { name: 'background(v1, v2, v3)', description: 'Устанавливает цвет фона', section: 'Environment' },
 
-    if (!response.ok) {
-      throw new Error(`API ошибка: ${response.status}`)
-    }
+    // Color
+    { name: 'color(v1, v2, v3, [a])', description: 'Создаёт цвет из RGB/HSB значений', section: 'Color' },
+    { name: 'red(c)', description: 'Извлекает красную компоненту из цвета', section: 'Color' },
+    { name: 'green(c)', description: 'Извлекает зелёную компоненту из цвета', section: 'Color' },
+    { name: 'blue(c)', description: 'Извлекает синюю компоненту из цвета', section: 'Color' },
+    { name: 'alpha(c)', description: 'Извлекает альфа-канал из цвета', section: 'Color' },
+    { name: 'hue(c)', description: 'Извлекает оттенок (HSB/HSL)', section: 'Color' },
+    { name: 'saturation(c)', description: 'Извлекает насыщенность (HSB/HSL)', section: 'Color' },
+    { name: 'brightness(c)', description: 'Извлекает яркость (HSB)', section: 'Color' },
+    { name: 'lerpColor(c1, c2, amt)', description: 'Интерполирует между двумя цветами', section: 'Color' },
+    { name: 'fill(v1, v2, v3, [a])', description: 'Устанавливает цвет заливки фигур', section: 'Color' },
+    { name: 'noFill()', description: 'Отключает заливку фигур', section: 'Color' },
+    { name: 'stroke(v1, v2, v3, [a])', description: 'Устанавливает цвет обводки', section: 'Color' },
+    { name: 'noStroke()', description: 'Отключает обводку', section: 'Color' },
+    { name: 'colorMode(mode, [max1], [max2], [max3], [maxA])', description: 'Устанавливает режим цвета (RGB/HSB/HSL)', section: 'Color' },
 
-    const data = await response.json()
-    return data.choices[0].message.content
-  } catch (error) {
-    console.error('Deepseek API error:', error)
-    return '😕 Извини, произошла ошибка при обращении к API. Попробуй еще раз или проверь подключение к интернету.'
+    // Shape
+    { name: 'arc(x, y, w, h, start, stop, [mode])', description: 'Рисует дугу', section: 'Shape' },
+    { name: 'circle(x, y, d)', description: 'Рисует круг', section: 'Shape' },
+    { name: 'ellipse(x, y, w, [h])', description: 'Рисует эллипс', section: 'Shape' },
+    { name: 'line(x1, y1, x2, y2)', description: 'Рисует линию между двумя точками', section: 'Shape' },
+    { name: 'point(x, y, [z])', description: 'Рисует точку', section: 'Shape' },
+    { name: 'quad(x1, y1, x2, y2, x3, y3, x4, y4)', description: 'Рисует четырёхугольник', section: 'Shape' },
+    { name: 'rect(x, y, w, h, [tl, tr, br, bl])', description: 'Рисует прямоугольник', section: 'Shape' },
+    { name: 'square(x, y, s)', description: 'Рисует квадрат', section: 'Shape' },
+    { name: 'triangle(x1, y1, x2, y2, x3, y3)', description: 'Рисует треугольник', section: 'Shape' },
+    { name: 'bezier(x1, y1, x2, y2, x3, y3, x4, y4)', description: 'Рисует кривую Безье', section: 'Shape' },
+    { name: 'curve(x1, y1, x2, y2, x3, y3, x4, y4)', description: 'Рисует сплайн-кривую', section: 'Shape' },
+    { name: 'beginShape([kind])', description: 'Начинает определение сложной формы', section: 'Shape' },
+    { name: 'endShape([mode])', description: 'Завершает определение формы', section: 'Shape' },
+    { name: 'vertex(x, y, [z], [u], [v])', description: 'Добавляет вершину к форме', section: 'Shape' },
+    { name: 'box([width], [height], [depth], [detail])', description: 'Рисует коробку (3D)', section: 'Shape' },
+    { name: 'sphere([radius], [detailX], [detailY])', description: 'Рисует сферу (3D)', section: 'Shape' },
+
+    // Math
+    { name: 'abs(n)', description: 'Возвращает абсолютное значение', section: 'Math' },
+    { name: 'ceil(n)', description: 'Округляет вверх до ближайшего целого', section: 'Math' },
+    { name: 'constrain(n, low, high)', description: 'Ограничивает число диапазоном', section: 'Math' },
+    { name: 'dist(x1, y1, x2, y2)', description: 'Вычисляет расстояние между точками', section: 'Math' },
+    { name: 'floor(n)', description: 'Округляет вниз до ближайшего целого', section: 'Math' },
+    { name: 'lerp(start, stop, amt)', description: 'Линейная интерполяция', section: 'Math' },
+    { name: 'mag(x, y)', description: 'Длина вектора (магнитуда)', section: 'Math' },
+    { name: 'max(n1, n2, n3, ...)', description: 'Максимальное значение', section: 'Math' },
+    { name: 'min(n1, n2, n3, ...)', description: 'Минимальное значение', section: 'Math' },
+    { name: 'pow(n, exponent)', description: 'Возведение в степень', section: 'Math' },
+    { name: 'round(n)', description: 'Округление до ближайшего целого', section: 'Math' },
+    { name: 'sqrt(n)', description: 'Квадратный корень', section: 'Math' },
+    { name: 'noise(x, [y], [z])', description: 'Возвращает значение шума Перлина', section: 'Math' },
+    { name: 'random([min], [max])', description: 'Возвращает случайное число', section: 'Math' },
+    { name: 'sin(angle)', description: 'Синус угла', section: 'Math' },
+    { name: 'cos(angle)', description: 'Косинус угла', section: 'Math' },
+    { name: 'tan(angle)', description: 'Тангенс угла', section: 'Math' },
+    { name: 'degrees(radians)', description: 'Конвертирует радианы в градусы', section: 'Math' },
+    { name: 'radians(degrees)', description: 'Конвертирует градусы в радианы', section: 'Math' },
+    { name: 'createVector([x], [y], [z])', description: 'Создаёт новый вектор p5.Vector', section: 'Math' },
+
+    // Input/Events
+    { name: 'keyIsPressed', description: 'true, если любая клавиша нажата', section: 'Input/Events' },
+    { name: 'key', description: 'Значение последней нажатой клавиши', section: 'Input/Events' },
+    { name: 'keyCode', description: 'Код последней нажатой клавиши', section: 'Input/Events' },
+    { name: 'keyPressed()', description: 'Вызывается при нажатии клавиши', section: 'Input/Events' },
+    { name: 'keyReleased()', description: 'Вызывается при отпускании клавиши', section: 'Input/Events' },
+    { name: 'mouseX', description: 'Текущая X-координата мыши на холсте', section: 'Input/Events' },
+    { name: 'mouseY', description: 'Текущая Y-координата мыши на холсте', section: 'Input/Events' },
+    { name: 'pmouseX', description: 'Предыдущая X-координата мыши', section: 'Input/Events' },
+    { name: 'pmouseY', description: 'Предыдущая Y-координата мыши', section: 'Input/Events' },
+    { name: 'mouseIsPressed', description: 'true, если кнопка мыши нажата', section: 'Input/Events' },
+    { name: 'mouseButton', description: 'Какая кнопка мыши нажата (LEFT/RIGHT/CENTER)', section: 'Input/Events' },
+    { name: 'mousePressed()', description: 'Вызывается при нажатии кнопки мыши', section: 'Input/Events' },
+    { name: 'mouseReleased()', description: 'Вызывается при отпускании кнопки мыши', section: 'Input/Events' },
+    { name: 'mouseClicked()', description: 'Вызывается при клике мыши', section: 'Input/Events' },
+    { name: 'mouseWheel(event)', description: 'Вызывается при прокрутке колеса', section: 'Input/Events' },
+    { name: 'touches', description: 'Массив активных касаний', section: 'Input/Events' },
+
+    // Image
+    { name: 'loadImage(path, [successCallback])', description: 'Загружает изображение как p5.Image', section: 'Image' },
+    { name: 'image(img, x, y, [w], [h])', description: 'Отрисовывает изображение', section: 'Image' },
+    { name: 'tint(v1, v2, v3, [a])', description: 'Устанавливает тонирование для изображений', section: 'Image' },
+    { name: 'noTint()', description: 'Отключает тонирование', section: 'Image' },
+    { name: 'filter(mode, [param])', description: 'Применяет фильтр к изображению/холсту', section: 'Image' },
+    { name: 'saveCanvas([selectedCanvas], [filename], [extension])', description: 'Сохраняет холст как изображение', section: 'Image' },
+
+    // Typography
+    { name: 'text(str, x, y, [w], [h])', description: 'Рисует текст на холсте', section: 'Typography' },
+    { name: 'textAlign([horizontal], [vertical])', description: 'Устанавливает выравнивание текста', section: 'Typography' },
+    { name: 'textSize(size)', description: 'Устанавливает размер шрифта', section: 'Typography' },
+    { name: 'textStyle(style)', description: 'Устанавливает стиль текста (NORMAL/BOLD/ITALIC)', section: 'Typography' },
+    { name: 'textWidth(str)', description: 'Вычисляет ширину текста', section: 'Typography' },
+    { name: 'loadFont(path, [successCallback])', description: 'Загружает шрифт как p5.Font', section: 'Typography' },
+    { name: 'textFont(font, [size])', description: 'Устанавливает шрифт для текста', section: 'Typography' },
+
+    // Transform
+    { name: 'push()', description: 'Сохраняет текущие настройки стиля и трансформации', section: 'Transform' },
+    { name: 'pop()', description: 'Восстанавливает последние сохранённые настройки', section: 'Transform' },
+    { name: 'translate(x, [y], [z])', description: 'Перемещает начало координат', section: 'Transform' },
+    { name: 'rotate(angle)', description: 'Поворачивает холст вокруг начала координат', section: 'Transform' },
+    { name: 'scale(s, [y], [z])', description: 'Масштабирует холст', section: 'Transform' },
+    { name: 'rotateX(angle)', description: 'Поворачивает вокруг оси X (3D)', section: 'Transform' },
+    { name: 'rotateY(angle)', description: 'Поворачивает вокруг оси Y (3D)', section: 'Transform' },
+
+    // Lights & Camera
+    { name: 'lights()', description: 'Включает стандартное освещение', section: 'Lights & Camera' },
+    { name: 'ambientLight(r, g, b)', description: 'Добавляет окружающий свет', section: 'Lights & Camera' },
+    { name: 'directionalLight(r, g, b, nx, ny, nz)', description: 'Добавляет направленный свет', section: 'Lights & Camera' },
+    { name: 'pointLight(r, g, b, x, y, z)', description: 'Добавляет точечный источник света', section: 'Lights & Camera' },
+    { name: 'specularMaterial(r, g, b)', description: 'Устанавливает зеркальный материал', section: 'Lights & Camera' },
+    { name: 'shininess(n)', description: 'Устанавливает блеск материала', section: 'Lights & Camera' },
+    { name: 'orbitControl()', description: 'Включает управление камерой мышью', section: 'Lights & Camera' },
+    { name: 'camera([x], [y], [z], [cx], [cy], [cz])', description: 'Устанавливает камеру', section: 'Lights & Camera' },
+
+    // DOM
+    { name: 'createDiv([html])', description: 'Создаёт элемент div', section: 'DOM' },
+    { name: 'createButton([label])', description: 'Создаёт кнопку', section: 'DOM' },
+    { name: 'createSlider(min, max, [value], [step])', description: 'Создаёт ползунок', section: 'DOM' },
+    { name: 'createInput([value])', description: 'Создаёт текстовое поле ввода', section: 'DOM' },
+    { name: 'createSelect([multiple])', description: 'Создаёт выпадающий список', section: 'DOM' },
+    { name: 'select(query)', description: 'Находит первый элемент по селектору', section: 'DOM' },
+
+    // Data
+    { name: 'append(array, value)', description: 'Добавляет элемент в конец массива', section: 'Data' },
+    { name: 'concat(array1, array2)', description: 'Объединяет два массива', section: 'Data' },
+    { name: 'reverse(array)', description: 'Переворачивает массив', section: 'Data' },
+    { name: 'shuffle(array)', description: 'Перемешивает массив', section: 'Data' },
+    { name: 'sort(array)', description: 'Сортирует массив', section: 'Data' },
+    { name: 'float(str)', description: 'Преобразует в число с плавающей точкой', section: 'Data' },
+    { name: 'int(str)', description: 'Преобразует в целое число', section: 'Data' },
+    { name: 'str(num)', description: 'Преобразует в строку', section: 'Data' },
+    { name: 'join(array, separator)', description: 'Объединяет массив в строку', section: 'Data' },
+    { name: 'split(str, delimiter)', description: 'Разбивает строку на массив', section: 'Data' },
+    { name: 'trim(str)', description: 'Удаляет пробелы по краям строки', section: 'Data' },
+    { name: 'storeItem(key, value)', description: 'Сохраняет в localStorage', section: 'Data' },
+    { name: 'getItem(key)', description: 'Получает из localStorage', section: 'Data' },
+
+    // IO
+    { name: 'loadJSON(path, [callback])', description: 'Загружает JSON файл', section: 'IO' },
+    { name: 'loadStrings(path, [callback])', description: 'Загружает текстовый файл построчно', section: 'IO' },
+    { name: 'httpGet(path, [data], [callback])', description: 'Выполняет HTTP GET запрос', section: 'IO' },
+    { name: 'httpPost(path, [data], [callback])', description: 'Выполняет HTTP POST запрос', section: 'IO' },
+    { name: 'saveJSON(data, filename)', description: 'Сохраняет JSON файл', section: 'IO' },
+    { name: 'saveStrings(data, filename)', description: 'Сохраняет массив строк в файл', section: 'IO' },
+    { name: 'millis()', description: 'Возвращает миллисекунды с начала программы', section: 'IO' },
+    { name: 'year()', description: 'Возвращает текущий год', section: 'IO' },
+    { name: 'month()', description: 'Возвращает текущий месяц', section: 'IO' },
+    { name: 'day()', description: 'Возвращает текущий день', section: 'IO' },
+    { name: 'hour()', description: 'Возвращает текущий час', section: 'IO' },
+    { name: 'minute()', description: 'Возвращает текущую минуту', section: 'IO' },
+    { name: 'second()', description: 'Возвращает текущую секунду', section: 'IO' }
+  ]
+
+  // Поиск функций по ключевому слову
+  const matchedFunctions = functions.filter(fn => {
+    const fnNameClean = fn.name.split('(')[0] || ''
+    return fn.name.toLowerCase().includes(normalizedKeyword) || 
+           normalizedKeyword.includes(fnNameClean.toLowerCase())
+  })
+
+  if (matchedFunctions.length === 0) {
+    return `❌ По запросу "${keyword}" ничего не найдено.\n\nПопробуйте ввести название функции p5.js (например, "circle", "rect", "color", "noise" и т.д.)`
   }
+
+  // Формирование ответа
+  let response = `📚 **Найдено функций: ${matchedFunctions.length}**\n---\n`
+
+  matchedFunctions.forEach(fn => {
+    response += `**${fn.name}** — ${fn.description}\n`
+  })
+
+  return response
+}
+
+/**
+ * Парсинг Markdown в HTML
+ */
+function parseMarkdown(text: string): string {
+  let html = text
+    // Экранирование HTML
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Жирный текст
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Курсив
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Заголовки
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Разделитель
+    .replace(/^---$/gm, '<hr>')
+    // Переносы строк
+    .replace(/\n/g, '<br>')
+  
+  return html
 }
 
 async function sendMessage() {
   if (!inputMessage.value.trim()) return
-  
+
   const userMessage = inputMessage.value
-  
+
   messages.value.push({
     role: 'user',
     content: userMessage
   })
-  
+
   inputMessage.value = ''
   isTyping.value = true
-  
+
   try {
-    const response = await callDeepseekAPI(userMessage)
-    
+    // Используем локальный поиск вместо API
+    const response = searchInReference(userMessage)
+
     messages.value.push({
       role: 'assistant',
       content: response
     })
-    
-    const codeMatch = response.match(/```(?:javascript|js)?\n([\s\S]*?)```/)
-    if (codeMatch && codeMatch[1]) {
-      const suggestedCode = codeMatch[1].trim()
-      if (confirm('В ответе есть код. Хотите применить его в редакторе?')) {
-        emit('suggestCode', suggestedCode)
-      }
-    }
-    
+
     emit('sendMessage', userMessage)
   } catch (error) {
     console.error('Error sending message:', error)
@@ -215,9 +384,9 @@ function onDrop(event: DragEvent) {
         <!-- Заголовок -->
         <div class="chat-header">
           <div class="header-left">
-            <span class="header-icon">🤖</span>
-            <span class="header-title">Deepseek AI</span>
-            <span class="header-badge">p5.js эксперт</span>
+            <span class="header-icon">📚</span>
+            <span class="header-title">p5.js помощник</span>
+            <span class="header-badge">справочник</span>
           </div>
           <div class="header-controls">
             <button class="control-btn" @click="toggleMinimize" :title="isMinimized ? 'Развернуть' : 'Свернуть'">
@@ -240,8 +409,8 @@ function onDrop(event: DragEvent) {
 
           <!-- Сообщения -->
           <div class="chat-messages" ref="chatContainer">
-            <div 
-              v-for="(msg, index) in messages" 
+            <div
+              v-for="(msg, index) in messages"
               :key="index"
               class="message"
               :class="msg.role"
@@ -250,7 +419,7 @@ function onDrop(event: DragEvent) {
                 {{ msg.role === 'user' ? '👤' : '🤖' }}
               </div>
               <div class="message-content">
-                <div class="message-text" v-html="msg.content.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')"></div>
+                <div class="message-text" v-html="parseMarkdown(msg.content)"></div>
                 <div class="message-time">{{ new Date().toLocaleTimeString() }}</div>
               </div>
             </div>
@@ -273,7 +442,7 @@ function onDrop(event: DragEvent) {
             <textarea
               v-model="inputMessage"
               @keydown="handleKeyDown"
-              placeholder="Спроси Deepseek о p5.js..."
+              placeholder="Введите функцию p5.js (например, circle, rect, color)..."
               rows="1"
             ></textarea>
             <button 
@@ -353,7 +522,7 @@ function onDrop(event: DragEvent) {
 
 /* Окно чата */
 .ai-chat-window {
-  width: 400px;
+  width: 800px;
   background: v-bind('props.theme === "dark" ? "#1e1e1e" : "#ffffff"');
   border-radius: 16px;
   overflow: hidden;
@@ -495,12 +664,37 @@ function onDrop(event: DragEvent) {
 }
 
 .message-text {
-  padding: 10px 15px;
+  padding: 15px 20px;
   background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"');
   border-radius: 18px;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 22px;
+  line-height: 1.6;
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
+}
+
+.message-text strong {
+  color: #646cff;
+  font-weight: 700;
+}
+
+.message-text em {
+  font-style: italic;
+  color: v-bind('props.theme === "dark" ? "#aaa" : "#666"');
+}
+
+.message-text h1, .message-text h2, .message-text h3 {
+  margin: 10px 0;
+  color: #646cff;
+}
+
+.message-text h1 { font-size: 32px; }
+.message-text h2 { font-size: 28px; }
+.message-text h3 { font-size: 24px; }
+
+.message-text hr {
+  border: none;
+  border-top: 2px solid rgba(100, 108, 255, 0.3);
+  margin: 15px 0;
 }
 
 .message.user .message-text {
@@ -508,20 +702,20 @@ function onDrop(event: DragEvent) {
 }
 
 .message-time {
-  font-size: 10px;
+  font-size: 16px;
   opacity: 0.5;
-  margin-top: 4px;
+  margin-top: 8px;
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
 }
 
 .message-text pre {
   background: v-bind('props.theme === "dark" ? "#2d2d2d" : "#f5f5f5"');
-  padding: 10px;
+  padding: 15px;
   border-radius: 8px;
   overflow-x: auto;
-  margin: 10px 0;
+  margin: 15px 0;
   font-family: 'Consolas', monospace;
-  font-size: 12px;
+  font-size: 20px;
 }
 
 .message-text code {
@@ -558,24 +752,24 @@ function onDrop(event: DragEvent) {
 
 /* Поле ввода */
 .chat-input-area {
-  padding: 15px;
+  padding: 20px;
   display: flex;
-  gap: 10px;
+  gap: 15px;
   border-top: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"');
   background: v-bind('props.theme === "dark" ? "#1e1e1e" : "#ffffff"');
 }
 
 .chat-input-area textarea {
   flex: 1;
-  padding: 10px;
+  padding: 15px;
   border-radius: 20px;
   border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"');
   background: v-bind('props.theme === "dark" ? "rgba(0, 0, 0, 0.2)" : "rgba(0, 0, 0, 0.05)"');
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
   resize: none;
   font-family: inherit;
-  font-size: 13px;
-  max-height: 100px;
+  font-size: 22px;
+  max-height: 200px;
 }
 
 .chat-input-area textarea:focus {

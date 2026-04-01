@@ -102,7 +102,7 @@ function updateMouseCoordinates(x: number, y: number) {
 }
 
 function handleAIMessage(message: string) {
-  addMessage(`🤖 AI запрос: ${message}`)
+  // Сообщение от помощника не выводится в консоль
 }
 
 // === Обработчики для изменения размера консоли ===
@@ -673,7 +673,7 @@ function getTooltipText(item: string): string {
   const tooltips: Record<string, string> = {
     'save': 'Сохранить скетч (Ctrl+S)',
     'load': 'Загрузить скетч',
-    'ai': 'Deepseek AI помощник',
+    'ai': 'p5.js помощник (справочник)',
     'font-up': 'Увеличить шрифт',
     'font-down': 'Уменьшить шрифт',
     'undo': 'Отмена (Ctrl+Z)',
@@ -854,10 +854,10 @@ function navigateToDashboard() {
           <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
         </button>
 
-        <button @click="showAIChat = true" class="menu-item" title="Deepseek AI помощник"
+        <button @click="showAIChat = true" class="menu-item" title="p5.js помощник (справочник)"
                 @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
-          <span class="menu-icon">🤖</span>
-          <span class="menu-text" v-show="isMenuExpanded">AI помощник</span>
+          <span class="menu-icon">📚</span>
+          <span class="menu-text" v-show="isMenuExpanded">Справочник</span>
         </button>
 
         <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
