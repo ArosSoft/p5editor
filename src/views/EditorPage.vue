@@ -185,11 +185,6 @@ function stopDividerDrag() {
 
 function toggleConsole() {
   isConsoleVisible.value = !isConsoleVisible.value
-  if (isConsoleVisible.value) {
-    addMessage('📋 Консоль показана')
-  } else {
-    addMessage('📋 Консоль скрыта')
-  }
 }
 
 // Вычисляемая ширина редактора
@@ -898,7 +893,7 @@ function navigateToDashboard() {
 
         <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
                 @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
-          <span class="menu-icon">{{ isConsoleVisible ? '📋' : '📭' }}</span>
+          <span class="menu-icon">{{ isConsoleVisible ? '📟' : '📭' }}</span>
           <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
         </button>
 

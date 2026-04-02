@@ -108,12 +108,13 @@ const checkSupabaseConnection = async () => {
       .from('sketches')
       .select('id')
       .limit(1)
-    
+
     const responseTime = Date.now() - startTime
-    
+
     if (error) {
       // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
-      if (error.status === 400 || error.status === 401 || error.status === 403) {
+      // PostgrestError имеет свойства: code, details, hint, message
+      if (error.code && ['400', '401', '403'].includes(error.code)) {
         supabaseStatus.value = 'connected'
         avgResponseTime.value = responseTime
       } else {
