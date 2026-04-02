@@ -177,74 +177,78 @@ function validateForm(): boolean {
 
 // Отправка формы
 async function submitSketch() {
-  if (!validateForm()) {
-    return
-  }
-
+  if (!validateForm()) return
   if (!user.value || !profile.value) {
     alert('Ошибка авторизации. Пожалуйста, войдите в систему.')
     return
   }
 
   isSubmitting.value = true
+  formErrors.value = {}
 
-  try {
-    let thumbnailUrl: string | null = null
+  let thumbnailUrl: string | null = null
 
-    // Загрузка thumbnail в Storage с таймаутом
-    if (thumbnailFile.value) {
-      try {
-        const uploadResult = await uploadFile(thumbnailFile.value, 'thumbnails')
-        if (uploadResult.success && uploadResult.url) {
-          thumbnailUrl = uploadResult.url
-        } else if (uploadResult.error) {
-          console.warn('Thumbnail не загрузился, но продолжаем без него:', uploadResult.error)
-        }
-      } catch (uploadError) {
-        console.warn('Ошибка загрузки thumbnail, продолжаем без него:', uploadError)
+  // === 1. Пытаемся загрузить thumbnail с коротким таймаутом ===
+  if (thumbnailFile.value) {
+    try {
+      console.log('[SharePage] Начинаем загрузку thumbnail...')
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Таймаут загрузки миниатюры')), 18000) // 18 секунд
+      })
+
+      const uploadPromise = uploadFile(thumbnailFile.value, 'thumbnails')
+
+      const uploadResult = await Promise.race([uploadPromise, timeoutPromise])
+
+      if (uploadResult.success && uploadResult.url) {
+        thumbnailUrl = uploadResult.url
+        console.log('[SharePage] Thumbnail успешно загружен:', thumbnailUrl)
+      } else {
+        console.warn('[SharePage] Не удалось загрузить thumbnail:', uploadResult.error)
       }
+    } catch (err: any) {
+      console.warn('[SharePage] Ошибка/таймаут при загрузке thumbnail:', err.message)
+      // Продолжаем без миниатюры — это не критично
     }
+  }
 
-    // Парсинг тегов
-    const tagsArray = tags.value
-      .split(',')
-      .map(t => t.trim())
-      .filter(t => t.length > 0)
-      .slice(0, 10) // Максимум 10 тегов
-
-    // Создание скетча в Supabase
+  // === 2. Создаём скетч (даже если thumbnail не загрузился) ===
+  try {
     const result = await createSketch({
       user_id: user.value.id,
       title: title.value.trim(),
       description: description.value.trim(),
       code: sharedCode.value,
       thumbnail_url: thumbnailUrl,
-      tags: tagsArray,
+      tags: tags.value
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean)
+        .slice(0, 10),
       category: category.value,
       difficulty: difficulty.value,
-      status: 'pending' // По умолчанию на модерации
+      status: 'pending'
     })
 
     if (result.success) {
       submitSuccess.value = true
-
-      // Очистка только временных данных (thumbnail)
-      // Код и название оставляем для возможности возврата в редактор
+      // Очищаем временные данные
       localStorage.removeItem('p5editor_canvas_snapshot')
 
-      // Перенаправление через 2 секунды
+      addMessage('✅ Скетч успешно отправлен на модерацию!')
+      
       setTimeout(() => {
         router.push('/explore')
       }, 2000)
     } else {
-      isSubmitting.value = false
-      alert(`Ошибка при сохранении: ${result.error}`)
+      throw new Error(result.error || 'Неизвестная ошибка сервера')
     }
-  } catch (error) {
-    console.error('Submit error:', error)
+  } catch (err: any) {
+    console.error('[SharePage] Ошибка создания скетча:', err)
+    alert(`Не удалось опубликовать скетч:\n${err.message}`)
+  } finally {
     isSubmitting.value = false
-    const errorMessage = error instanceof Error ? error.message : 'Произошла ошибка при публикации скетча'
-    alert(errorMessage)
   }
 }
 

@@ -25,11 +25,25 @@ const isDeleting = ref(false)
 // Загрузка скетча
 onMounted(async () => {
   const id = route.params.id as string
-  
+
   // Сохраняем предыдущий маршрут для возврата после удаления
   // Используем sessionStorage чтобы сохранить между переходами
   const savedPreviousRoute = sessionStorage.getItem('sketch_previous_route')
-  previousRoute.value = savedPreviousRoute || document.referrer
+  const referrer = document.referrer
+  
+  // Извлекаем только путь из полного URL
+  if (savedPreviousRoute) {
+    previousRoute.value = savedPreviousRoute
+  } else if (referrer) {
+    try {
+      const url = new URL(referrer)
+      previousRoute.value = url.pathname + url.hash
+    } catch {
+      previousRoute.value = referrer
+    }
+  } else {
+    previousRoute.value = ''
+  }
 
   const result = await getSketchById(id)
 
