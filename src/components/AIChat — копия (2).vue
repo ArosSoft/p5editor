@@ -24,7 +24,6 @@ const startY = ref(0)
 const startHeight = ref(560)
 const chatHeight = ref(560)
 const isMinimized = ref(false)
-const typingInterval = ref<number | null>(null)
 
 // Временная заглушка - API отключено
 // const DEEPSEEK_API_KEY = 'sk-de29f369b0f44d0081ec017c27daae20'
@@ -275,7 +274,7 @@ function searchInReference(query: string): string {
   let response = `📚 **Найдено функций: ${matchedFunctions.length}**\n`
   response += `🔍 **Запрос:** "${query}"\n---\n`
 
-  matchedFunctions.forEach((fn, index) => {
+  matchedFunctions.forEach(fn => {
     // Подсвечиваем совпавшие слова в описании
     let highlightedDesc = fn.description
     fn.matchedWords.forEach(word => {
@@ -290,11 +289,6 @@ function searchInReference(query: string): string {
     const example = P5_EXAMPLES[fnNameClean as keyof typeof P5_EXAMPLES]
     if (example) {
       response += `\`\`\`javascript\n${example}\n\`\`\`\n`
-    }
-
-    // Добавляем тонкую горизонтальную черту между функциями (но не после последней)
-    if (index < matchedFunctions.length - 1) {
-      response += `---\n`
     }
   })
 
@@ -328,46 +322,6 @@ function parseMarkdown(text: string): string {
   return html
 }
 
-/**
- * Эффект печатающей машинки для вывода текста
- */
-function typeWriterEffect(text: string, messageIndex: number, speed: number = 10): Promise<void> {
-  return new Promise((resolve) => {
-    let index = 0
-    const message = messages.value[messageIndex]
-    if (!message) {
-      resolve()
-      return
-    }
-    message.content = ''
-    
-    typingInterval.value = window.setInterval(() => {
-      if (index < text.length) {
-        // Добавляем по одному символу
-        const msg = messages.value[messageIndex]
-        if (msg) {
-          msg.content = text.substring(0, index + 1)
-        }
-        index++
-        
-        // Прокручиваем вниз при каждом символе
-        nextTick(() => {
-          if (chatContainer.value) {
-            chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-          }
-        })
-      } else {
-        // Завершаем печать
-        if (typingInterval.value) {
-          clearInterval(typingInterval.value)
-          typingInterval.value = null
-        }
-        resolve()
-      }
-    }, speed)
-  })
-}
-
 async function sendMessage() {
   if (!inputMessage.value.trim()) return
 
@@ -385,16 +339,11 @@ async function sendMessage() {
     // Используем локальный поиск вместо API
     const response = searchInReference(userMessage)
 
-    // Создаём пустое сообщение для ассистента
-    const assistantMessageIndex = messages.value.length
     messages.value.push({
       role: 'assistant',
-      content: ''
+      content: response
     })
 
-    // Запускаем эффект печатающей машинки
-    await typeWriterEffect(response, assistantMessageIndex, 8)
-    
     emit('sendMessage', userMessage)
   } catch (error) {
     console.error('Error sending message:', error)
@@ -404,10 +353,6 @@ async function sendMessage() {
     })
   } finally {
     isTyping.value = false
-    if (typingInterval.value) {
-      clearInterval(typingInterval.value)
-      typingInterval.value = null
-    }
   }
 }
 
@@ -444,11 +389,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('mousemove', onResize)
   window.removeEventListener('mouseup', stopResize)
-  // Очищаем интервал печатающей машинки
-  if (typingInterval.value) {
-    clearInterval(typingInterval.value)
-    typingInterval.value = null
-  }
 })
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -552,7 +492,7 @@ function onDrop(event: DragEvent) {
             <textarea
               v-model="inputMessage"
               @keydown="handleKeyDown"
-              placeholder="Введите любое слово (например, circle, rect, color, цвет)"
+              placeholder="Введите функцию p5.js (например, circle, rect, color)..."
               rows="1"
             ></textarea>
             <button 
