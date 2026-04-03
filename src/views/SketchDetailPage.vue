@@ -191,6 +191,28 @@ function formatDate(dateStr: string) {
   })
 }
 
+// Копировать ссылку на скетч в буфер обмена
+async function copySketchLink() {
+  if (!sketch.value) return
+  
+  const baseUrl = window.location.origin + window.location.pathname
+  const sketchUrl = `${baseUrl}#/sketch/${sketch.value.id}`
+
+  try {
+    await navigator.clipboard.writeText(sketchUrl)
+    alert('✅ Ссылка скопирована в буфер обмена')
+  } catch (err) {
+    // Fallback для старых браузеров
+    const textarea = document.createElement('textarea')
+    textarea.value = sketchUrl
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    alert('✅ Ссылка скопирована в буфер обмена')
+  }
+}
+
 // Вычисляемые
 const authorName = computed(() => {
   if (!sketch.value) return ''
@@ -341,6 +363,12 @@ const authorAvatar = computed(() => {
               :class="{ 'liked': hasLiked }"
             >
               {{ hasLiked ? '❤️' : '🤍' }} {{ hasLiked ? 'Понравилось!' : 'Лайк' }}
+            </button>
+            <button
+              @click="copySketchLink"
+              class="action-btn share-btn"
+            >
+              🔗 Поделиться
             </button>
             <button
               v-if="isAuthenticated && user && sketch.user_id === user.id"
@@ -720,6 +748,17 @@ const authorAvatar = computed(() => {
 
 .copy-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.share-btn {
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  color: #667eea;
+}
+
+.share-btn:hover {
+  background: rgba(102, 126, 234, 0.3);
+  transform: scale(1.02);
 }
 
 .delete-btn {
