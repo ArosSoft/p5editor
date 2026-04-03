@@ -1,4 +1,4 @@
-import{d as K,P as Q,o as N,w as Z,a as ee,b as y,i as te,e as t,n as b,c as S,t as T,F as Y,h as ne,g as D,p as F,q as ie,v as ae,C as se,l as oe,r as c,M as X,_ as re}from"./index-ml9QLuNs.js";const ce={createCanvas:`createCanvas(800, 600); // Создаёт холст 800x600
+import{d as K,P as Q,o as N,w as Z,a as ee,b as y,i as te,e as t,n as b,c as S,t as T,F as Y,h as ne,g as D,p as F,q as ie,v as ae,C as se,l as oe,r as c,M as X,_ as re}from"./index-BrxCHfpC.js";const ce={createCanvas:`createCanvas(800, 600); // Создаёт холст 800x600
 createCanvas(windowWidth, windowHeight); // На весь экран
 createCanvas(400, 400, WEBGL); // 3D режим`,setup:`function setup() {
   createCanvas(800, 600);
