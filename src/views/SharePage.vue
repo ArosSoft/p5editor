@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useSketches } from '../composables/useSketches'
 import { useStorage } from '../composables/useStorage'
+import { supabase } from '../lib/supabase'
 
 const router = useRouter()
 const { user, profile, isAuthenticated, isReady, readyPromise } = useAuth()
@@ -26,6 +27,103 @@ const thumbnailFile = ref<File | null>(null)
 const isSubmitting = ref(false)
 const submitSuccess = ref(false)
 const formErrors = ref<Record<string, string>>({})
+
+// Состояние проверки подключения к Supabase
+const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
+const supabaseResponseTime = ref<number | null>(null)
+const isCheckingConnection = ref(false)
+const isComponentMounted = ref(true)
+
+// Вычисляемые свойства для отображения статуса
+const supabaseStatusClass = computed(() => ({
+  'status-checking': supabaseStatus.value === 'checking',
+  'status-connected': supabaseStatus.value === 'connected',
+  'status-error': supabaseStatus.value === 'error'
+}))
+
+const supabaseStatusText = computed(() => {
+  if (supabaseStatus.value === 'checking') {
+    return 'Проверка Supabase...'
+  } else if (supabaseStatus.value === 'connected') {
+    return supabaseResponseTime.value
+      ? `Supabase: подключено (${Math.round(supabaseResponseTime.value)}мс)`
+      : 'Supabase: подключено'
+  } else {
+    return 'Supabase: ошибка соединения'
+  }
+})
+
+// Функция проверки доступности Supabase
+const checkSupabaseConnection = async () => {
+  // Если уже идёт проверка, не запускаем новую
+  if (isCheckingConnection.value) {
+    addMessage('⏳ Проверка уже выполняется...')
+    return
+  }
+
+  isCheckingConnection.value = true
+  supabaseStatus.value = 'checking'
+  
+  const startTime = Date.now()
+  
+  // Создаём собственный AbortController для этого запроса
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => {
+    abortController.abort()
+    addMessage('⏰ Таймаут проверки подключения (5с)')
+  }, 5000)
+  
+  try {
+    // Используем .abortSignal() для передачи нашего signal
+    const { data, error } = await supabase
+      .from('sketches')
+      .select('id')
+      .limit(1)
+      .abortSignal(abortController.signal)
+
+    clearTimeout(timeoutId)
+    
+    // Проверяем, что компонент всё ещё примонтирован перед обновлением UI
+    if (!isComponentMounted.value) return
+
+    const responseTime = Date.now() - startTime
+
+    if (error) {
+      // Если запрос был отменён (таймаут)
+      if (error.message?.includes('abort') || error.message?.includes('Abort')) {
+        supabaseStatus.value = 'error'
+        addMessage('❌ Таймаут соединения с Supabase')
+      }
+      // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
+      else if (error.code && ['400', '401', '403'].includes(error.code)) {
+        supabaseStatus.value = 'connected'
+        supabaseResponseTime.value = responseTime
+        addMessage(`✅ Supabase подключён (${responseTime}мс)`)
+      } else {
+        supabaseStatus.value = 'error'
+        addMessage(`❌ Ошибка Supabase: ${error.message}`)
+      }
+    } else {
+      supabaseStatus.value = 'connected'
+      supabaseResponseTime.value = responseTime
+      addMessage(`✅ Supabase подключён (${responseTime}мс)`)
+    }
+  } catch (e: any) {
+    clearTimeout(timeoutId)
+    
+    // Проверяем, что компонент всё ещё примонтирован перед обновлением UI
+    if (!isComponentMounted.value) return
+    
+    // Ошибка сети или таймаут
+    supabaseStatus.value = 'error'
+    addMessage(`❌ Ошибка соединения с Supabase: ${e.message}`)
+  } finally {
+    clearTimeout(timeoutId)
+    if (isComponentMounted.value) {
+      isCheckingConnection.value = false
+    }
+  }
+}
 
 // Категории
 const categories = [
@@ -74,6 +172,14 @@ onMounted(async () => {
       })
       .catch(() => {})
   }
+
+  // Проверяем подключение к Supabase
+  await checkSupabaseConnection()
+})
+
+// Очистка при уничтожении компонента
+onUnmounted(() => {
+  isComponentMounted.value = false
 })
 
 // Получение кода и названия из localStorage (для предпросмотра)
@@ -180,6 +286,17 @@ async function submitSketch() {
   if (!validateForm()) return
   if (!user.value || !profile.value) {
     alert('Ошибка авторизации. Пожалуйста, войдите в систему.')
+    return
+  }
+
+  // Проверяем подключение к Supabase перед отправкой
+  if (supabaseStatus.value !== 'connected') {
+    addMessage('🔄 Выполняется проверка подключения к Supabase...')
+    await checkSupabaseConnection()
+  }
+
+  if (supabaseStatus.value !== 'connected') {
+    alert('Не удалось подключиться к Supabase. Проверьте соединение и попробуйте снова.')
     return
   }
 
@@ -293,6 +410,23 @@ function goBack() {
         </header>
 
         <div class="form-container">
+          <!-- Статус подключения к Supabase -->
+          <div class="form-section">
+            <h2 class="section-title">🔌 Подключение к серверу</h2>
+            <div class="supabase-status" :class="supabaseStatusClass">
+              <span class="status-indicator"></span>
+              <span class="status-text">{{ supabaseStatusText }}</span>
+              <button 
+                v-if="supabaseStatus !== 'checking'" 
+                @click="checkSupabaseConnection" 
+                class="refresh-status-btn"
+                :disabled="isCheckingConnection"
+              >
+                🔄 Обновить
+              </button>
+            </div>
+          </div>
+
           <!-- Основная информация -->
           <div class="form-section">
             <h2 class="section-title">📝 Основная информация</h2>
@@ -422,9 +556,9 @@ function goBack() {
             <button
               @click="submitSketch"
               class="submit-btn"
-              :disabled="isSubmitting || uploading || !title || !description"
+              :disabled="isSubmitting || uploading || isCheckingConnection || supabaseStatus !== 'connected' || !title || !description"
             >
-              {{ isSubmitting ? '⏳ Отправка...' : uploading ? '⏳ Загрузка...' : '🚀 Опубликовать' }}
+              {{ isSubmitting ? '⏳ Отправка...' : uploading ? '⏳ Загрузка...' : isCheckingConnection ? '🔌 Проверка...' : supabaseStatus !== 'connected' ? '🔌 Нет подключения' : '🚀 Опубликовать' }}
             </button>
           </div>
         </div>
@@ -796,6 +930,107 @@ function goBack() {
 .no-code .hint {
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* Статус подключения */
+.supabase-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  flex-wrap: wrap;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.status-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+  flex: 1;
+}
+
+.status-checking {
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.status-checking .status-indicator {
+  background: #ff9800;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-checking .status-text {
+  color: #ff9800;
+}
+
+.status-connected {
+  background: rgba(66, 184, 131, 0.1);
+  border: 1px solid rgba(66, 184, 131, 0.3);
+}
+
+.status-connected .status-indicator {
+  background: #42b883;
+  box-shadow: 0 0 8px rgba(66, 184, 131, 0.5);
+}
+
+.status-connected .status-text {
+  color: #42b883;
+}
+
+.status-error {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.status-error .status-indicator {
+  background: #f44336;
+  box-shadow: 0 0 8px rgba(244, 67, 54, 0.5);
+}
+
+.status-error .status-text {
+  color: #f44336;
+}
+
+.refresh-status-btn {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.refresh-status-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.refresh-status-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
 }
 
 /* Кнопки действий */

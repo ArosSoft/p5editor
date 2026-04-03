@@ -11,7 +11,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Создаем кастомный fetch с таймаутом для работы на медленном соединении
 const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   const controller = new AbortController()
-  const timeout = setTimeout(() => {
+  
+  // Если передан внешний signal, используем его для отмены
+  // Иначе создаём свой таймаут на 60 секунд
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  
+  if (init?.signal) {
+    // Если есть внешний signal, просто передаём его
+    // и не создаём свой таймаут
+    const fetchInit: RequestInit = {
+      ...init,
+      signal: init.signal
+    }
+
+    return fetch(input, fetchInit)
+  }
+  
+  // Если нет внешнего signal, используем свой таймаут
+  timeout = setTimeout(() => {
     controller.abort()
   }, 60000) // 60 секунд таймаут на любой запрос
 
@@ -21,7 +38,9 @@ const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   }
 
   return fetch(input, fetchInit).finally(() => {
-    clearTimeout(timeout)
+    if (timeout) {
+      clearTimeout(timeout)
+    }
   })
 }
 

@@ -30,14 +30,19 @@ onMounted(async () => {
   // Используем sessionStorage чтобы сохранить между переходами
   const savedPreviousRoute = sessionStorage.getItem('sketch_previous_route')
   const referrer = document.referrer
-  
+
   // Извлекаем только путь из полного URL
   if (savedPreviousRoute) {
     previousRoute.value = savedPreviousRoute
   } else if (referrer) {
     try {
       const url = new URL(referrer)
-      previousRoute.value = url.pathname + url.hash
+      // Для hash-режима извлекаем путь после #
+      if (url.hash && url.hash.startsWith('#')) {
+        previousRoute.value = url.hash.substring(1) // Убираем '#'
+      } else {
+        previousRoute.value = url.pathname
+      }
     } catch {
       previousRoute.value = referrer
     }
