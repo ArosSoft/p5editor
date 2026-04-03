@@ -66,21 +66,25 @@ const checkSupabaseConnection = async () => {
   
   const startTime = Date.now()
   
-  // Создаём собственный AbortController для этого запроса
-  const abortController = new AbortController()
-  const timeoutId = setTimeout(() => {
-    abortController.abort()
-    addMessage('⏰ Таймаут проверки подключения (5с)')
-  }, 5000)
-  
   try {
-    // Используем .abortSignal() для передачи нашего signal
-    const { data, error } = await supabase
-      .from('sketches')
-      .select('id')
-      .limit(1)
-      .abortSignal(abortController.signal)
-
+    // Используем нативный fetch с таймаутом для проверки подключения
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
+    // Простой запрос к Supabase REST API
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL || 'https://gfupycrmnegbcafuoxdx.supabase.co'}/rest/v1/sketches?select=id&limit=1`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_9Yrru1vT4XDUZPY3_sm1XQ_j0YIdHLy',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_9Yrru1vT4XDUZPY3_sm1XQ_j0YIdHLy'}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      }
+    )
+    
     clearTimeout(timeoutId)
     
     // Проверяем, что компонент всё ещё примонтирован перед обновлением UI
@@ -88,37 +92,24 @@ const checkSupabaseConnection = async () => {
 
     const responseTime = Date.now() - startTime
 
-    if (error) {
-      // Если запрос был отменён (таймаут)
-      if (error.message?.includes('abort') || error.message?.includes('Abort')) {
-        supabaseStatus.value = 'error'
-        addMessage('❌ Таймаут соединения с Supabase')
-      }
-      // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
-      else if (error.code && ['400', '401', '403'].includes(error.code)) {
-        supabaseStatus.value = 'connected'
-        supabaseResponseTime.value = responseTime
-        addMessage(`✅ Supabase подключён (${responseTime}мс)`)
-      } else {
-        supabaseStatus.value = 'error'
-        addMessage(`❌ Ошибка Supabase: ${error.message}`)
-      }
-    } else {
+    // Если ответ 200 или 401/403 - соединение есть
+    if (response.ok || response.status === 401 || response.status === 403) {
       supabaseStatus.value = 'connected'
       supabaseResponseTime.value = responseTime
       addMessage(`✅ Supabase подключён (${responseTime}мс)`)
+    } else {
+      supabaseStatus.value = 'error'
+      addMessage(`❌ Ошибка Supabase: ${response.status} ${response.statusText}`)
     }
   } catch (e: any) {
-    clearTimeout(timeoutId)
-    
     // Проверяем, что компонент всё ещё примонтирован перед обновлением UI
     if (!isComponentMounted.value) return
     
     // Ошибка сети или таймаут
     supabaseStatus.value = 'error'
-    addMessage(`❌ Ошибка соединения с Supabase: ${e.message}`)
+    const errorMsg = e.name === 'AbortError' ? 'Таймаут соединения (5с)' : e.message
+    addMessage(`❌ Ошибка соединения с Supabase: ${errorMsg}`)
   } finally {
-    clearTimeout(timeoutId)
     if (isComponentMounted.value) {
       isCheckingConnection.value = false
     }
