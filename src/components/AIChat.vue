@@ -2,6 +2,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { P5_EXAMPLES } from '../lib/p5-examples'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Настройка worker для PDF.js - используем локальный файл
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 const props = defineProps<{
   theme?: 'dark' | 'light'
@@ -14,6 +19,19 @@ const emit = defineEmits<{
   (e: 'sendMessage', message: string): void
   (e: 'suggestCode', code: string): void
 }>()
+
+type TabType = 'chat' | 'pdf'
+const activeTab = ref<TabType>('chat')
+
+// PDF viewer state
+const pdfCanvas = ref<HTMLCanvasElement | null>(null)
+const pdfLoading = ref(false)
+const pdfError = ref('')
+const pdfPageNum = ref(1)
+const pdfTotalPages = ref(0)
+const pdfScale = 1.5
+const isPdfFullscreen = ref(false)
+let pdfDoc: any = null
 
 const messages = ref<Array<{ role: 'user' | 'assistant', content: string }>>([])
 const inputMessage = ref('')
@@ -53,6 +71,13 @@ function closeChat() {
 
 function toggleMinimize() {
   isMinimized.value = !isMinimized.value
+  
+  // Перерисовываем PDF при разворачивании
+  if (!isMinimized.value && activeTab.value === 'pdf' && pdfDoc) {
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value)
+    })
+  }
 }
 
 /**
@@ -464,6 +489,109 @@ function onDrop(event: DragEvent) {
   if (text) inputMessage.value = text
 }
 
+// PDF Viewer функции
+async function loadPDF() {
+  pdfLoading.value = true
+  pdfError.value = ''
+  
+  try {
+    // Путь к PDF файлу (из папки public)
+    const pdfUrl = '/p5editor/p5/coding_course.pdf'
+    
+    const loadingTask = pdfjsLib.getDocument(pdfUrl)
+    pdfDoc = await loadingTask.promise
+    
+    pdfTotalPages.value = pdfDoc.numPages
+    pdfPageNum.value = 1
+    
+    await renderPDFPage(1)
+  } catch (error: any) {
+    console.error('Error loading PDF:', error)
+    pdfError.value = `Ошибка загрузки PDF: ${error.message || 'неизвестная ошибка'}`
+  } finally {
+    pdfLoading.value = false
+  }
+}
+
+async function renderPDFPage(pageNum: number) {
+  if (!pdfDoc) return
+  
+  try {
+    const page = await pdfDoc.getPage(pageNum)
+    const viewport = page.getViewport({ scale: pdfScale })
+    
+    const canvas = pdfCanvas.value
+    if (!canvas) return
+    
+    const context = canvas.getContext('2d')
+    if (!context) return
+    
+    canvas.height = viewport.height
+    canvas.width = viewport.width
+    
+    const renderContext = {
+      canvasContext: context,
+      viewport: viewport
+    }
+    
+    await page.render(renderContext).promise
+  } catch (error: any) {
+    console.error('Error rendering PDF page:', error)
+    pdfError.value = `Ошибка отображения страницы: ${error.message || 'неизвестная ошибка'}`
+  }
+}
+
+function pdfPrevPage() {
+  if (pdfPageNum.value > 1) {
+    pdfPageNum.value--
+    renderPDFPage(pdfPageNum.value)
+  }
+}
+
+function pdfNextPage() {
+  if (pdfPageNum.value < pdfTotalPages.value) {
+    pdfPageNum.value++
+    renderPDFPage(pdfPageNum.value)
+  }
+}
+
+function togglePdfFullscreen() {
+  isPdfFullscreen.value = !isPdfFullscreen.value
+  
+  if (isPdfFullscreen.value) {
+    // При входе в полноэкранный режим увеличим масштаб
+    setTimeout(() => {
+      renderPDFPage(pdfPageNum.value)
+    }, 100)
+  } else {
+    // При выходе вернем стандартный масштаб
+    setTimeout(() => {
+      renderPDFPage(pdfPageNum.value)
+    }, 100)
+  }
+}
+
+// Загружаем PDF при переключении на вкладку
+watch(activeTab, (newTab) => {
+  if (newTab === 'pdf' && !pdfDoc) {
+    loadPDF()
+  } else if (newTab === 'pdf' && pdfDoc) {
+    // Перерисовываем при переключении обратно на PDF
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value)
+    })
+  }
+})
+
+// Перерисовываем PDF при повторном открытии панели
+watch(() => props.isVisible, (isVisible) => {
+  if (isVisible && activeTab.value === 'pdf' && pdfDoc) {
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value)
+    })
+  }
+})
+
 </script>
 
 <template>
@@ -479,12 +607,11 @@ function onDrop(event: DragEvent) {
       <span class="ai-pulse"></span>
     </button>
 
-    <!-- Окно чата (БЕЗ РАЗМЫТИЯ ФОНА) -->
-    <div 
+    <!-- Окно чата (немодальное) -->
+    <div
       v-if="isVisible"
-      class="ai-chat-overlay"
+      class="ai-chat-overlay non-modal"
       :class="`theme-${props.theme}`"
-      @click.self="closeChat"
     >
       <div 
         class="ai-chat-window"
@@ -492,12 +619,58 @@ function onDrop(event: DragEvent) {
         :style="{ height: isMinimized ? '60px' : chatHeight + 'px' }"
       >
         <!-- Заголовок -->
-        <div class="chat-header">
-          <div class="header-left">
-            <span class="header-icon">📚</span>
-            <span class="header-title">p5.js помощник</span>
-            <span class="header-badge">справочник</span>
+        <div class="chat-header unified-header">
+          <!-- Вкладки-кнопки -->
+          <div class="header-tabs">
+            <button
+              class="header-tab-btn"
+              :class="{ active: activeTab === 'chat' }"
+              @click="activeTab = 'chat'"
+              title="Справочник по командам"
+            >
+              Справочник по командам
+            </button>
+            <button
+              class="header-tab-btn"
+              :class="{ active: activeTab === 'pdf' }"
+              @click="activeTab = 'pdf'"
+              title="Книга"
+            >
+              Книга
+            </button>
           </div>
+
+          <!-- Навигация PDF (показывается только на вкладке PDF) -->
+          <div v-if="activeTab === 'pdf' && !isMinimized" class="pdf-nav-inline">
+            <button 
+              class="header-nav-btn" 
+              @click="pdfPrevPage" 
+              :disabled="pdfPageNum <= 1"
+              title="Предыдущая страница"
+            >
+              ◀
+            </button>
+            <span class="header-page-info">
+              {{ pdfLoading ? 'Загрузка...' : `${pdfPageNum} / ${pdfTotalPages}` }}
+            </span>
+            <button 
+              class="header-nav-btn" 
+              @click="pdfNextPage" 
+              :disabled="pdfPageNum >= pdfTotalPages"
+              title="Следующая страница"
+            >
+              ▶
+            </button>
+            <button 
+              class="header-nav-btn fullscreen-btn" 
+              @click="togglePdfFullscreen"
+              :title="isPdfFullscreen ? 'Выйти из полноэкранного режима' : 'Во весь экран'"
+            >
+              {{ isPdfFullscreen ? '⊡' : '⛶' }}
+            </button>
+          </div>
+
+          <!-- Управление окном -->
           <div class="header-controls">
             <button class="control-btn" @click="toggleMinimize" :title="isMinimized ? 'Развернуть' : 'Свернуть'">
               {{ isMinimized ? '□' : '−' }}
@@ -509,7 +682,7 @@ function onDrop(event: DragEvent) {
         <!-- Тело чата -->
         <template v-if="!isMinimized">
           <!-- Ручка изменения размера -->
-          <div 
+          <div
             class="chat-resize-handle"
             @mousedown="startResize"
             :class="{ 'dragging': isDragging }"
@@ -517,8 +690,10 @@ function onDrop(event: DragEvent) {
             <div class="handle-dots">⋯</div>
           </div>
 
-          <!-- Сообщения -->
-          <div class="chat-messages" ref="chatContainer">
+          <!-- Вкладка чата -->
+          <template v-if="activeTab === 'chat'">
+            <!-- Сообщения -->
+            <div class="chat-messages" ref="chatContainer">
             <div
               v-for="(msg, index) in messages"
               :key="index"
@@ -555,14 +730,57 @@ function onDrop(event: DragEvent) {
               placeholder="Введите любое слово (например, circle, rect, color, цвет)"
               rows="1"
             ></textarea>
-            <button 
-              class="send-btn" 
+            <button
+              class="send-btn"
               @click="sendMessage"
               :disabled="!inputMessage.trim() || isTyping"
             >
               📤
             </button>
           </div>
+          </template>
+
+          <!-- Вкладка PDF -->
+          <template v-if="activeTab === 'pdf'">
+            <div class="pdf-viewer" :class="{ fullscreen: isPdfFullscreen }">
+              <!-- Боковая панель навигации (видна только в полноэкранном режиме) -->
+              <div v-if="isPdfFullscreen" class="pdf-side-nav">
+                <button 
+                  class="side-nav-btn" 
+                  @click="pdfPrevPage" 
+                  :disabled="pdfPageNum <= 1"
+                  title="Предыдущая страница"
+                >
+                  ◀
+                </button>
+                <span class="side-page-info">
+                  {{ pdfLoading ? '...' : pdfPageNum }}
+                </span>
+                <button 
+                  class="side-nav-btn" 
+                  @click="pdfNextPage" 
+                  :disabled="pdfPageNum >= pdfTotalPages"
+                  title="Следующая страница"
+                >
+                  ▶
+                </button>
+                <button 
+                  class="side-nav-btn fullscreen-exit-btn" 
+                  @click="togglePdfFullscreen"
+                  title="Выйти из полноэкранного режима"
+                >
+                  ⊡
+                </button>
+              </div>
+
+              <!-- Canvas для PDF -->
+              <div class="pdf-canvas-container">
+                <canvas ref="pdfCanvas" class="pdf-canvas"></canvas>
+                <div v-if="pdfLoading" class="pdf-loading">Загрузка PDF...</div>
+                <div v-if="pdfError" class="pdf-error">{{ pdfError }}</div>
+              </div>
+            </div>
+          </template>
         </template>
       </div>
     </div>
@@ -630,6 +848,15 @@ function onDrop(event: DragEvent) {
   animation: fadeIn 0.2s ease;
 }
 
+/* Немодальный оверлей - пропускает клики */
+.ai-chat-overlay.non-modal {
+  pointer-events: none;
+}
+
+.ai-chat-overlay.non-modal .ai-chat-window {
+  pointer-events: auto;
+}
+
 /* Окно чата */
 .ai-chat-window {
   width: 800px;
@@ -646,37 +873,99 @@ function onDrop(event: DragEvent) {
 
 /* Заголовок */
 .chat-header {
-  padding: 15px 20px;
+  padding: 0;
   background: v-bind('props.theme === "dark" ? "rgba(100, 108, 255, 0.1)" : "rgba(100, 108, 255, 0.05)"');
   border-bottom: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"');
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   cursor: move;
+  flex-wrap: nowrap;
 }
 
-.header-left {
+.unified-header {
+  padding: 8px 12px;
+}
+
+.header-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.header-tab-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)"');
+  border-radius: 6px;
+  color: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.7)"');
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.header-tab-btn:hover {
+  background: v-bind('props.theme === "dark" ? "rgba(100, 108, 255, 0.15)" : "rgba(100, 108, 255, 0.1)"');
+  border-color: #646cff;
+  color: #646cff;
+}
+
+.header-tab-btn.active {
+  background: rgba(100, 108, 255, 0.3);
+  border-color: #646cff;
+  color: white;
+}
+
+/* Навигация PDF в заголовке */
+.pdf-nav-inline {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
-.header-icon {
-  font-size: 20px;
-}
-
-.header-title {
-  font-weight: 600;
-  font-size: 14px;
+.header-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"');
+  background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"');
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.header-badge {
-  font-size: 10px;
-  padding: 2px 6px;
+.header-nav-btn:hover:not(:disabled) {
   background: rgba(100, 108, 255, 0.3);
-  border-radius: 12px;
-  color: #646cff;
+  border-color: #646cff;
+}
+
+.header-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.header-page-info {
+  font-size: 12px;
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  font-weight: 500;
+  min-width: 70px;
+  text-align: center;
+}
+
+.fullscreen-btn {
+  margin-left: 4px;
+}
+
+.fullscreen-btn:hover:not(:disabled) {
+  background: rgba(100, 108, 255, 0.4);
 }
 
 .header-controls {
@@ -1078,9 +1367,153 @@ function onDrop(event: DragEvent) {
     width: 100%;
     height: 80vh !important;
   }
-  
+
   .ai-chat-overlay {
     padding: 10px;
   }
+}
+
+/* PDF Viewer */
+.pdf-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: v-bind('props.theme === "dark" ? "#1e1e1e" : "#ffffff"');
+  overflow: hidden;
+}
+
+.pdf-canvas-container {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+  position: relative;
+  background: v-bind('props.theme === "dark" ? "#0a0a0a" : "#f5f5f5"');
+}
+
+.pdf-canvas {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  background: white;
+  max-width: 100%;
+  height: auto;
+}
+
+.pdf-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  color: #646cff;
+}
+
+.pdf-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  border-radius: 8px;
+  color: #ff4444;
+  font-size: 14px;
+  text-align: center;
+  max-width: 80%;
+}
+
+/* Fullscreen кнопка и режим */
+.fullscreen-btn {
+  margin-left: 8px;
+}
+
+.fullscreen-btn:hover:not(:disabled) {
+  background: rgba(100, 108, 255, 0.4);
+}
+
+.pdf-viewer.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  background: v-bind('props.theme === "dark" ? "#0a0a0a" : "#f5f5f5"');
+}
+
+.pdf-viewer.fullscreen .pdf-canvas-container {
+  height: calc(100vh - 60px);
+  padding: 30px;
+}
+
+.pdf-viewer.fullscreen .pdf-canvas {
+  max-width: 90vw;
+  max-height: calc(100vh - 120px);
+}
+
+/* Боковая навигация в полноэкранном режиме */
+.pdf-side-nav {
+  position: fixed;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 10px;
+  background: v-bind('props.theme === "dark" ? "rgba(30, 30, 30, 0.95)" : "rgba(255, 255, 255, 0.95)"');
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)"');
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  z-index: 10001;
+}
+
+.side-nav-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"');
+  background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"');
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-nav-btn:hover:not(:disabled) {
+  background: rgba(100, 108, 255, 0.3);
+  border-color: #646cff;
+  transform: scale(1.1);
+}
+
+.side-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.fullscreen-exit-btn {
+  margin-top: 8px;
+  background: rgba(255, 95, 86, 0.2);
+  border-color: rgba(255, 95, 86, 0.4);
+}
+
+.fullscreen-exit-btn:hover {
+  background: rgba(255, 95, 86, 0.5);
+  border-color: #ff5f56;
+}
+
+.side-page-info {
+  font-size: 16px;
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 0;
 }
 </style>
