@@ -1,0 +1,60 @@
+RLS-политики (schema: public) — единым текстовым блоком
+public.profiles
+
+profiles_select_own (SELECT, role=authenticated): видны только строки где id = auth.uid().
+profiles_update_own (UPDATE, role=authenticated): видимость/изменяемость только где id = auth.uid(); также WITH CHECK требует id = auth.uid().
+profiles_select_admin (SELECT, role=authenticated): доступ по JWT claim auth.jwt() ->> 'role' = 'admin'.
+Public-политики:
+Users can update own profile (UPDATE, role=public): auth.uid() = id.
+Users can insert own profile (INSERT, role=public): auth.uid() = id (через WITH CHECK).
+Profiles are viewable by everyone (SELECT, role=public): true.
+public.sketches
+
+sketches_owner_select (SELECT, role=authenticated): auth.uid() = user_id.
+sketches_moderator_admin_select (SELECT, role=authenticated): auth.jwt() ->> 'role' IN ('moderator','admin').
+sketches_public_select (SELECT, role=authenticated): status = 'approved'.
+Owner write/policy:
+sketches_owner_insert (INSERT, role=authenticated): WITH CHECK auth.uid() = user_id.
+sketches_owner_update (UPDATE, role=authenticated): USING auth.uid() = user_id и WITH CHECK auth.uid() = user_id.
+sketches_owner_delete (DELETE, role=authenticated): auth.uid() = user_id.
+Moderator/Admin update/delete:
+sketches_moderator_admin_update (UPDATE, role=authenticated): auth.jwt() ->> 'role' IN ('moderator','admin') (и USING, и WITH CHECK).
+sketches_admin_delete (DELETE, role=authenticated): auth.jwt() ->> 'role' = 'admin'.
+Public-политики:
+Users can view own sketches (SELECT, role=public): auth.uid() = user_id.
+Approved sketches are viewable by everyone (SELECT, role=public): status = 'approved'.
+Authenticated users can create sketches (INSERT, role=public): WITH CHECK auth.uid() = user_id.
+Users can update own sketches (UPDATE, role=public): USING auth.uid() = user_id и WITH CHECK auth.uid() = user_id.
+Users can delete own sketches (DELETE, role=public): auth.uid() = user_id.
+Moderators can update any sketch status (UPDATE, role=public): EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('moderator','admin')).
+Moderators can view all sketches (SELECT, role=public): то же условие EXISTS через profiles.role.
+public.sketch_likes
+
+sketch_likes_insert (INSERT, role=authenticated): WITH CHECK user_id = auth.uid().
+sketch_likes_select (SELECT, role=authenticated): видны либо лайки “своих” (user_id = auth.uid()), либо лайки к скетчам с sketches.status = 'approved' (sketch_id IN (SELECT sketches.id ... WHERE status='approved')).
+sketch_likes_delete_owner (DELETE, role=authenticated): user_id = auth.uid().
+Public-политики:
+Likes are viewable by everyone (SELECT, role=public): true.
+Authenticated users can create likes (INSERT, role=public): WITH CHECK user_id = auth.uid().
+Users can delete own likes (DELETE, role=public): auth.uid() = user_id.
+public.sketch_comments
+
+sketch_comments_select (SELECT, role=authenticated): комментарий виден если EXISTS (SELECT 1 FROM sketches s WHERE s.id = sketch_comments.sketch_id AND (s.status='approved' OR s.user_id = auth.uid())).
+sketch_comments_insert (INSERT, role=authenticated): WITH CHECK user_id = auth.uid() AND EXISTS (SELECT 1 FROM sketches s WHERE s.id = sketch_comments.sketch_id AND (s.status='approved' OR s.user_id = auth.uid())).
+sketch_comments_update_owner (UPDATE, role=authenticated): USING user_id = auth.uid() и WITH CHECK user_id = auth.uid().
+sketch_comments_delete_owner (DELETE, role=authenticated): user_id = auth.uid().
+Public-политики:
+Comments are viewable by everyone (SELECT, role=public): true.
+Authenticated users can create comments (INSERT, role=public): WITH CHECK user_id = auth.uid().
+Users can update own comments (UPDATE, role=public): auth.uid() = user_id (и USING, и WITH CHECK).
+Users can delete own comments (DELETE, role=public): auth.uid() = user_id.
+public.sketch_moderation_logs
+
+moderation_logs_select (SELECT, role=authenticated): auth.jwt() ->> 'role' IN ('moderator','admin').
+moderation_logs_insert (INSERT, role=authenticated): auth.jwt() ->> 'role' IN ('moderator','admin').
+Public-политики:
+Moderators can view moderation logs (SELECT, role=public): EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('moderator','admin')).
+Moderators can create moderation logs (INSERT, role=public): то же EXISTS через profiles (и WITH CHECK требует роль moderator/admin).
+(Дополнительно в списке есть условие, что для вставки логов также подразумевается соответствие moderator_id = auth.uid() в одной из политик: Check содержит это условие.)
+Точка, где часто “ломает” доступ (для проверки агентом)
+В нескольких местах доступ модератора/админа проверяется через profiles.role (табличное значение), а в других — через JWT claim auth.jwt() ->> 'role'. Если эти источники роли расходятся, RLS может вести себя неожиданно (например, запрос с JWT “admin”, но profiles.role не соответствует, или наоборот).

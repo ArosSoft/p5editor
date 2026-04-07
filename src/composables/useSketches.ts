@@ -320,6 +320,10 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
+      console.log('[createSketch] Начинаем создание скетча:', sketchData.title)
+      console.log('[createSketch] User ID:', sketchData.user_id)
+      console.log('[createSketch] Статус:', sketchData.status)
+
       const query = supabase
         .from('sketches')
         .insert(sketchData)
@@ -328,7 +332,15 @@ export function useSketches() {
 
       const { data, error: createError } = await withTimeout(query, LONG_TIMEOUT, 'Таймаут создания скетча')
 
-      if (createError) throw createError
+      if (createError) {
+        console.error('[createSketch] Ошибка создания скетча:', createError)
+        console.error('[createSketch] Код ошибки:', createError.code)
+        console.error('[createSketch] Сообщение:', createError.message)
+        throw createError
+      }
+
+      console.log('[createSketch] Скетч успешно создан с ID:', data?.id)
+      console.log('[createSketch] Данные созданного скетча:', data)
 
       return { success: true, data }
     } catch (e) {

@@ -16,6 +16,19 @@ function addMessage(msg: string) {
   console.log('[SharePage] ' + msg)
 }
 
+// Синхронное преобразование dataURL → File (избегает race condition при SPA-переходе)
+function dataURLtoFile(dataurl: string, filename: string): File {
+  const arr = dataurl.split(',')
+  const mimeMatch = arr[0].match(/:(.*?);/)
+  if (!mimeMatch) throw new Error('Неверный формат dataURL')
+  const mime = mimeMatch[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) u8arr[n] = bstr.charCodeAt(n)
+  return new File([u8arr], filename, { type: mime })
+}
+
 // Состояние формы
 const title = ref('')
 const description = ref('')
@@ -24,9 +37,30 @@ const category = ref('Анимация')
 const difficulty = ref<'Лёгкая' | 'Средняя' | 'Тяжёлая'>('Средняя')
 const thumbnail = ref<string | null>(null)
 const thumbnailFile = ref<File | null>(null)
+const isThumbnailReady = ref(false)
 const isSubmitting = ref(false)
 const submitSuccess = ref(false)
 const formErrors = ref<Record<string, string>>({})
+
+// Статус публикации (для отображения на странице)
+const publishStatus = ref<{
+  step: string
+  message: string
+  status: 'idle' | 'loading' | 'success' | 'error'
+  timestamp: string
+}[]>([])
+
+// Функция для добавления шага в статус публикации
+function addPublishStep(step: string, message: string, status: 'idle' | 'loading' | 'success' | 'error') {
+  const timestamp = new Date().toLocaleTimeString('ru-RU')
+  publishStatus.value.push({ step, message, status, timestamp })
+  console.log(`[SharePage][${status.toUpperCase()}] ${step}: ${message}`)
+}
+
+// Очистка статуса публикации
+function clearPublishStatus() {
+  publishStatus.value = []
+}
 
 // Состояние проверки подключения к Supabase
 const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
@@ -155,13 +189,15 @@ onMounted(async () => {
   const savedSnapshot = localStorage.getItem('p5editor_canvas_snapshot')
   if (savedSnapshot) {
     thumbnail.value = savedSnapshot
-    // Создаём File из base64 для загрузки
-    fetch(savedSnapshot)
-      .then(res => res.blob())
-      .then(blob => {
-        thumbnailFile.value = new File([blob], 'thumbnail.png', { type: 'image/png' })
-      })
-      .catch(() => {})
+    // Синхронное создание File из dataURL (избегаем race condition с fetch)
+    try {
+      thumbnailFile.value = dataURLtoFile(savedSnapshot, 'thumbnail.png')
+      isThumbnailReady.value = true
+      addMessage('📷 Миниатюра готова (синхронно)')
+    } catch (e) {
+      console.error('[SharePage] Не удалось создать File из dataURL', e)
+      addMessage('⚠️ Не удалось создать файл миниатюры')
+    }
   }
 
   // Проверяем подключение к Supabase
@@ -202,7 +238,8 @@ function handleThumbnailUpload(event: Event) {
     
     delete formErrors.value.thumbnail
     thumbnailFile.value = file
-    
+    isThumbnailReady.value = true
+
     const reader = new FileReader()
     reader.onload = (e) => {
       thumbnail.value = e.target?.result as string
@@ -218,17 +255,16 @@ function captureFromCanvas() {
   if (savedSnapshot) {
     thumbnail.value = savedSnapshot
     delete formErrors.value.thumbnail
-    
-    // Создаём File из base64 для загрузки
-    fetch(savedSnapshot)
-      .then(res => res.blob())
-      .then(blob => {
-        thumbnailFile.value = new File([blob], 'thumbnail.png', { type: 'image/png' })
-        addMessage('📷 Изображение загружено из памяти')
-      })
-      .catch(() => {
-        addMessage('⚠️ Не удалось создать файл из памяти')
-      })
+
+    // Синхронное создание File из dataURL (избегаем race condition с fetch)
+    try {
+      thumbnailFile.value = dataURLtoFile(savedSnapshot, 'thumbnail.png')
+      isThumbnailReady.value = true
+      addMessage('📷 Изображение загружено из памяти')
+    } catch (e) {
+      console.error('[SharePage] Не удалось создать File из dataURL', e)
+      addMessage('⚠️ Не удалось создать файл из памяти')
+    }
     return
   }
   
@@ -274,35 +310,56 @@ function validateForm(): boolean {
 
 // Отправка формы
 async function submitSketch() {
-  if (!validateForm()) return
-  if (!user.value || !profile.value) {
-    alert('Ошибка авторизации. Пожалуйста, войдите в систему.')
+  console.log('[SharePage] === submitSketch вызвана ===')
+  console.log('[SharePage] isSubmitting:', isSubmitting.value)
+  console.log('[SharePage] uploading:', uploading.value)
+  console.log('[SharePage] isCheckingConnection:', isCheckingConnection.value)
+  console.log('[SharePage] supabaseStatus:', supabaseStatus.value)
+  console.log('[SharePage] title:', title.value)
+  console.log('[SharePage] description:', description.value)
+  
+  if (!validateForm()) {
+    addMessage('❌ Ошибка валидации формы')
     return
   }
+  if (!user.value || !profile.value) {
+    alert('Ошибка авторизации. Пожалуйста, войдите в систему.')
+    addMessage('❌ Ошибка авторизации: user или profile не найден')
+    return
+  }
+
+  // Очищаем предыдущий статус публикации
+  clearPublishStatus()
+  addPublishStep('Инициализация', 'Начало процесса публикации скетча', 'loading')
 
   // Проверяем подключение к Supabase перед отправкой
   if (supabaseStatus.value !== 'connected') {
     addMessage('🔄 Выполняется проверка подключения к Supabase...')
+    addPublishStep('Проверка подключения', 'Подключение к Supabase не установлено, проверяем...', 'loading')
     await checkSupabaseConnection()
   }
 
   if (supabaseStatus.value !== 'connected') {
     alert('Не удалось подключиться к Supabase. Проверьте соединение и попробуйте снова.')
+    addPublishStep('Ошибка подключения', 'Не удалось подключиться к Supabase', 'error')
     return
   }
+
+  addPublishStep('Проверка подключения', 'Supabase подключён успешно', 'success')
 
   isSubmitting.value = true
   formErrors.value = {}
 
   let thumbnailUrl: string | null = null
 
-  // === 1. Пытаемся загрузить thumbnail с коротким таймаутом ===
+  // === 1. Загрузка thumbnail ===
   if (thumbnailFile.value) {
+    addPublishStep('Загрузка миниатюры', `Начало загрузки файла: ${thumbnailFile.value.name}, размер: ${(thumbnailFile.value.size / 1024).toFixed(2)} KB`, 'loading')
     try {
       console.log('[SharePage] Начинаем загрузку thumbnail...')
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Таймаут загрузки миниатюры')), 18000) // 18 секунд
+        setTimeout(() => reject(new Error('Таймаут загрузки миниатюры')), 60000) // 60 секунд
       })
 
       const uploadPromise = uploadFile(thumbnailFile.value, 'thumbnails')
@@ -312,48 +369,68 @@ async function submitSketch() {
       if (uploadResult.success && uploadResult.url) {
         thumbnailUrl = uploadResult.url
         console.log('[SharePage] Thumbnail успешно загружен:', thumbnailUrl)
+        addPublishStep('Загрузка миниатюры', `Миниатюра успешно загружена. URL: ${thumbnailUrl}`, 'success')
       } else {
         console.warn('[SharePage] Не удалось загрузить thumbnail:', uploadResult.error)
+        addPublishStep('Загрузка миниатюры', `Ошибка загрузки: ${uploadResult.error}. Продолжаем без миниатюры.`, 'error')
       }
     } catch (err: any) {
       console.warn('[SharePage] Ошибка/таймаут при загрузке thumbnail:', err.message)
+      addPublishStep('Загрузка миниатюры', `Ошибка/таймаут: ${err.message}. Продолжаем без миниатюры.`, 'error')
       // Продолжаем без миниатюры — это не критично
     }
+  } else {
+    addPublishStep('Загрузка миниатюры', 'Файл миниатюры не выбран. Продолжаем без миниатюры.', 'idle')
   }
 
-  // === 2. Создаём скетч (даже если thumbnail не загрузился) ===
+  // === 2. Создание скетча ===
+  addPublishStep('Создание скетча', 'Подготовка данных для создания скетча...', 'loading')
+  
+  const sketchData = {
+    user_id: user.value.id,
+    title: title.value.trim(),
+    description: description.value.trim(),
+    code: sharedCode.value,
+    thumbnail_url: thumbnailUrl,
+    tags: tags.value
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean)
+      .slice(0, 10),
+    category: category.value,
+    difficulty: difficulty.value,
+    status: 'pending'
+  }
+
+  addPublishStep('Создание скетча', `Отправка данных на сервер: название="${sketchData.title}", категория="${sketchData.category}", тегов=${sketchData.tags.length}`, 'loading')
+
+  console.log('[SharePage] Данные для createSketch:', JSON.stringify(sketchData, null, 2))
+  console.log('[SharePage] Вызов createSketch...')
+
   try {
-    const result = await createSketch({
-      user_id: user.value.id,
-      title: title.value.trim(),
-      description: description.value.trim(),
-      code: sharedCode.value,
-      thumbnail_url: thumbnailUrl,
-      tags: tags.value
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean)
-        .slice(0, 10),
-      category: category.value,
-      difficulty: difficulty.value,
-      status: 'pending'
-    })
+    const result = await createSketch(sketchData)
+
+    console.log('[SharePage] Результат createSketch:', result)
 
     if (result.success) {
+      addPublishStep('Создание скетча', `Скетч успешно создан с ID: ${result.data?.id}. Отправлен на модерацию!`, 'success')
       submitSuccess.value = true
       // Очищаем временные данные
       localStorage.removeItem('p5editor_canvas_snapshot')
 
       addMessage('✅ Скетч успешно отправлен на модерацию!')
-      
+
+      // Принудительно ждём 3 секунды перед редиректом, чтобы Supabase точно закоммитил данные
+      addPublishStep('Завершение', 'Перенаправление в галерею через 3 секунды...', 'success')
       setTimeout(() => {
         router.push('/explore')
-      }, 2000)
+      }, 3000)
     } else {
       throw new Error(result.error || 'Неизвестная ошибка сервера')
     }
   } catch (err: any) {
     console.error('[SharePage] Ошибка создания скетча:', err)
+    addPublishStep('Ошибка создания скетча', `Произошла ошибка: ${err.message}`, 'error')
     alert(`Не удалось опубликовать скетч:\n${err.message}`)
   } finally {
     isSubmitting.value = false
@@ -547,10 +624,35 @@ function goBack() {
             <button
               @click="submitSketch"
               class="submit-btn"
-              :disabled="isSubmitting || uploading || isCheckingConnection || supabaseStatus !== 'connected' || !title || !description"
+              :disabled="isSubmitting || uploading || isCheckingConnection || supabaseStatus !== 'connected' || !title || !description || !isThumbnailReady"
             >
-              {{ isSubmitting ? '⏳ Отправка...' : uploading ? '⏳ Загрузка...' : isCheckingConnection ? '🔌 Проверка...' : supabaseStatus !== 'connected' ? '🔌 Нет подключения' : '🚀 Опубликовать' }}
+              {{ isSubmitting ? '⏳ Отправка...' : uploading ? '⏳ Загрузка...' : isCheckingConnection ? '🔌 Проверка...' : supabaseStatus !== 'connected' ? '🔌 Нет подключения' : !isThumbnailReady ? '📷 Нет миниатюры' : '🚀 Опубликовать' }}
             </button>
+          </div>
+
+          <!-- Статус публикации -->
+          <div v-if="publishStatus.length > 0" class="publish-status">
+            <h3 class="status-title">📋 Статус публикации</h3>
+            <div class="status-steps">
+              <div
+                v-for="(step, index) in publishStatus"
+                :key="index"
+                class="status-step"
+                :class="`status-${step.status}`"
+              >
+                <span class="status-icon">
+                  <template v-if="step.status === 'loading'">⏳</template>
+                  <template v-else-if="step.status === 'success'">✅</template>
+                  <template v-else-if="step.status === 'error'">❌</template>
+                  <template v-else>⚪</template>
+                </span>
+                <div class="status-content">
+                  <div class="status-step-title">{{ step.step }}</div>
+                  <div class="status-step-message">{{ step.message }}</div>
+                </div>
+                <span class="status-timestamp">{{ step.timestamp }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1094,6 +1196,88 @@ function goBack() {
   margin-bottom: 0.5rem;
 }
 
+/* Статус публикации */
+.publish-status {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.status-title {
+  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.status-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.status-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.status-step.status-loading {
+  background: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid #ff9800;
+}
+
+.status-step.status-success {
+  background: rgba(66, 184, 131, 0.1);
+  border-left: 3px solid #42b883;
+}
+
+.status-step.status-error {
+  background: rgba(244, 67, 54, 0.1);
+  border-left: 3px solid #f44336;
+}
+
+.status-step.status-idle {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.status-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.status-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-step-title {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.25rem;
+}
+
+.status-step-message {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.status-timestamp {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
   .share-header {
@@ -1121,6 +1305,16 @@ function goBack() {
   .submit-btn,
   .cancel-btn {
     width: 100%;
+  }
+
+  .status-step {
+    flex-wrap: wrap;
+  }
+
+  .status-timestamp {
+    width: 100%;
+    text-align: right;
+    margin-top: 0.5rem;
   }
 }
 </style>
