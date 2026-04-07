@@ -19,10 +19,10 @@ function addMessage(msg: string) {
 // Синхронное преобразование dataURL → File (избегает race condition при SPA-переходе)
 function dataURLtoFile(dataurl: string, filename: string): File {
   const arr = dataurl.split(',')
-  const mimeMatch = arr[0].match(/:(.*?);/)
+  const mimeMatch = arr[0]?.match(/:(.*?);/)
   if (!mimeMatch) throw new Error('Неверный формат dataURL')
   const mime = mimeMatch[1]
-  const bstr = atob(arr[1])
+  const bstr = atob(arr[1] ?? '')
   let n = bstr.length
   const u8arr = new Uint8Array(n)
   while (n--) u8arr[n] = bstr.charCodeAt(n)
@@ -399,7 +399,7 @@ async function submitSketch() {
       .slice(0, 10),
     category: category.value,
     difficulty: difficulty.value,
-    status: 'pending'
+    status: 'pending' as const
   }
 
   addPublishStep('Создание скетча', `Отправка данных на сервер: название="${sketchData.title}", категория="${sketchData.category}", тегов=${sketchData.tags.length}`, 'loading')

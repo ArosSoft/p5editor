@@ -330,7 +330,7 @@ export function useSketches() {
         .select()
         .single()
 
-      const { data, error: createError } = await withTimeout(query, LONG_TIMEOUT, 'Таймаут создания скетча')
+      const { data, error: createError } = await withTimeout<{ id: string } & Sketch>(query, LONG_TIMEOUT, 'Таймаут создания скетча')
 
       if (createError) {
         console.error('[createSketch] Ошибка создания скетча:', createError)
