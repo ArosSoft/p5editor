@@ -2,11 +2,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { P5_EXAMPLES } from '../lib/p5-examples'
-import * as pdfjsLib from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 
-// Настройка worker для PDF.js - используем локальный файл
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+// Импортируем worker как Vite worker
+// @ts-ignore
+import PDFWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = PDFWorker
 
 const props = defineProps<{
   theme?: 'dark' | 'light'
@@ -29,9 +30,31 @@ const pdfLoading = ref(false)
 const pdfError = ref('')
 const pdfPageNum = ref(1)
 const pdfTotalPages = ref(0)
-const pdfScale = 1.5
+const pdfScale = ref(1.5)
 const isPdfFullscreen = ref(false)
 let pdfDoc: any = null
+let currentRenderTask: any = null
+
+/**
+ * Вычисляет оптимальный масштаб PDF под размер контейнера
+ */
+async function calcPdfScale(): Promise<number> {
+  const container = pdfCanvas.value?.parentElement
+  if (!container || !pdfDoc) return 1.5
+
+  const containerWidth = container.clientWidth - 40 // padding
+  const containerHeight = container.clientHeight - 40
+
+  // Получаем размер первой страницы при scale=1
+  const page = await pdfDoc.getPage(1)
+  const viewport = page.getViewport({ scale: 1 })
+  
+  return Math.min(
+    containerWidth / viewport.width,
+    containerHeight / viewport.height,
+    3 // максимум 3x
+  )
+}
 
 const messages = ref<Array<{ role: 'user' | 'assistant', content: string }>>([])
 const inputMessage = ref('')
@@ -474,6 +497,15 @@ onUnmounted(() => {
     clearInterval(typingInterval.value)
     typingInterval.value = null
   }
+  // Отменяем текущий рендер PDF
+  if (currentRenderTask) {
+    try {
+      currentRenderTask.cancel()
+    } catch (e) {
+      // Игнорируем
+    }
+    currentRenderTask = null
+  }
 })
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -493,17 +525,22 @@ function onDrop(event: DragEvent) {
 async function loadPDF() {
   pdfLoading.value = true
   pdfError.value = ''
-  
+
   try {
     // Путь к PDF файлу (из папки public)
     const pdfUrl = '/p5editor/p5/coding_course.pdf'
-    
+
     const loadingTask = pdfjsLib.getDocument(pdfUrl)
     pdfDoc = await loadingTask.promise
-    
+
     pdfTotalPages.value = pdfDoc.numPages
     pdfPageNum.value = 1
     
+    // Вычисляем начальный масштаб под контейнер
+    await nextTick()
+    const initialScale = await calcPdfScale()
+    pdfScale.value = initialScale
+
     await renderPDFPage(1)
   } catch (error: any) {
     console.error('Error loading PDF:', error)
@@ -515,27 +552,43 @@ async function loadPDF() {
 
 async function renderPDFPage(pageNum: number) {
   if (!pdfDoc) return
-  
+
+  // Отменяем предыдущий рендер, если он ещё идёт
+  if (currentRenderTask) {
+    try {
+      currentRenderTask.cancel()
+    } catch (e) {
+      // Игнорируем ошибки отмены
+    }
+    currentRenderTask = null
+  }
+
   try {
     const page = await pdfDoc.getPage(pageNum)
-    const viewport = page.getViewport({ scale: pdfScale })
-    
+    const viewport = page.getViewport({ scale: pdfScale.value })
+
     const canvas = pdfCanvas.value
     if (!canvas) return
-    
+
     const context = canvas.getContext('2d')
     if (!context) return
-    
+
     canvas.height = viewport.height
     canvas.width = viewport.width
-    
+
     const renderContext = {
       canvasContext: context,
       viewport: viewport
     }
-    
-    await page.render(renderContext).promise
+
+    const task = page.render(renderContext)
+    currentRenderTask = task
+    await task.promise
+    currentRenderTask = null
   } catch (error: any) {
+    // Игнорируем ошибки отмены рендера
+    if (error?.name === 'RenderingCancelledException') return
+    
     console.error('Error rendering PDF page:', error)
     pdfError.value = `Ошибка отображения страницы: ${error.message || 'неизвестная ошибка'}`
   }
@@ -555,20 +608,24 @@ function pdfNextPage() {
   }
 }
 
-function togglePdfFullscreen() {
+async function togglePdfFullscreen() {
   isPdfFullscreen.value = !isPdfFullscreen.value
+
+  // Ждём применения CSS и layout
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, 50))
   
   if (isPdfFullscreen.value) {
-    // При входе в полноэкранный режим увеличим масштаб
-    setTimeout(() => {
-      renderPDFPage(pdfPageNum.value)
-    }, 100)
+    // Вычисляем оптимальный масштаб для полного экрана
+    const newScale = await calcPdfScale()
+    pdfScale.value = newScale
   } else {
-    // При выходе вернем стандартный масштаб
-    setTimeout(() => {
-      renderPDFPage(pdfPageNum.value)
-    }, 100)
+    // Возвращаем стандартный масштаб
+    pdfScale.value = 1.5
   }
+  
+  // Перерисовываем с новым масштабом
+  renderPDFPage(pdfPageNum.value)
 }
 
 // Загружаем PDF при переключении на вкладку
@@ -1387,8 +1444,8 @@ watch(() => props.isVisible, (isVisible) => {
   overflow: auto;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 20px;
+  align-items: center;
+  padding: 0;
   position: relative;
   background: v-bind('props.theme === "dark" ? "#0a0a0a" : "#f5f5f5"');
 }
@@ -1444,13 +1501,17 @@ watch(() => props.isVisible, (isVisible) => {
 }
 
 .pdf-viewer.fullscreen .pdf-canvas-container {
-  height: calc(100vh - 60px);
-  padding: 30px;
+  height: calc(100vh - 50px);
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .pdf-viewer.fullscreen .pdf-canvas {
-  max-width: 90vw;
-  max-height: calc(100vh - 120px);
+  max-width: 100%;
+  max-height: 100vh;
+  object-fit: contain;
 }
 
 /* Боковая навигация в полноэкранном режиме */
