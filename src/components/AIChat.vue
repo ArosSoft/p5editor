@@ -32,6 +32,7 @@ const pdfPageNum = ref(1)
 const pdfTotalPages = ref(0)
 const pdfScale = ref(1.5)
 const isPdfFullscreen = ref(false)
+const pdfPageInput = ref('')
 let pdfDoc: any = null
 let currentRenderTask: any = null
 
@@ -535,6 +536,7 @@ async function loadPDF() {
 
     pdfTotalPages.value = pdfDoc.numPages
     pdfPageNum.value = 1
+    pdfPageInput.value = '1'
     
     // Вычисляем начальный масштаб под контейнер
     await nextTick()
@@ -597,6 +599,7 @@ async function renderPDFPage(pageNum: number) {
 function pdfPrevPage() {
   if (pdfPageNum.value > 1) {
     pdfPageNum.value--
+    pdfPageInput.value = String(pdfPageNum.value)
     renderPDFPage(pdfPageNum.value)
   }
 }
@@ -604,7 +607,19 @@ function pdfPrevPage() {
 function pdfNextPage() {
   if (pdfPageNum.value < pdfTotalPages.value) {
     pdfPageNum.value++
+    pdfPageInput.value = String(pdfPageNum.value)
     renderPDFPage(pdfPageNum.value)
+  }
+}
+
+function pdfGoToPage() {
+  const pageNum = parseInt(pdfPageInput.value, 10)
+  if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= pdfTotalPages.value) {
+    pdfPageNum.value = pageNum
+    renderPDFPage(pageNum)
+  } else {
+    // Сбросить ввод к текущей странице
+    pdfPageInput.value = String(pdfPageNum.value)
   }
 }
 
@@ -699,27 +714,34 @@ watch(() => props.isVisible, (isVisible) => {
 
           <!-- Навигация PDF (показывается только на вкладке PDF) -->
           <div v-if="activeTab === 'pdf' && !isMinimized" class="pdf-nav-inline">
-            <button 
-              class="header-nav-btn" 
-              @click="pdfPrevPage" 
+            <button
+              class="header-nav-btn"
+              @click="pdfPrevPage"
               :disabled="pdfPageNum <= 1"
               title="Предыдущая страница"
             >
               ◀
             </button>
-            <span class="header-page-info">
-              {{ pdfLoading ? 'Загрузка...' : `${pdfPageNum} / ${pdfTotalPages}` }}
-            </span>
-            <button 
-              class="header-nav-btn" 
-              @click="pdfNextPage" 
+            <input
+              v-model="pdfPageInput"
+              @keydown.enter="pdfGoToPage"
+              @blur="pdfGoToPage"
+              class="header-page-input"
+              type="text"
+              :placeholder="pdfPageNum"
+              size="3"
+            />
+            <span class="header-page-separator">/ {{ pdfTotalPages || '—' }}</span>
+            <button
+              class="header-nav-btn"
+              @click="pdfNextPage"
               :disabled="pdfPageNum >= pdfTotalPages"
               title="Следующая страница"
             >
               ▶
             </button>
-            <button 
-              class="header-nav-btn fullscreen-btn" 
+            <button
+              class="header-nav-btn fullscreen-btn"
               @click="togglePdfFullscreen"
               :title="isPdfFullscreen ? 'Выйти из полноэкранного режима' : 'Во весь экран'"
             >
@@ -802,27 +824,33 @@ watch(() => props.isVisible, (isVisible) => {
             <div class="pdf-viewer" :class="{ fullscreen: isPdfFullscreen }">
               <!-- Боковая панель навигации (видна только в полноэкранном режиме) -->
               <div v-if="isPdfFullscreen" class="pdf-side-nav">
-                <button 
-                  class="side-nav-btn" 
-                  @click="pdfPrevPage" 
+                <button
+                  class="side-nav-btn"
+                  @click="pdfPrevPage"
                   :disabled="pdfPageNum <= 1"
                   title="Предыдущая страница"
                 >
                   ◀
                 </button>
-                <span class="side-page-info">
-                  {{ pdfLoading ? '...' : pdfPageNum }}
-                </span>
-                <button 
-                  class="side-nav-btn" 
-                  @click="pdfNextPage" 
+                <input
+                  v-model="pdfPageInput"
+                  @keydown.enter="pdfGoToPage"
+                  @blur="pdfGoToPage"
+                  class="side-page-input"
+                  type="text"
+                  :placeholder="pdfPageNum"
+                  size="3"
+                />
+                <button
+                  class="side-nav-btn"
+                  @click="pdfNextPage"
                   :disabled="pdfPageNum >= pdfTotalPages"
                   title="Следующая страница"
                 >
                   ▶
                 </button>
-                <button 
-                  class="side-nav-btn fullscreen-exit-btn" 
+                <button
+                  class="side-nav-btn fullscreen-exit-btn"
                   @click="togglePdfFullscreen"
                   title="Выйти из полноэкранного режима"
                 >
@@ -1015,6 +1043,31 @@ watch(() => props.isVisible, (isVisible) => {
   font-weight: 500;
   min-width: 70px;
   text-align: center;
+}
+
+.header-page-input {
+  width: 40px;
+  height: 28px;
+  text-align: center;
+  background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"');
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"');
+  border-radius: 4px;
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.header-page-input:focus {
+  border-color: #646cff;
+  background: v-bind('props.theme === "dark" ? "rgba(100, 108, 255, 0.15)" : "rgba(100, 108, 255, 0.1)"');
+}
+
+.header-page-separator {
+  font-size: 12px;
+  color: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)"');
+  margin: 0 4px;
 }
 
 .fullscreen-btn {
@@ -1557,6 +1610,25 @@ watch(() => props.isVisible, (isVisible) => {
 .side-nav-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.side-page-input {
+  width: 44px;
+  height: 44px;
+  text-align: center;
+  background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"');
+  border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"');
+  border-radius: 8px;
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.side-page-input:focus {
+  border-color: #646cff;
+  background: v-bind('props.theme === "dark" ? "rgba(100, 108, 255, 0.2)" : "rgba(100, 108, 255, 0.1)"');
 }
 
 .fullscreen-exit-btn {
