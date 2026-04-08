@@ -109,15 +109,10 @@ async function handleDeleteSketch() {
       // Закрываем модальное окно
       closeDeleteModal()
 
-      // Возвращаемся на предыдущую страницу или на галерею
-      // previousRoute.value уже содержит чистый путь без '#'
-      const targetRoute = previousRoute.value || '/explore'
-      console.log('[SketchDetailPage] Возврат на:', targetRoute)
+      console.log('[SketchDetailPage] previousRoute.value:', previousRoute.value)
 
-      // Очищаем сохранённый маршрут
-      sessionStorage.removeItem('sketch_previous_route')
-
-      router.push(targetRoute)
+      // Всегда переходим на дашборд после удаления
+      router.push('/dashboard')
     } else {
       alert(result.error || 'Ошибка удаления скетча')
     }

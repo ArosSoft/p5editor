@@ -6,8 +6,9 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import type { EditorState, Transaction } from '@codemirror/state'
 import { StateField } from '@codemirror/state'
 import type { Range } from '@codemirror/state'
-import { EditorView, Decoration, type DecorationSet } from '@codemirror/view'
+import { EditorView, Decoration, type DecorationSet, keymap } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
+import { indentWithTab } from '@codemirror/commands'
 import { UNIQUE_P5_KEYWORDS } from '../lib/p5-keywords'
 
 const props = defineProps<{
@@ -187,6 +188,7 @@ const baseTheme = EditorView.theme({
     javascript(),
     isDark ? darkTheme : lightTheme,
     baseTheme,
+    keymap.of([indentWithTab]),
     ...p5KeywordsHighlight()
   ]
 })

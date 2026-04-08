@@ -728,7 +728,7 @@ watch(() => props.isVisible, (isVisible) => {
               @blur="pdfGoToPage"
               class="header-page-input"
               type="text"
-              :placeholder="pdfPageNum"
+              :placeholder="String(pdfPageNum)"
               size="3"
             />
             <span class="header-page-separator">/ {{ pdfTotalPages || '—' }}</span>
@@ -838,7 +838,7 @@ watch(() => props.isVisible, (isVisible) => {
                   @blur="pdfGoToPage"
                   class="side-page-input"
                   type="text"
-                  :placeholder="pdfPageNum"
+                  :placeholder="String(pdfPageNum)"
                   size="3"
                 />
                 <button

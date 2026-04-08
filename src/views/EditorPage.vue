@@ -957,9 +957,6 @@ function navigateToDashboard() {
                 <span class="window-control green"></span>
               </div>
               <span class="editor-title">sketch.js</span>
-              <div class="editor-badge" v-if="history.length > 0">
-                {{ historyIndex + 1 }}/{{ history.length }}
-              </div>
             </div>
             <div class="editor-content">
               <CodeEditor
@@ -1615,15 +1612,6 @@ function navigateToDashboard() {
   border-radius: 50%;
   background: #4caf50;
   animation: pulse 1.5s infinite;
-}
-
-.editor-badge {
-  margin-left: auto;
-  font-size: 10px;
-  padding: 2px 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #888;
 }
 
 .editor-container, .canvas-container {
