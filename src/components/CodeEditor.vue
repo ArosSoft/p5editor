@@ -40,10 +40,10 @@ const wrapperRef = ref<HTMLElement | null>(null)
 
 // === Рефы для кастомной панели поиска ===
 const showSearchPanel = ref(false)
+const showReplaceSection = ref(false)
 const currentQuery = ref('')
 const currentReplace = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
-const panelPosition = ref({ top: 0, right: 0 })
 const matchCount = ref(0)
 const currentMatchIndex = ref(-1)
 const allMatches = ref<Array<{ from: number; to: number }>>([])
@@ -106,16 +106,7 @@ function openSearch() {
     }
   }
   currentReplace.value = ''
-
-  // Позиция панели относительно viewport
-  if (wrapperRef.value) {
-    const rect = wrapperRef.value.getBoundingClientRect()
-    panelPosition.value = {
-      top: rect.top + 12,
-      right: window.innerWidth - rect.right + 12,
-    }
-  }
-
+  showReplaceSection.value = false
   showSearchPanel.value = true
 
   nextTick(() => {
@@ -131,11 +122,17 @@ function closeSearch() {
     editorView.value.dispatch({
       effects: setSearchQuery.of(emptyQuery),
     })
+    editorView.value.focus()
   }
   showSearchPanel.value = false
+  showReplaceSection.value = false
   allMatches.value = []
   matchCount.value = 0
   currentMatchIndex.value = -1
+}
+
+function toggleReplace() {
+  showReplaceSection.value = !showReplaceSection.value
 }
 
 function updateSearchQuery() {
@@ -379,58 +376,70 @@ onMounted(() => {
     class="code-editor-wrapper"
     :class="{ 'theme-light': theme === 'light', 'theme-dark': theme === 'dark' }"
   >
+    <!-- Кастомная панель поиска -->
+    <div
+      v-if="showSearchPanel"
+      class="custom-search-panel"
+      :class="{ 'theme-dark': theme === 'dark' }"
+      @keydown="handleSearchKeydown"
+    >
+      <div class="search-row">
+        <div class="search-input-wrapper">
+          <input
+            ref="searchInput"
+            v-model="currentQuery"
+            class="search-input"
+            placeholder="Найти..."
+            @keyup.enter="customFindNext"
+          />
+          <span v-if="currentQuery && matchCount > 0" class="match-counter">
+            {{ currentMatchIndex + 1 }}/{{ matchCount }}
+          </span>
+        </div>
+
+        <div class="search-buttons">
+          <button @click="customFindPrevious" title="Предыдущее совпадение (Shift+Enter)" class="nav-btn">
+            ▲
+          </button>
+          <button @click="customFindNext" title="Следующее совпадение (Enter)" class="nav-btn">
+            ▼
+          </button>
+          <button @click="toggleReplace" title="Заменить" class="toggle-replace-btn">
+            ↕
+          </button>
+          <button @click="closeSearch" title="Закрыть (Esc)" class="close-btn">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <transition name="slide">
+        <div v-if="showReplaceSection" class="replace-row">
+          <input
+            v-model="currentReplace"
+            class="replace-input"
+            placeholder="Заменить на..."
+            @keyup.enter="doReplaceNext"
+          />
+          <button @click="doReplaceNext" class="replace-btn">
+            Заменить
+          </button>
+          <button @click="doReplaceAll" class="replace-btn replace-all-btn">
+            Заменить всё
+          </button>
+        </div>
+      </transition>
+    </div>
+
     <CodeMirror
       ref="editorRef"
       v-model="value"
       :extensions="extensions"
       :wrap="true"
+      class="codemirror-area"
       placeholder="Напиши свой p5.js скетч здесь..."
       @update:model-value="emit('update:modelValue', $event as string)"
     />
-
-    <!-- Кастомная плавающая панель поиска -->
-    <Teleport to="body">
-      <div
-        v-if="showSearchPanel"
-        class="custom-search-panel"
-        :class="{ 'theme-dark': theme === 'dark' }"
-        :style="{
-          top: panelPosition.top + 'px',
-          right: panelPosition.right + 'px',
-        }"
-        @keydown="handleSearchKeydown"
-      >
-        <div class="search-container">
-          <div class="search-row">
-            <input
-              ref="searchInput"
-              v-model="currentQuery"
-              class="search-input"
-              placeholder="Найти в коде..."
-              @keyup.enter="customFindNext"
-            />
-            <span v-if="currentQuery" class="match-count">
-              {{ matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0/0' }}
-            </span>
-            <button @click="customFindNext" class="search-btn primary">Далее ▶</button>
-            <button @click="customFindPrevious" class="search-btn">◀ Назад</button>
-          </div>
-
-          <div class="search-row">
-            <input
-              v-model="currentReplace"
-              class="search-input"
-              placeholder="Заменить на..."
-              @keyup.enter="doReplaceNext"
-            />
-            <button @click="doReplaceNext" class="search-btn">Заменить</button>
-            <button @click="doReplaceAll" class="search-btn">Заменить всё</button>
-          </div>
-        </div>
-
-        <button @click="closeSearch" class="close-search-btn" title="Закрыть (Esc)">✕</button>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -438,45 +447,26 @@ onMounted(() => {
 .code-editor-wrapper {
   height: 100%;
   width: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ==================== КАСТОМНАЯ ПАНЕЛЬ ПОИСКА ==================== */
 .custom-search-panel {
-  position: fixed;
-  background: #1e1e1e;
-  border: 2px solid #646cff;
-  border-radius: 10px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-  padding: 14px 16px 14px 14px;
-  width: 420px;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-shrink: 0;
+  background: #282c34;
+  border-bottom: 1px solid #3e4451;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 100;
   animation: searchPanelPop 0.2s ease;
-}
-
-.custom-search-panel.theme-dark {
-  background: #1e1e1e;
-  color: #fff;
-}
-
-.theme-light .custom-search-panel {
-  background: #ffffff;
-  border-color: #646cff;
-  box-shadow: 0 15px 35px rgba(100, 108, 255, 0.2);
-  color: #2c3e50;
 }
 
 @keyframes searchPanelPop {
   from { opacity: 0; transform: translateY(-10px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.search-container {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .search-row {
@@ -485,103 +475,138 @@ onMounted(() => {
   gap: 8px;
 }
 
-.search-input {
+.search-input-wrapper {
   flex: 1;
-  padding: 9px 14px;
-  font-size: 15px;
-  border: 1px solid #555;
-  border-radius: 6px;
-  background: #2d2d2d;
-  color: #fff;
-  outline: none;
-}
-
-.theme-light .search-input {
-  background: #f8f9fa;
-  border-color: #b0b0b0;
-  color: #333;
-}
-
-.search-input:focus {
-  border-color: #646cff;
-  box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.2);
-}
-
-.match-count {
-  font-size: 13px;
-  color: #888;
-  min-width: 40px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.theme-light .match-count {
-  color: #666;
-}
-
-.search-btn {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 6px;
-  background: #3a3a3a;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.theme-light .search-btn {
-  background: #e5e5e5;
-  color: #2c3e50;
-}
-
-.search-btn.primary {
-  background: #646cff;
-}
-
-.search-btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.15);
-}
-
-.close-search-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  font-size: 22px;
-  color: #888;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s;
 }
 
-.close-search-btn:hover {
-  background: rgba(255, 95, 86, 0.15);
-  color: #ff5f56;
+.search-input,
+.replace-input {
+  width: 100%;
+  padding: 6px 10px;
+  background: #1e2127;
+  border: 1px solid #3e4451;
+  border-radius: 4px;
+  color: #abb2bf;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
 }
 
-.theme-light .close-search-btn {
-  color: #777;
+.search-input:focus,
+.replace-input:focus {
+  border-color: #61afef;
+}
+
+.search-input::placeholder,
+.replace-input::placeholder {
+  color: #5c6370;
+}
+
+.match-counter {
+  position: absolute;
+  right: 8px;
+  color: #5c6370;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.search-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-btn,
+.toggle-replace-btn,
+.close-btn {
+  padding: 6px 10px;
+  background: #3e4451;
+  border: none;
+  border-radius: 4px;
+  color: #abb2bf;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.nav-btn:hover,
+.toggle-replace-btn:hover,
+.close-btn:hover {
+  background: #4b5263;
+}
+
+.close-btn {
+  background: #e06c75;
+}
+
+.close-btn:hover {
+  background: #c45a63;
+}
+
+.replace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.replace-input {
+  flex: 1;
+}
+
+.replace-btn,
+.replace-all-btn {
+  padding: 6px 12px;
+  background: #61afef;
+  border: none;
+  border-radius: 4px;
+  color: #1e2127;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.replace-btn:hover,
+.replace-all-btn:hover {
+  background: #4a9bdc;
+}
+
+.replace-all-btn {
+  background: #98c379;
+}
+
+.replace-all-btn:hover {
+  background: #85b265;
+}
+
+/* Анимация для панели замены */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.2s ease;
+  max-height: 50px;
+  opacity: 1;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.codemirror-area {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Скрыть встроенную панель поиска */
 .cm-editor .cm-panel {
   display: none !important;
-}
-
-/* Стили для скроллбара в светлой теме */
-.theme-light .cm-editor ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
 }
 
 /* p5.js подсветка */
