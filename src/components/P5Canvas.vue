@@ -103,7 +103,7 @@ function start(userCode: string) {
 
       clean = clean
         .replace(/is not defined/g, 'не определена')
-        .replace(/Unexpected end of input/g, 'Неожиданный конец ввода')
+        .replace(/Unexpected end of input/g, ': возможно где-то в программе не поставлена } (закрывающая фигурная скобка)')
         .replace(/Unexpected token/g, 'Неожиданный токен')
         .replace(/Cannot read properties of undefined/g, 'Невозможно прочитать свойства undefined');
 
