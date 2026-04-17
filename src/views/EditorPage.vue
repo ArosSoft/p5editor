@@ -25,15 +25,15 @@ const showAuthModal = ref(false)
 const currentSketchId = ref<string | null>(null)
 const isSaving = ref(false)
 
-const code = ref(`let Размер = 50;
-
-function setup() {
-  createCanvas( windowWidth, 400);
+const code = ref(`function setup() {
+  createCanvas( 800, 600);
 }
 
 function draw() {
-  background(220);
-  ellipse( mouseX, mouseY, Размер, 50);
+  // background(220);
+  ellipse( mouseX, mouseY, 50, 50);
+  // напиши свой код ниже
+
 }`)
 
 const originalCode = ref(code.value)
@@ -481,15 +481,15 @@ function resetToExample() {
     currentSketchId.value = null
     localStorage.removeItem('p5editor_current_sketch_id')
     // Восстанавливаем стартовый шаблон
-    code.value = `let Размер = 50;
-
-function setup() {
-  createCanvas( windowWidth, 400);
+    code.value = `function setup() {
+  createCanvas( 800, 600);
 }
 
 function draw() {
-  background(220);
-  ellipse( mouseX, mouseY, Размер, 50);
+  // background(220);
+  ellipse( mouseX, mouseY, 50, 50);
+  // напиши свой код ниже
+
 }`
     originalCode.value = code.value
     // Устанавливаем название "Шаблон"
