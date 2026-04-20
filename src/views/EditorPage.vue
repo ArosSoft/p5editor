@@ -13,6 +13,7 @@ import beautify from 'js-beautify'
 // Ленивая загрузка тяжёлых компонентов
 const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
 const ExamplesPanel = defineAsyncComponent(() => import('../components/ExamplesPanel.vue'))
+const PalettePanel = defineAsyncComponent(() => import('../components/PalettePanel.vue'))
 const AIChat = defineAsyncComponent(() => import('../components/AIChat.vue'))
 
 const route = useRoute()
@@ -43,6 +44,7 @@ const canvasRef = ref<InstanceType<typeof P5Canvas> | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const showExamples = ref(false)
+const showPalette = ref(false)
 
 const fontSize = ref(19)
 const fontFamily = ref('Consolas, Monaco, monospace')
@@ -157,7 +159,7 @@ function stopDividerDrag() {
   // Теперь применяем финальные размеры ОДИН раз
   const deltaX = (ghostDividerX.value ?? dragStartX) - dragStartX
   const totalWidth = mainRef.value.clientWidth
-  const dividerCount = showExamples.value ? 2 : 1
+  const dividerCount = (showExamples.value || showPalette.value) ? 2 : 1
   const availableWidth = totalWidth - dividerCount * 8
 
   if (draggingDivider.value === 'examples-editor') {
@@ -168,7 +170,7 @@ function stopDividerDrag() {
     }
   } else if (draggingDivider.value === 'editor-canvas') {
     const newCanvasWidth = dragStartCanvasWidth - deltaX
-    const exW = showExamples.value ? examplesWidth.value : 0
+    const exW = (showExamples.value || showPalette.value) ? examplesWidth.value : 0
     const editorWidth = availableWidth - exW - newCanvasWidth
     if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
       canvasWidth.value = newCanvasWidth
@@ -619,10 +621,21 @@ function showShortcuts() {
 
 function toggleExamples() {
   showExamples.value = !showExamples.value
+  if (showExamples.value) showPalette.value = false
   if (showExamples.value) {
     addMessage('📚 Открыта галерея примеров')
   } else {
     addMessage('📚 Галерея примеров закрыта')
+  }
+}
+
+function togglePalette() {
+  showPalette.value = !showPalette.value
+  if (showPalette.value) showExamples.value = false
+  if (showPalette.value) {
+    addMessage('🎨 Открыта палитра цветов')
+  } else {
+    addMessage('🎨 Палитра цветов закрыта')
   }
 }
 
@@ -669,6 +682,7 @@ function getTooltipText(item: string): string {
     'save': 'Сохранить скетч (Ctrl+S)',
     'load': 'Загрузить скетч',
     'ai': 'p5.js помощник (справочник)',
+    'palette': 'Палитра цветов',
     'font-up': 'Увеличить шрифт',
     'font-down': 'Уменьшить шрифт',
     'undo': 'Отмена (Ctrl+Z)',
@@ -855,6 +869,12 @@ function navigateToDashboard() {
           <span class="menu-text" v-show="isMenuExpanded">Справочник</span>
         </button>
 
+        <button @click="togglePalette" class="menu-item" :class="{ 'active': showPalette }" title="Палитра цветов"
+                @mouseenter="setActiveMenuItem('palette')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">🎨</span>
+          <span class="menu-text" v-show="isMenuExpanded">Палитра</span>
+        </button>
+
         <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
                 @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">+</span>
@@ -924,22 +944,28 @@ function navigateToDashboard() {
       <div class="main" ref="mainRef">
         <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
 
-        <!-- Панель примеров -->
+        <!-- Левая панель: примеры / палитра -->
         <div
-          v-if="showExamples"
+          v-if="showExamples || showPalette"
           class="examples-panel-wrapper"
           :style="{ width: examplesWidth + 'px' }"
         >
           <ExamplesPanel
+            v-if="showExamples"
             :theme="theme"
             @load-example="loadExample"
             @close="toggleExamples"
+          />
+          <PalettePanel
+            v-else
+            :theme="theme"
+            @close="togglePalette"
           />
         </div>
 
         <!-- Разделитель: примеры ↔ редактор -->
         <div
-          v-if="showExamples"
+          v-if="showExamples || showPalette"
           class="resize-handle-vertical"
           :class="{ 'resizing': draggingDivider === 'examples-editor' }"
           @mousedown.prevent="startDividerDrag('examples-editor', $event)"

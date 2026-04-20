@@ -49,8 +49,5 @@ function draw() {
   strokeWeight(2);
   arc(200, 125, 30, 15, 0, PI);
 
-  // Простой снег на земле
-  noStroke();
-  fill(255);
-  ellipse(200, 350, 400, 60);
+  
 }
