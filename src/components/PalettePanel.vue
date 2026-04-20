@@ -174,9 +174,11 @@ function clamp01(n: number) {
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return null
-  const v = parseInt(m[1], 16)
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  // Безопасная проверка на наличие совпадения и первой группы
+  if (!match?.[1]) return null
+  
+  const v = parseInt(match[1], 16)
   const r = (v >> 16) & 255
   const g = (v >> 8) & 255
   const b = v & 255
