@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps<{
   theme?: 'dark' | 'light'
@@ -10,9 +10,10 @@ const emit = defineEmits<{
 }>()
 
 type CssColor = { name: string; value: string }
+
 type Hsl = { h: number; s: number; l: number }
 
-// CSS named colors (исправлены все опечатки из исходного текста)
+// CSS named colors (lowercase) — копируем именно имя, как в CSS.
 const CSS_NAMED_COLORS: CssColor[] = [
   { name: 'aliceblue', value: '#f0f8ff' },
   { name: 'antiquewhite', value: '#faebd7' },
@@ -198,9 +199,16 @@ function rgbToHsl(r8: number, g8: number, b8: number): Hsl {
 
   if (d !== 0) {
     s = d / (1 - Math.abs(2 * l - 1))
-    if (max === r) h = ((g - b) / d) % 6
-    else if (max === g) h = (b - r) / d + 2
-    else h = (r - g) / d + 4
+    switch (max) {
+      case r:
+        h = ((g - b) / d) % 6
+        break
+      case g:
+        h = (b - r) / d + 2
+        break
+      default:
+        h = (r - g) / d + 4
+    }
     h *= 60
     if (h < 0) h += 360
   }
@@ -259,7 +267,7 @@ const filteredNamed = computed(() => {
 </script>
 
 <template>
-  <div class="panel" :class="theme">
+  <div class="panel" :class="props.theme">
     <Transition name="fade">
       <div v-if="notification" class="notif">{{ notification }}</div>
     </Transition>
@@ -281,6 +289,7 @@ const filteredNamed = computed(() => {
       <div class="section">
         <div class="section-title">CSS-цвета</div>
         <input v-model="search" class="search" placeholder="Поиск (name или #hex)..." />
+
         <div class="colors">
           <button
             v-for="c in filteredNamed"
@@ -446,7 +455,7 @@ const filteredNamed = computed(() => {
 }
 
 .value {
-  margin-left: auto; 
+  margin-left: auto;
   font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
   font-size: 12px;
   opacity: 0.9;
@@ -469,3 +478,4 @@ const filteredNamed = computed(() => {
 .fade-enter-active, .fade-leave-active { transition: all 0.22s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 </style>
+
