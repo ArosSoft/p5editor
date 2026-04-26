@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useSketches } from '../composables/useSketches'
@@ -39,6 +39,13 @@ onMounted(async () => {
   }
 
   await loadDashboardData()
+})
+
+// Обновление данных при возврате на страницу (для keep-alive)
+onActivated(async () => {
+  if (user.value) {
+    await loadDashboardData()
+  }
 })
 
 // Загрузка всех данных

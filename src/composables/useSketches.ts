@@ -369,12 +369,14 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const { data, error: updateError } = await supabase
+      const query = supabase
         .from('sketches')
         .update(updates)
         .eq('id', id)
         .select()
         .single()
+
+      const { data, error: updateError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут обновления скетча')
 
       if (updateError) throw updateError
 
