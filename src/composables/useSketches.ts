@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import type { Sketch, SketchDifficulty, SketchStatus, SketchWithProfile } from '../types/supabase'
+import { useStorage } from './useStorage'
 
 // Настраиваемые таймауты (в миллисекундах)
 const DEFAULT_TIMEOUT = 8000
@@ -43,6 +44,9 @@ export function useSketches() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const total = ref(0)
+
+  // Storage functions
+  const { deleteFile } = useStorage()
 
   // AbortController для отмены предыдущих запросов
   let currentAbortController: AbortController | null = null
@@ -400,6 +404,33 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
+      // Сначала получаем данные скетча для получения thumbnail_url
+      const { data: sketchData, error: fetchError } = await supabase
+        .from('sketches')
+        .select('thumbnail_url')
+        .eq('id', id)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Удаляем миниатюру из хранилища, если она существует
+      if (sketchData?.thumbnail_url) {
+        try {
+          // Извлекаем путь к файлу из URL
+          // Формат URL: https://<project>.supabase.co/storage/v1/object/public/user-content/<path>
+          const url = sketchData.thumbnail_url
+          const match = url.match(/\/public\/user-content\/([^?]+)/)
+          if (match) {
+            const filePath = match[1]
+            await deleteFile(filePath)
+          }
+        } catch (e) {
+          console.warn('Не удалось удалить миниатюру:', e)
+          // Продолжаем удаление скетча, даже если не удалось удалить миниатюру
+        }
+      }
+
+      // Теперь удаляем скетч из базы данных
       const { error: deleteError } = await supabase
         .from('sketches')
         .delete()

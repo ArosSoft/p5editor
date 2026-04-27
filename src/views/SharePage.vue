@@ -29,6 +29,86 @@ function dataURLtoFile(dataurl: string, filename: string): File {
   return new File([u8arr], filename, { type: mime })
 }
 
+// Обработка изображения: изменение размера до 550x410, конвертация в PNG и JPG, выбор наименьшего
+async function processImageForUpload(input: File | string): Promise<File> {
+  // Создаем Image из входных данных
+  const img = new Image()
+  const imageLoadPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    if (typeof input === 'string') {
+      img.src = input
+    } else {
+      const reader = new FileReader()
+      reader.onload = (e) => { img.src = e.target?.result as string }
+      reader.onerror = reject
+      reader.readAsDataURL(input)
+    }
+  })
+  
+  const loadedImg = await imageLoadPromise
+  
+  // Целевые размеры
+  const targetWidth = 550
+  const targetHeight = 410
+  
+  // Создаем canvas для изменения размера
+  const canvas = document.createElement('canvas')
+  canvas.width = targetWidth
+  canvas.height = targetHeight
+  const ctx = canvas.getContext('2d')!
+  
+  // Вычисляем размеры и позицию для cover (сохранение пропорций с обрезкой)
+  const imgRatio = loadedImg.width / loadedImg.height
+  const targetRatio = targetWidth / targetHeight
+  
+  let drawWidth: number, drawHeight: number, offsetX: number, offsetY: number
+  
+  if (imgRatio > targetRatio) {
+    // Изображение шире относительно целевого - обрезаем по ширине
+    drawHeight = targetHeight
+    drawWidth = loadedImg.width * (targetHeight / loadedImg.height)
+    offsetX = -(drawWidth - targetWidth) / 2
+    offsetY = 0
+  } else {
+    // Изображение уже относительно целевого - обрезаем по высоте
+    drawWidth = targetWidth
+    drawHeight = loadedImg.height * (targetWidth / loadedImg.width)
+    offsetX = 0
+    offsetY = -(drawHeight - targetHeight) / 2
+  }
+  
+  // Заполняем фон (для JPG нужен белый фон, так как JPG не поддерживает прозрачность)
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, 0, targetWidth, targetHeight)
+  
+  // Рисуем изображение с обрезкой
+  ctx.drawImage(loadedImg, offsetX, offsetY, drawWidth, drawHeight)
+  
+  // Конвертируем в PNG и JPG (качество 0.9 для JPG)
+  const pngBlob = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((blob) => resolve(blob!), 'image/png')
+  )
+  
+  const jpgBlob = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.9)
+  )
+  
+  // Сравниваем размеры
+  const pngSize = pngBlob.size
+  const jpgSize = jpgBlob.size
+  
+  addMessage(`📊 Размер PNG: ${(pngSize / 1024).toFixed(2)} KB, JPG: ${(jpgSize / 1024).toFixed(2)} KB`)
+  
+  if (jpgSize <= pngSize) {
+    addMessage(`✅ Выбран JPG (меньше на ${((pngSize - jpgSize) / 1024).toFixed(2)} KB)`)
+    return new File([jpgBlob], 'thumbnail.jpg', { type: 'image/jpeg' })
+  } else {
+    addMessage(`✅ Выбран PNG (меньше на ${((jpgSize - pngSize) / 1024).toFixed(2)} KB)`)
+    return new File([pngBlob], 'thumbnail.png', { type: 'image/png' })
+  }
+}
+
 // Состояние формы
 const title = ref('')
 const description = ref('')
@@ -219,7 +299,7 @@ const sharedName = computed(() => {
 })
 
 // Загрузка thumbnail из файла
-function handleThumbnailUpload(event: Event) {
+async function handleThumbnailUpload(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files && target.files[0]) {
     const file = target.files[0]
@@ -237,33 +317,64 @@ function handleThumbnailUpload(event: Event) {
     }
     
     delete formErrors.value.thumbnail
-    thumbnailFile.value = file
-    isThumbnailReady.value = true
+    addMessage('🔄 Обработка изображения...')
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      thumbnail.value = e.target?.result as string
+    try {
+      // Обрабатываем изображение: изменение размера и выбор оптимального формата
+      const processedFile = await processImageForUpload(file)
+      thumbnailFile.value = processedFile
+      isThumbnailReady.value = true
+
+      // Создаем preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        thumbnail.value = e.target?.result as string
+      }
+      reader.readAsDataURL(processedFile)
+      
+      addMessage(`✅ Изображение обработано: ${processedFile.name} (${(processedFile.size / 1024).toFixed(2)} KB)`)
+    } catch (e) {
+      console.error('[SharePage] Ошибка обработки изображения:', e)
+      addMessage('⚠️ Ошибка обработки изображения, используем оригинал')
+      // В случае ошибки используем оригинальный файл
+      thumbnailFile.value = file
+      isThumbnailReady.value = true
+      
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        thumbnail.value = e.target?.result as string
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
   }
 }
 
 // Создание thumbnail из canvas
-function captureFromCanvas() {
+async function captureFromCanvas() {
   // Сначала пробуем получить изображение из localStorage (если было сохранено в редакторе)
   const savedSnapshot = localStorage.getItem('p5editor_canvas_snapshot')
   if (savedSnapshot) {
-    thumbnail.value = savedSnapshot
     delete formErrors.value.thumbnail
+    addMessage('🔄 Обработка изображения из памяти...')
 
-    // Синхронное создание File из dataURL (избегаем race condition с fetch)
     try {
-      thumbnailFile.value = dataURLtoFile(savedSnapshot, 'thumbnail.png')
+      // Обрабатываем изображение: изменение размера и выбор оптимального формата
+      const processedFile = await processImageForUpload(savedSnapshot)
+      thumbnailFile.value = processedFile
+      thumbnail.value = URL.createObjectURL(processedFile)
       isThumbnailReady.value = true
-      addMessage('📷 Изображение загружено из памяти')
+      addMessage(`📷 Изображение обработано: ${processedFile.name} (${(processedFile.size / 1024).toFixed(2)} KB)`)
     } catch (e) {
-      console.error('[SharePage] Не удалось создать File из dataURL', e)
-      addMessage('⚠️ Не удалось создать файл из памяти')
+      console.error('[SharePage] Ошибка обработки изображения:', e)
+      addMessage('⚠️ Ошибка обработки, используем оригинал')
+      // В случае ошибки используем оригинальный dataURL
+      thumbnail.value = savedSnapshot
+      try {
+        thumbnailFile.value = dataURLtoFile(savedSnapshot, 'thumbnail.png')
+        isThumbnailReady.value = true
+      } catch (e2) {
+        console.error('[SharePage] Не удалось создать File из dataURL', e2)
+      }
     }
     return
   }
@@ -271,13 +382,29 @@ function captureFromCanvas() {
   // Если нет сохранённого изображения, пробуем сделать скриншот из canvas
   const canvas = document.querySelector('canvas')
   if (canvas) {
-    canvas.toBlob((blob) => {
+    addMessage('🔄 Создание скриншота из canvas...')
+    canvas.toBlob(async (blob) => {
       if (blob) {
-        const file = new File([blob], 'thumbnail.png', { type: 'image/png' })
-        thumbnailFile.value = file
-        thumbnail.value = canvas.toDataURL('image/png')
-        delete formErrors.value.thumbnail
-        addMessage('📷 Скриншот сделан из canvas')
+        try {
+          // Преобразуем Blob в File для обработки
+          const fileFromBlob = new File([blob], 'thumbnail.png', { type: 'image/png' })
+          // Обрабатываем изображение: изменение размера и выбор оптимального формата
+          const processedFile = await processImageForUpload(fileFromBlob)
+          thumbnailFile.value = processedFile
+          thumbnail.value = URL.createObjectURL(processedFile)
+          delete formErrors.value.thumbnail
+          isThumbnailReady.value = true
+          addMessage(`📷 Скриншот обработан: ${processedFile.name} (${(processedFile.size / 1024).toFixed(2)} KB)`)
+        } catch (e) {
+          console.error('[SharePage] Ошибка обработки скриншота:', e)
+          // В случае ошибки используем оригинальный blob
+          const file = new File([blob], 'thumbnail.png', { type: 'image/png' })
+          thumbnailFile.value = file
+          thumbnail.value = canvas.toDataURL('image/png')
+          delete formErrors.value.thumbnail
+          isThumbnailReady.value = true
+          addMessage('📷 Скриншот сделан из canvas (без обработки)')
+        }
       }
     }, 'image/png')
   } else {
