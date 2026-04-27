@@ -9,6 +9,7 @@ import { useAuth } from '../composables/useAuth'
 import { useSketches } from '../composables/useSketches'
 import { saveAs } from 'file-saver'
 import beautify from 'js-beautify'
+import { supabase } from '../lib/supabase'
 
 // Ленивая загрузка тяжёлых компонентов
 const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
@@ -87,6 +88,9 @@ const sketchName = ref('Мой первый скетч')
 const mouseX = ref(0)
 const mouseY = ref(0)
 
+// Состояние подключения к БД
+const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
+
 // Ref на main контейнер для расчётов
 const mainRef = ref<HTMLElement | null>(null)
 
@@ -105,6 +109,30 @@ function updateMouseCoordinates(x: number, y: number) {
 
 function handleAIMessage(message: string) {
   // Сообщение от помощника не выводится в консоль
+}
+
+// Функция проверки подключения к Supabase
+async function checkSupabaseConnection() {
+  try {
+    const { error } = await supabase
+      .from('sketches')
+      .select('id')
+      .limit(1)
+    
+    if (error) {
+      // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
+      if (error.code && ['400', '401', '403'].includes(error.code)) {
+        supabaseStatus.value = 'connected'
+      } else {
+        supabaseStatus.value = 'error'
+      }
+    } else {
+      supabaseStatus.value = 'connected'
+    }
+  } catch (e) {
+    // Ошибка сети или таймаут
+    supabaseStatus.value = 'error'
+  }
 }
 
 // === Обработчики для изменения размера консоли ===
@@ -259,6 +287,9 @@ onMounted(async () => {
   }
 
   console.log('[EditorPage] onMounted')
+
+  // Проверка подключения к Supabase
+  checkSupabaseConnection()
 
   // Проверка параметра auth:required для открытия модального окна входа
   if (route.query.auth === 'required') {
@@ -1035,7 +1066,7 @@ function navigateToDashboard() {
                 <span class="coord-separator">/</span>
                 <span class="coord-item">Y = {{ mouseY }}</span>
               </div>
-              <div class="canvas-indicator"></div>
+              <div class="canvas-indicator" :class="'status-' + supabaseStatus"></div>
             </div>
             <div class="canvas-content">
               <P5Canvas
@@ -1636,8 +1667,28 @@ function navigateToDashboard() {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4caf50;
+  background: #4caf50; /* по умолчанию зеленый */
+}
+
+/* Динамические классы для статуса БД */
+.canvas-indicator.status-checking {
+  background: #ff9800;
   animation: pulse 1.5s infinite;
+}
+
+.canvas-indicator.status-connected {
+  background: #4caf50;
+  animation: none;
+}
+
+.canvas-indicator.status-error {
+  background: #f44336;
+  animation: pulse-error 1s infinite;
+}
+
+@keyframes pulse-error {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .editor-container, .canvas-container {

@@ -38,6 +38,42 @@ async function withTimeout<T>(
   }
 }
 
+// Вспомогательная функция для выполнения запроса с автоматическим обновлением токена при 401 ошибке
+async function withAuthRetry<T>(
+  queryFactory: () => any, // Фабрика, возвращающая новый query builder
+  timeoutMs: number = DEFAULT_TIMEOUT,
+  timeoutMessage: string = 'Таймаут запроса'
+): Promise<{ data: T | null; error: any; count?: number | null }> {
+  // Первая попытка
+  let query = queryFactory()
+  let result = await withTimeout<T>(query, timeoutMs, timeoutMessage)
+
+  // Проверка на ошибку 401 (Unauthorized) или PGRST301 (JWT expired)
+  if (result.error && (result.error.status === 401 || result.error.code === 'PGRST301' || result.error.message?.includes('JWT'))) {
+    console.warn('[useSketches] Обнаружена ошибка авторизации (401), попытка обновления токена...')
+
+    try {
+      // Пытаемся обновить сессию
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+
+      if (refreshError || !refreshData.session) {
+        console.error('[useSketches] Не удалось обновить токен:', refreshError)
+        return result // Возвращаем оригинальную ошибку
+      }
+
+      console.log('[useSketches] Токен успешно обновлен, повторяем запрос...')
+      // Повторная попытка с новым токеном (пересоздаем query)
+      query = queryFactory()
+      result = await withTimeout<T>(query, timeoutMs, timeoutMessage)
+    } catch (refreshErr) {
+      console.error('[useSketches] Ошибка при обновлении токена:', refreshErr)
+      return result
+    }
+  }
+
+  return result
+}
+
 export function useSketches() {
   const sketches = ref<SketchWithProfile[]>([])
   const sketch = ref<Sketch | null>(null)
@@ -59,29 +95,32 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const query = supabase
-        .from('sketches')
-        .select(`
-          *,
-          profiles:user_id (
-            id,
-            display_name,
-            avatar_url
-          ),
-          sketch_moderation_logs (
-            id,
-            action,
-            comment,
-            created_at,
-            profiles:moderator_id (
-              display_name
+      // Используем withAuthRetry с фабрикой запросов для возможности повтора при 401 ошибке
+      const { data, error: fetchError } = await withAuthRetry<any>(
+        () => supabase
+          .from('sketches')
+          .select(`
+            *,
+            profiles:user_id (
+              id,
+              display_name,
+              avatar_url
+            ),
+            sketch_moderation_logs (
+              id,
+              action,
+              comment,
+              created_at,
+              profiles:moderator_id (
+                display_name
+              )
             )
-          )
-        `, { count: 'exact' })
-        .eq('id', id)
-        .single()
-
-      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Ошибка загрузки скетча (таймаут)')
+          `, { count: 'exact' })
+          .eq('id', id)
+          .single(),
+        DEFAULT_TIMEOUT,
+        'Ошибка загрузки скетча (таймаут)'
+      )
 
       if (fetchError) throw fetchError
 
@@ -134,49 +173,8 @@ export function useSketches() {
     sortOrder?: 'asc' | 'desc'
   } = {}) {
     try {
-      // Отменяем предыдущий запрос, если он ещё выполняется
-      if (currentAbortController) {
-        currentAbortController.abort()
-      }
-      currentAbortController = new AbortController()
-
       loading.value = true
       error.value = null
-
-      let query = supabase
-        .from('sketches')
-        .select(`
-          *,
-          profiles:user_id (
-            id,
-            display_name,
-            avatar_url
-          )
-        `, { count: 'exact' })
-        .eq('status', 'approved')
-
-      // Фильтр по категории
-      if (category) {
-        query = query.eq('category', category)
-      }
-
-      // Фильтр по сложности
-      if (difficulty) {
-        query = query.eq('difficulty', difficulty)
-      }
-
-      // Фильтр по тэгам (если выбраны тэги, ищем скетчи, содержащие хотя бы один из них)
-      if (tags && tags.length > 0) {
-        // Используем contains для поиска по JSON-массиву tags
-        // Для нескольких тэгов - используем or с contains для каждого
-        const tagFilters = tags.map(tag => `tags.cs.{${JSON.stringify(tag)}}`).join(',')
-        query = query.or(tagFilters)
-      }
-
-      // Поиск по названию, описанию
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
-      }
 
       // Маппинг имени сортировки на реальные колонки
       const sortColumnMap: Record<string, string> = {
@@ -190,19 +188,56 @@ export function useSketches() {
       const isPopularSort = sortBy === 'popular'
       const sortColumn = isPopularSort ? 'created_at' : (sortColumnMap[sortBy] || 'created_at')
 
-      // Сортировка
-      query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
-
       // Пагинация
       const from = (page - 1) * limit
       const to = from + limit - 1
-      query = query.range(from, to)
 
-      // Добавляем abortSignal к финальному query
-      const finalQuery = query.abortSignal(currentAbortController.signal)
+      // Фабрика запросов для возможности повтора при 401 ошибке
+      const queryFactory = () => {
+        let query = supabase
+          .from('sketches')
+          .select(`
+            *,
+            profiles:user_id (
+              id,
+              display_name,
+              avatar_url
+            )
+          `, { count: 'exact' })
+          .eq('status', 'approved')
 
-      const { data, error: fetchError, count } = await withTimeout(
-        finalQuery,
+        // Фильтр по категории
+        if (category) {
+          query = query.eq('category', category)
+        }
+
+        // Фильтр по сложности
+        if (difficulty) {
+          query = query.eq('difficulty', difficulty)
+        }
+
+        // Фильтр по тэгам (если выбраны тэги, ищем скетчи, содержащие хотя бы один из них)
+        if (tags && tags.length > 0) {
+          const tagFilters = tags.map(tag => `tags.cs.{${JSON.stringify(tag)}}`).join(',')
+          query = query.or(tagFilters)
+        }
+
+        // Поиск по названию, описанию
+        if (search) {
+          query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
+        }
+
+        // Сортировка
+        query = query.order(sortColumn, { ascending: sortOrder === 'asc' })
+
+        // Пагинация
+        query = query.range(from, to)
+
+        return query
+      }
+
+      const { data, error: fetchError, count } = await withAuthRetry(
+        queryFactory,
         DEFAULT_TIMEOUT,
         'Таймаут загрузки галереи'
       )
@@ -245,37 +280,40 @@ export function useSketches() {
   // Получение скетчей пользователя
   async function getUserSketches(userId: string, status?: SketchStatus) {
     try {
-      // Отменяем предыдущий запрос, если он ещё выполняется
-      if (userSketchesAbortController) {
-        userSketchesAbortController.abort()
-      }
-      userSketchesAbortController = new AbortController()
-
       loading.value = true
       error.value = null
 
-      let query = supabase
-        .from('sketches')
-        .select(`
-          *,
-          sketch_moderation_logs (
-            id,
-            action,
-            comment,
-            created_at,
-            profiles:moderator_id (
-              display_name
+      // Фабрика запросов для withAuthRetry
+      const queryFactory = () => {
+        let query = supabase
+          .from('sketches')
+          .select(`
+            *,
+            sketch_moderation_logs (
+              id,
+              action,
+              comment,
+              created_at,
+              profiles:moderator_id (
+                display_name
+              )
             )
-          )
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
 
-      if (status) {
-        query = query.eq('status', status)
+        if (status) {
+          query = query.eq('status', status)
+        }
+
+        return query
       }
 
-      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки скетчей пользователя')
+      const { data, error: fetchError } = await withAuthRetry(
+        queryFactory,
+        DEFAULT_TIMEOUT,
+        'Таймаут загрузки скетчей пользователя'
+      )
 
       if (fetchError) throw fetchError
 
@@ -328,13 +366,18 @@ export function useSketches() {
       console.log('[createSketch] User ID:', sketchData.user_id)
       console.log('[createSketch] Статус:', sketchData.status)
 
-      const query = supabase
+      // Фабрика запросов для withAuthRetry
+      const queryFactory = () => supabase
         .from('sketches')
         .insert(sketchData)
         .select()
         .single()
 
-      const { data, error: createError } = await withTimeout<{ id: string } & Sketch>(query, LONG_TIMEOUT, 'Таймаут создания скетча')
+      const { data, error: createError } = await withAuthRetry<{ id: string } & Sketch>(
+        queryFactory,
+        LONG_TIMEOUT,
+        'Таймаут создания скетча'
+      )
 
       if (createError) {
         console.error('[createSketch] Ошибка создания скетча:', createError)
@@ -373,14 +416,19 @@ export function useSketches() {
       loading.value = true
       error.value = null
 
-      const query = supabase
+      // Фабрика запросов для withAuthRetry
+      const queryFactory = () => supabase
         .from('sketches')
         .update(updates)
         .eq('id', id)
         .select()
         .single()
 
-      const { data, error: updateError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут обновления скетча')
+      const { data, error: updateError } = await withAuthRetry(
+        queryFactory,
+        DEFAULT_TIMEOUT,
+        'Таймаут обновления скетча'
+      )
 
       if (updateError) throw updateError
 
@@ -563,16 +611,11 @@ export function useSketches() {
   // Получение скетчей на модерацию (для админов и модераторов)
   async function getPendingSketches() {
     try {
-      // Отменяем предыдущий запрос, если он ещё выполняется
-      if (pendingSketchesAbortController) {
-        pendingSketchesAbortController.abort()
-      }
-      pendingSketchesAbortController = new AbortController()
-
       loading.value = true
       error.value = null
 
-      const query = supabase
+      // Фабрика запросов для withAuthRetry
+      const queryFactory = () => supabase
         .from('sketches')
         .select(`
           *,
@@ -585,7 +628,11 @@ export function useSketches() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
 
-      const { data, error: fetchError } = await withTimeout(query, DEFAULT_TIMEOUT, 'Таймаут загрузки скетчей на модерацию')
+      const { data, error: fetchError } = await withAuthRetry(
+        queryFactory,
+        DEFAULT_TIMEOUT,
+        'Таймаут загрузки скетчей на модерацию'
+      )
 
       if (fetchError) throw fetchError
 
@@ -597,7 +644,6 @@ export function useSketches() {
       return { success: false, error: error.value }
     } finally {
       loading.value = false
-      pendingSketchesAbortController = null
     }
   }
 
@@ -609,15 +655,19 @@ export function useSketches() {
 
       console.log('[approveSketch] Начало одобрения скетча:', sketchId)
 
-      // Обновляем статус скетча с таймаутом
-      const query = supabase
+      // Обновляем статус скетча с таймаутом и retry при 401
+      const queryFactory = () => supabase
         .from('sketches')
         .update({ status: 'approved' })
         .eq('id', sketchId)
         .select()
         .single()
 
-      const { data: sketchData, error: updateError } = await withTimeout(query, LONG_TIMEOUT, 'Таймаут одобрения скетча')
+      const { data: sketchData, error: updateError } = await withAuthRetry(
+        queryFactory,
+        LONG_TIMEOUT,
+        'Таймаут одобрения скетча'
+      )
 
       if (updateError) {
         console.error('[approveSketch] Ошибка обновления скетча:', updateError)
@@ -666,19 +716,23 @@ export function useSketches() {
       console.log('[rejectSketch] Moderator ID:', moderatorId)
       console.log('[rejectSketch] Причина:', reason)
 
-      // Проверяем, можем ли вообще получить доступ к скетчу
-      const checkQuery = supabase
+      // Проверяем, можем ли вообще получить доступ к скетчу (с retry при 401)
+      const checkQueryFactory = () => supabase
         .from('sketches')
         .select('id, status, user_id')
         .eq('id', sketchId)
         .single()
 
-      const { data: sketchCheck, error: checkError } = await withTimeout(checkQuery, DEFAULT_TIMEOUT, 'Таймаут проверки скетча')
+      const { data: sketchCheck, error: checkError } = await withAuthRetry(
+        checkQueryFactory,
+        DEFAULT_TIMEOUT,
+        'Таймаут проверки скетча'
+      )
 
       if (checkError) {
         console.error('[rejectSketch] Ошибка проверки скетча:', checkError)
-        // Если ошибка 400/401/403 - проблема с RLS
-        if (checkError.code === '400' || checkError.code === '401' || checkError.code === '403') {
+        // Если ошибка 400/403 - проблема с RLS (401 обрабатывается в withAuthRetry)
+        if (checkError.code === '400' || checkError.code === '403') {
           throw new Error('Нет прав доступа к скетчу. Проверьте RLS политики.')
         }
         throw checkError
@@ -686,15 +740,19 @@ export function useSketches() {
 
       console.log('[rejectSketch] Скетч найден:', sketchCheck)
 
-      // Обновляем статус скетча
-      const updateQuery = supabase
+      // Обновляем статус скетча (с retry при 401)
+      const updateQueryFactory = () => supabase
         .from('sketches')
         .update({ status: 'rejected' })
         .eq('id', sketchId)
         .select()
         .single()
 
-      const { data: sketchData, error: updateError } = await withTimeout(updateQuery, LONG_TIMEOUT, 'Таймаут отклонения скетча')
+      const { data: sketchData, error: updateError } = await withAuthRetry(
+        updateQueryFactory,
+        LONG_TIMEOUT,
+        'Таймаут отклонения скетча'
+      )
 
       if (updateError) {
         console.error('[rejectSketch] Ошибка обновления скетча:', updateError)

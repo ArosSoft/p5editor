@@ -36,6 +36,22 @@ export async function initAuth() {
 
       // Подписка на изменения авторизации
       const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        console.log('[Auth] Event:', event)
+        
+        // Приведение к string для поддержки всех возможных событий (включая TOKEN_REFRESH_FAILED)
+        const eventStr = event as string
+        
+        // Обработка события истечения/неудачи обновления токена
+        if (eventStr === 'TOKEN_REFRESH_FAILED' || eventStr === 'SIGNED_OUT') {
+          globalSession.value = null
+          globalUser.value = null
+          globalProfile.value = null
+          localStorage.removeItem('user_role')
+          globalError.value = 'Сессия истекла. Пожалуйста, войдите снова.'
+          console.warn('[Auth] Сессия истекла или токен не обновился')
+          return
+        }
+
         globalSession.value = newSession
         globalUser.value = newSession?.user ?? null
 

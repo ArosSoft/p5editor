@@ -74,35 +74,32 @@ router.beforeEach(async (to, from, next) => {
     document.title = `${title} — p5editor`
   }
 
+  // Получаем состояние авторизации
+  const { user, isReady, readyPromise } = useAuth()
+  
   // Ждём готовности авторизации перед проверкой прав
-  const { isReady, readyPromise } = useAuth()
   if (!isReady.value && readyPromise.value) {
     await readyPromise.value
   }
 
-  // Проверка авторизации через localStorage (роль сохраняется при входе)
-  // user_role устанавливается в useAuth при загрузке профиля
+  // Проверка авторизации через реального пользователя (надёжнее localStorage)
   if (to.meta.requiresAuth) {
-    const userRole = localStorage.getItem('user_role')
-    // Если роль есть (user, moderator, admin) - доступ разрешён
-    const hasUserRole = userRole === 'user' || userRole === 'moderator' || userRole === 'admin'
-
-    if (!hasUserRole) {
+    if (!user.value) {
       // Перенаправляем на главную с параметром для открытия модального окна входа
       next({ path: '/', query: { auth: 'required' } })
       return
     }
   }
 
-  // Проверка доступа к админ-панели
+  // Проверка доступа к админ-панели (также через user и profile)
   if (to.meta.requiresModerator) {
-    const userRole = localStorage.getItem('user_role')
-    const isModerator = userRole === 'moderator' || userRole === 'admin'
-
-    if (!isModerator) {
+    // Если пользователь не авторизован - на главную
+    if (!user.value) {
       next('/')
       return
     }
+    // Проверка роли происходит на стороне компонента через isModerator
+    // Здесь просто пропускаем, так как роль загружается асинхронно
   }
 
   next()
