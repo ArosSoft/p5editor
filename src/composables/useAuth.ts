@@ -249,7 +249,7 @@ export function useAuth() {
       // Формируем полный URL для редиректа после сброса
       // Важно: используем хэш (#), так как в проекте hash-mode роутер
       const redirectTo = `${window.location.origin}${basePath}#/update-password`
-      console.log('[Auth] Password reset redirectTo:', redirectTo)
+      console.log('[Auth] Password reset redirectTo:', redirectTo, '(v2)')
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo
