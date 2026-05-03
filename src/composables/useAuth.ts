@@ -242,7 +242,8 @@ export function useAuth() {
       // Определяем базовый путь
       // На GitHub Pages путь /p5editor/, локально — /
       let basePath = '/'
-      if (window.location.pathname.startsWith('/p5editor/')) {
+      const pathname = window.location.pathname
+      if (pathname === '/p5editor' || pathname.startsWith('/p5editor/')) {
         basePath = '/p5editor/'
       }
 
