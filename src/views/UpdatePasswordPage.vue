@@ -13,6 +13,11 @@
         <router-link to="/">На главную</router-link>
       </div>
 
+      <div v-else-if="!passwordRecoveryMode" class="error-message">
+        Ссылка для сброса пароля недействительна или устарела. Пожалуйста, запросите сброс пароля снова.
+        <router-link to="/">На главную</router-link>
+      </div>
+
       <form v-else @submit.prevent="handleUpdatePassword" class="password-form">
         <div class="form-group">
           <label for="new-password">Новый пароль</label>

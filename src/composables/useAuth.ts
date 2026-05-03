@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types/supabase'
+import router from '../router'
 
 // Глобальное состояние для хранения данных авторизации
 const globalUser = ref<User | null>(null)
@@ -62,6 +63,12 @@ export async function initAuth() {
           passwordRecoveryMode.value = true
           globalSession.value = newSession
           globalUser.value = newSession?.user ?? null
+          // Перенаправляем на страницу обновления пароля
+          try {
+            router.push('/update-password')
+          } catch (e) {
+            console.error('[Auth] Ошибка перенаправления:', e)
+          }
           return
         }
 
@@ -239,7 +246,7 @@ export function useAuth() {
       globalLoading.value = true
       globalError.value = null
 
-      // Определяем базовый путь
+      // Определяем базовый путь (без хэша!)
       // На GitHub Pages путь /p5editor/, локально — /
       let basePath = '/'
       const pathname = window.location.pathname
@@ -247,10 +254,11 @@ export function useAuth() {
         basePath = '/p5editor/'
       }
 
-      // Формируем полный URL для редиректа после сброса
-      // Важно: используем хэш (#), так как в проекте hash-mode роутер
-      const redirectTo = `${window.location.origin}${basePath}#/update-password`
-      console.log('[Auth] Password reset redirectTo:', redirectTo, '(v2)')
+      // ВАЖНО: Supabase некорректно обрабатывает хэш в redirectTo
+      // Поэтому перенаправляем на корень, а дальше роутер сам перекинет на /update-password
+      // после события PASSWORD_RECOVERY
+      const redirectTo = `${window.location.origin}${basePath}`
+      console.log('[Auth] Password reset redirectTo:', redirectTo)
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo
