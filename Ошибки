@@ -25,6 +25,9 @@ https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=564f858267bbfd19d1
 http://localhost:5173/p5editor/#/error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&sb=
 
 После правок на почту приходит
-https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=1e769fa98ed9dfbd6827c91390ce32f17354f662fd7bc5fc6f1fffe1&type=recovery&redirect_to=https%3A%2F%2Farossoft.github.io%2Fp5editor%2F%23%2F
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=045efad20301564604e43424f685ec57bc4d4243903e3c1f897f018e&type=recovery&redirect_to=https%3A%2F%2Farossoft.github.io%2Fp5editor%2F%23%2Fupdate-password
 С переходом на 
 https://arossoft.github.io/p5editor/#/error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&sb=
+
+Ошибка 4.
+При нажатии "Выйти" не происходит сброс имени пользователя на экране. И после перезагрузки страницы имя продолжает отображаться 
