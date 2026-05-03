@@ -25,6 +25,7 @@
     "marked": "^17.0.4",
     "p5": "^2.2.0",
     "pdfjs-dist": "^4.10.38",
+    "supabase": "^2.98.0",
     "vue": "^3.5.27",
     "vue-codemirror6": "^1.4.1",
     "vue-router": "^4.6.4"

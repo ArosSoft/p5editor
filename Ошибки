@@ -1,0 +1,30 @@
+Ошибка 1. 
+При регистрации нового пользователя сообщение об успешной регистрации и Ошибка. 
+Консоль:
+useAuth.ts:39 [Auth] Event: INITIAL_SESSION
+chunk-DAESH65R.js?v=85d68b6c:10754 An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+insert @ chunk-DAESH65R.js?v=85d68b6c:10754
+EditorPage.vue:289 [EditorPage] onMounted
+gfupycrmnegbcafuoxdx.supabase.co/rest/v1/profiles?select=*&id=eq.b4f273b4-69ec-402c-9111-788991427cc3:1  Failed to load resource: the server responded with a status of 406 ()
+useAuth.ts:107 Error loading profile: Object
+loadProfileInternal @ useAuth.ts:107
+
+Ошибка 2.
+Подтверждение пароля ведет не на сайт.
+Confirm your signup
+Follow this link to confirm your user:
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=742527acb424c44dbeefbf2e325553e4f962020127251d0fd8779f95&type=signup&redirect_to=http://localhost:3000
+
+Ошибка 3.
+Сброс пароля
+Инструкция по сбросу пароля отправлена на почту
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=564f858267bbfd19d17131034cb30a505a3b60338c07e429a293b8a1&type=recovery&redirect_to=http://localhost:5173/
+Может быть должна быть ссылка
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=564f858267bbfd19d17131034cb30a505a3b60338c07e429a293b8a1&type=recovery&redirect_to=http://localhost:5173/p5editor/#/
+Но После перехода по ней
+http://localhost:5173/p5editor/#/error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&sb=
+
+После правок на почту приходит
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=1e769fa98ed9dfbd6827c91390ce32f17354f662fd7bc5fc6f1fffe1&type=recovery&redirect_to=https%3A%2F%2Farossoft.github.io%2Fp5editor%2F%23%2F
+С переходом на 
+https://arossoft.github.io/p5editor/#/error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&sb=

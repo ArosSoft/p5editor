@@ -14,6 +14,9 @@ const readyPromise = ref<Promise<void> | null>(null)
 let authInitialized = false
 let authUnsubscribe: (() => void) | null = null
 
+// Состояние для сброса пароля
+const passwordRecoveryMode = ref(false)
+
 // Инициализация авторизации (вызывается один раз при старте приложения)
 export async function initAuth() {
   if (authInitialized) {
@@ -37,19 +40,34 @@ export async function initAuth() {
       // Подписка на изменения авторизации
       const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         console.log('[Auth] Event:', event)
-        
+
         // Приведение к string для поддержки всех возможных событий (включая TOKEN_REFRESH_FAILED)
         const eventStr = event as string
-        
+
         // Обработка события истечения/неудачи обновления токена
         if (eventStr === 'TOKEN_REFRESH_FAILED' || eventStr === 'SIGNED_OUT') {
           globalSession.value = null
           globalUser.value = null
           globalProfile.value = null
           localStorage.removeItem('user_role')
+          passwordRecoveryMode.value = false
           globalError.value = 'Сессия истекла. Пожалуйста, войдите снова.'
           console.warn('[Auth] Сессия истекла или токен не обновился')
           return
+        }
+
+        // Обработка события сброса пароля
+        if (eventStr === 'PASSWORD_RECOVERY') {
+          console.log('[Auth] Режим восстановления пароля')
+          passwordRecoveryMode.value = true
+          globalSession.value = newSession
+          globalUser.value = newSession?.user ?? null
+          return
+        }
+
+        // Сброс режима восстановления при входе/выходе
+        if (eventStr === 'SIGNED_IN' || eventStr === 'INITIAL_SESSION') {
+          passwordRecoveryMode.value = false
         }
 
         globalSession.value = newSession
@@ -221,8 +239,20 @@ export function useAuth() {
       globalLoading.value = true
       globalError.value = null
 
+      // Определяем базовый путь
+      // На GitHub Pages путь /p5editor/, локально — /
+      let basePath = '/'
+      if (window.location.pathname.startsWith('/p5editor/')) {
+        basePath = '/p5editor/'
+      }
+
+      // Формируем полный URL для редиректа после сброса
+      // Важно: используем хэш (#), так как в проекте hash-mode роутер
+      const redirectTo = `${window.location.origin}${basePath}#/update-password`
+      console.log('[Auth] Password reset redirectTo:', redirectTo)
+
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/`
+        redirectTo
       })
 
       if (resetError) throw resetError
@@ -231,6 +261,38 @@ export function useAuth() {
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : 'Ошибка сброса пароля'
       console.error('Reset password error:', e)
+      return { success: false, error: globalError.value }
+    } finally {
+      globalLoading.value = false
+    }
+  }
+
+  // Обновление пароля после сброса
+  async function updatePassword(newPassword: string) {
+    try {
+      globalLoading.value = true
+      globalError.value = null
+
+      const { data, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (updateError) throw updateError
+
+      passwordRecoveryMode.value = false
+
+      // Обновляем данные пользователя и сессию
+      if (data.user) {
+        globalUser.value = data.user
+        // Получаем актуальную сессию
+        const { data: sessionData } = await supabase.auth.getSession()
+        globalSession.value = sessionData.session
+      }
+
+      return { success: true }
+    } catch (e) {
+      globalError.value = e instanceof Error ? e.message : 'Ошибка обновления пароля'
+      console.error('Update password error:', e)
       return { success: false, error: globalError.value }
     } finally {
       globalLoading.value = false
@@ -321,10 +383,12 @@ export function useAuth() {
     isModerator,
     isReady: computed(() => authReady.value),
     readyPromise: computed(() => readyPromise.value),
+    passwordRecoveryMode: computed(() => passwordRecoveryMode.value),
     login,
     register,
     logout,
     resetPassword,
+    updatePassword,
     updateProfile,
     uploadAvatar,
     loadProfile

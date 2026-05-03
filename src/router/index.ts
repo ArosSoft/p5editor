@@ -9,6 +9,7 @@ const SharePage = () => import('../views/SharePage.vue')
 const AdminDashboard = () => import('../views/AdminDashboard.vue')
 const ProfilePage = () => import('../views/ProfilePage.vue')
 const DashboardPage = () => import('../views/DashboardPage.vue')
+const UpdatePasswordPage = () => import('../views/UpdatePasswordPage.vue')
 
 const routes = [
   {
@@ -52,6 +53,12 @@ const routes = [
     name: 'dashboard',
     component: DashboardPage,
     meta: { title: 'Личный кабинет', requiresAuth: true }
+  },
+  {
+    path: '/update-password',
+    name: 'update-password',
+    component: UpdatePasswordPage,
+    meta: { title: 'Обновление пароля' }
   }
 ]
 
