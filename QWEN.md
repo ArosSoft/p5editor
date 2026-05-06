@@ -1,4 +1,10 @@
 ## Qwen Added Memories
+- В проекте p5editor реализован переключатель версий p5.js в левом меню (side-menu):
+  1. **Переключение источника**: Кнопки "Папка" (локальные файлы из `p5/`) и "CDN" (cdn.jsdelivr.net)
+  2. **Версия CDN**: Можно указать версию (по умолчанию 1.11.13), сохраняется в localStorage
+  3. **Индикация**: Текущая версия отображается в меню, выбор сохраняется между сессиями
+  4. **Передача в P5Canvas**: Через props `p5-source` и `p5-cdn-version`
+
 - В проекте p5editor для прокрутки редактора CodeMirror 6 к найденному слову по центру используется: view.dispatch({ selection: { anchor: match.from, head: match.to }, effects: [EditorView.scrollIntoView(match.from, { y: 'center', yMargin: 300 })] }). Параметр yMargin: 300 обеспечивает правильное центрирование. Прямая прокрутка через scrollEl.scrollTop не работает корректно в vue-codemirror6.
 - В проекте p5editor используется vue-codemirror6. Прокрутка редактора к найденному слову через view.scrollDOM.scrollTop не работает, т.к. scrollDOM растягивается по контенту. Реальный контейнер с прокруткой — внешний .editor-content (overflow: auto). Для центрирования строки нужно: 1) Найти wrapper через view.dom.closest('.editor-content'), 2) Получить coords = view.coordsAtPos(match.from), 3) Вычислить lineAbsTop = coords.top - view.dom.getBoundingClientRect().top + wrapper.scrollTop, 4) wrapper.scrollTop = lineAbsTop - viewportHeight/2, где viewportHeight берётся из родителя с overflow:auto/hidden.
 - В проекте p5editor кастомная панель поиска в CodeEditor.vue реализована так:

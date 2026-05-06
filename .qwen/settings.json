@@ -8,7 +8,9 @@
       "Bash(git add *)",
       "Bash(findstr *)",
       "Bash(git commit *)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "WebFetch(p5js.org)",
+      "Bash(curl *)"
     ]
   },
   "$version": 3

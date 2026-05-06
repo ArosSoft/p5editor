@@ -88,6 +88,16 @@ const sketchName = ref('Мой первый скетч')
 const mouseX = ref(0)
 const mouseY = ref(0)
 
+// Настройки версии p5.js
+type P5Source = 'cdn' | 'local'
+const savedSource = localStorage.getItem('p5editor-p5-source')
+const p5Source = ref<P5Source>(
+  savedSource === 'cdn' || savedSource === 'local' ? savedSource : 'local'
+)
+const savedVersion = localStorage.getItem('p5editor-p5-cdn-version')
+const p5CdnVersion = ref(savedVersion || '1.11.13')
+const p5LocalVersion = '1.11.13' // Версия локальных файлов в папке p5/
+
 // Состояние подключения к БД
 const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
 
@@ -793,6 +803,26 @@ async function navigateToShare() {
 function navigateToDashboard() {
   router.push('/dashboard')
 }
+
+// Функции переключения версии p5.js
+function setP5Source(source: P5Source) {
+  p5Source.value = source
+  localStorage.setItem('p5editor-p5-source', source)
+  addMessage(`📦 Источник p5.js: ${source === 'cdn' ? 'CDN' : 'локальная папка'}`)
+}
+
+function updateP5CdnVersion() {
+  localStorage.setItem('p5editor-p5-cdn-version', p5CdnVersion.value)
+  addMessage(`📦 Версия CDN обновлена: ${p5CdnVersion.value}`)
+}
+
+// Вычисляемое свойство для отображения текущей версии
+const currentP5Version = computed(() => {
+  if (p5Source.value === 'cdn') {
+    return `CDN ${p5CdnVersion.value}`
+  }
+  return `Local ${p5LocalVersion}`
+})
 </script>
 
 <template>
@@ -966,6 +996,41 @@ function navigateToDashboard() {
           <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
         </button>
 
+        <!-- Переключатель версии p5.js -->
+        <div class="menu-divider" v-show="isMenuExpanded"></div>
+
+        <div class="p5-version-section" v-show="isMenuExpanded">
+          <div class="version-label">Версия p5.js</div>
+          <div class="version-source-toggle">
+            <button
+              class="version-btn"
+              :class="{ active: p5Source === 'local' }"
+              @click="setP5Source('local')"
+            >
+              Папка
+            </button>
+            <button
+              class="version-btn"
+              :class="{ active: p5Source === 'cdn' }"
+              @click="setP5Source('cdn')"
+            >
+              CDN
+            </button>
+          </div>
+          <div v-if="p5Source === 'cdn'" class="version-input-wrapper">
+            <input
+              type="text"
+              class="version-input"
+              v-model="p5CdnVersion"
+              placeholder="например: 1.11.13"
+              @change="updateP5CdnVersion"
+            />
+          </div>
+          <div v-else class="version-display">
+            {{ p5LocalVersion }}
+          </div>
+        </div>
+
         <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
           {{ getTooltipText(activeMenuItem) }}
         </div>
@@ -1073,6 +1138,8 @@ function navigateToDashboard() {
                 ref="canvasRef"
                 :add-message="addMessage"
                 :theme="theme"
+                :p5-source="p5Source"
+                :p5-cdn-version="p5CdnVersion"
                 @mouse-move="updateMouseCoordinates"
               />
             </div>
@@ -1500,6 +1567,109 @@ function navigateToDashboard() {
   background: rgba(255, 255, 255, 0.95);
   color: #333;
   border: 1px solid #646cff;
+}
+
+/* Переключатель версии p5.js */
+.menu-divider {
+  width: 80%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 8px auto;
+}
+
+.app.theme-light .menu-divider {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.p5-version-section {
+  padding: 8px;
+  width: 100%;
+}
+
+.version-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.app.theme-light .version-label {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.version-source-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.version-btn {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.version-btn:hover {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+.version-btn.active {
+  background: rgba(100, 108, 255, 0.4);
+  border-color: #646cff;
+}
+
+.app.theme-light .version-btn {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.app.theme-light .version-btn:hover {
+  background: rgba(100, 108, 255, 0.1);
+}
+
+.app.theme-light .version-btn.active {
+  background: rgba(100, 108, 255, 0.2);
+  border-color: #646cff;
+}
+
+.version-input-wrapper {
+  margin-top: 4px;
+}
+
+.version-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+  border-radius: 4px;
+  font-size: 11px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.version-input:focus {
+  border-color: #646cff;
+}
+
+.app.theme-light .version-input {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.version-display {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(100, 108, 255, 0.1);
+  border-radius: 4px;
+  text-align: center;
+  color: #9089fc;
 }
 
 /* Основной контент */

@@ -3,7 +3,9 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 
 const props = defineProps<{
   addMessage: (msg: string) => void,
-  theme?: 'dark' | 'light'
+  theme?: 'dark' | 'light',
+  p5Source?: 'cdn' | 'local',
+  p5CdnVersion?: string
 }>()
 
 const emit = defineEmits<{
@@ -34,6 +36,17 @@ function start(userCode: string) {
   const basePath = import.meta.env.BASE_URL || '/'
   const baseHref = window.location.origin + (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath)
 
+  // Определяем URL для p5.js
+  let p5ScriptSrc: string
+  if (props.p5Source === 'local') {
+    // Используем локальную версию из папки p5/
+    p5ScriptSrc = baseHref + '/p5/p5.min.js'
+  } else {
+    // Используем CDN с указанной версией (по умолчанию 1.11.13)
+    const version = props.p5CdnVersion || '1.11.13'
+    p5ScriptSrc = `https://cdn.jsdelivr.net/npm/p5@${version}/lib/p5.min.js`
+  }
+
   const encodedCode = JSON.stringify(userCode)
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029')
@@ -45,7 +58,7 @@ function start(userCode: string) {
   <meta charset="utf-8" />
   <base href="${baseHref}">
   <title>p5.js Sketch</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>
+  <script src="${p5ScriptSrc}"><\/script>
   <style>
     body { margin: 0; overflow: hidden; background: ${backgroundColor}; color: ${textColor}; }
     canvas { display: block; }
