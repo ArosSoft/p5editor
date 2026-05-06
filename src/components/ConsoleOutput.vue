@@ -126,12 +126,12 @@ function getMessageClass(msg: string): string {
 }
 
 .console-line {
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   word-break: break-word;
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.4;
   padding: 4px 8px;
   border-radius: 4px;

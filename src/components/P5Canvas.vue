@@ -33,19 +33,29 @@ function start(userCode: string) {
   const textColor = isDark ? '#ffffff' : '#333333'
   const gridColor = isDark ? 'rgba(100, 108, 255, 0.1)' : 'rgba(100, 108, 255, 0.05)'
 
+  // Формируем базовый URL для ресурсов (убираем двойные слеши)
   const basePath = import.meta.env.BASE_URL || '/'
-  const baseHref = window.location.origin + (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath)
+  const origin = window.location.origin
+  // Нормализуем base: если нет ведущего слеша, добавляем; если есть trailing slash, оставляем
+  const normalizedBase = basePath.startsWith('/') ? basePath : '/' + basePath
+  const baseUrl = normalizedBase.endsWith('/') ? normalizedBase : normalizedBase + '/'
 
   // Определяем URL для p5.js
   let p5ScriptSrc: string
   if (props.p5Source === 'local') {
-    // Используем локальную версию из папки p5/
-    p5ScriptSrc = baseHref + '/p5/p5.min.js'
+    // Используем локальную версию из папки public/p5/
+    p5ScriptSrc = origin + baseUrl + 'p5/p5.min.js'
   } else {
     // Используем CDN с указанной версией (по умолчанию 1.11.13)
     const version = props.p5CdnVersion || '1.11.13'
     p5ScriptSrc = `https://cdn.jsdelivr.net/npm/p5@${version}/lib/p5.min.js`
   }
+
+  // Отладка: отправляем URL в родительское окно
+  window.parent.postMessage({
+    type: 'log',
+    message: `[P5Canvas] Using p5 source: ${p5ScriptSrc}`
+  }, '*')
 
   const encodedCode = JSON.stringify(userCode)
     .replace(/\u2028/g, '\\u2028')
@@ -56,7 +66,6 @@ function start(userCode: string) {
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <base href="${baseHref}">
   <title>p5.js Sketch</title>
   <script src="${p5ScriptSrc}"><\/script>
   <style>

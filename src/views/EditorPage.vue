@@ -1584,6 +1584,7 @@ const currentP5Version = computed(() => {
 .p5-version-section {
   padding: 8px;
   width: 100%;
+  margin-top: -15px;
 }
 
 .version-label {

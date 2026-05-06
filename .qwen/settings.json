@@ -10,7 +10,11 @@
       "Bash(git commit *)",
       "Bash(git push)",
       "WebFetch(p5js.org)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(move *)",
+      "Bash(dir *)",
+      "Bash(xcopy *)",
+      "Bash(rmdir *)"
     ]
   },
   "$version": 3
