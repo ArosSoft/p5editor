@@ -186,5 +186,18 @@
     "icon": "🚀",
     "color": "#191970",
     "codePath": "/examples/12-rocket-landing/sketch.js"
+  },
+  {
+    "id": "13-aero",
+    "title": "🏓 Аэрохоккей",
+    "description": "Игра для двоих игроков",
+    "theme": "Киберспорт",
+    "difficulty": "Средняя",
+    "tags": [
+      "Управление мышью"
+    ],
+    "icon": "🏓",
+    "color": "#191970",
+    "codePath": "/examples/13-aero/sketch.js"
   }
 ]

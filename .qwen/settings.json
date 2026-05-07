@@ -14,7 +14,9 @@
       "Bash(move *)",
       "Bash(dir *)",
       "Bash(xcopy *)",
-      "Bash(rmdir *)"
+      "Bash(rmdir *)",
+      "Bash(del *)",
+      "Bash(mkdir *)"
     ]
   },
   "$version": 3
