@@ -28,12 +28,18 @@ const currentSketchId = ref<string | null>(null)
 const isSaving = ref(false)
 
 const code = ref(`function setup() {
-  createCanvas( 800, 600);
+  // установка размеров холста
+  createCanvas(800, 600);
+  // настройка модели цвета
+  colorMode(HSB, 256, 100, 100);
 }
 
 function draw() {
   // background(220);
-  ellipse( mouseX, mouseY, 50, 50);
+  ellipse(mouseX, mouseY, 50, 50);
+  // смена цвета при нажатии
+  if (mouseIsPressed)
+    fill(frameCount % 256, 100, 100);
   // напиши свой код ниже
 
 }`)
@@ -65,11 +71,11 @@ const startHeight = ref(150)
 // Минимальные ширины панелей (в пикселях)
 const MIN_EXAMPLES_WIDTH = 250
 const MIN_EDITOR_WIDTH = 300
-const MIN_CANVAS_WIDTH = 410
+const MIN_CANVAS_WIDTH = 450
 
 // Ширины панелей в пикселях (будут рассчитаны при монтировании)
 const examplesWidth = ref(420)
-const canvasWidth = ref(MIN_CANVAS_WIDTH)
+const canvasWidth = ref(810)
 
 // Состояние перетаскивания разделителей
 const draggingDivider = ref<'examples-editor' | 'editor-canvas' | null>(null)
@@ -525,12 +531,18 @@ function resetToExample() {
     localStorage.removeItem('p5editor_current_sketch_id')
     // Восстанавливаем стартовый шаблон
     code.value = `function setup() {
-  createCanvas( 800, 600);
+  // установка размеров холста
+  createCanvas(800, 600);
+  // настройка модели цвета
+  colorMode(HSB, 256, 100, 100);
 }
 
 function draw() {
   // background(220);
-  ellipse( mouseX, mouseY, 50, 50);
+  ellipse(mouseX, mouseY, 50, 50);
+  // смена цвета при нажатии
+  if (mouseIsPressed)
+    fill(frameCount % 256, 100, 100);
   // напиши свой код ниже
 
 }`
@@ -1122,15 +1134,16 @@ const currentP5Version = computed(() => {
         >
           <div class="canvas-container">
             <div class="canvas-header">
-              <span class="canvas-title">Холст p5.js</span>
-              <button @click="saveCanvas" class="canvas-btn" title="Сохранить холст">
-                📸
-              </button>
+              <span class="canvas-title"></span>
               <div class="mouse-coordinates">
+                <span class="coords-label">координаты на холсте:</span>
                 <span class="coord-item">X = {{ mouseX }}</span>
                 <span class="coord-separator">/</span>
                 <span class="coord-item">Y = {{ mouseY }}</span>
               </div>
+              <button @click="saveCanvas" class="canvas-btn" title="Сохранить холст">
+                📸
+              </button>
               <div class="canvas-indicator" :class="'status-' + supabaseStatus"></div>
             </div>
             <div class="canvas-content">
@@ -1928,7 +1941,6 @@ const currentP5Version = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   margin-right: 10px;
   font-family: 'Consolas', monospace;
   font-size: 12px;
@@ -1941,6 +1953,11 @@ const currentP5Version = computed(() => {
 .app.theme-light .mouse-coordinates {
   background: rgba(255, 255, 255, 0.5);
   border-color: rgba(0, 0, 0, 0.1);
+}
+
+.coords-label {
+  opacity: 0.7;
+  margin-right: 4px;
 }
 
 .coord-item {

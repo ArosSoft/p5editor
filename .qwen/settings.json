@@ -16,8 +16,12 @@
       "Bash(xcopy *)",
       "Bash(rmdir *)",
       "Bash(del *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Read(//d:\\p5editor/**)",
+      "Read(//d:/p5editor/**)",
+      "Bash(get-content *)",
+      "Bash(foreach-object *)"
     ]
   },
-  "$version": 3
+  "$version": 4
 }

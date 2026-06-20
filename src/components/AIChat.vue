@@ -68,6 +68,11 @@ const chatHeight = ref(560)
 const isMinimized = ref(false)
 const typingInterval = ref<number | null>(null)
 
+// Orientation state: 'landscape' (16:9) or 'portrait' (9:16)
+type OrientationType = 'landscape' | 'portrait'
+const orientation = ref<OrientationType>('landscape')
+const chatWidth = ref(800)
+
 // Временная заглушка - API отключено
 // const DEEPSEEK_API_KEY = 'sk-de29f369b0f44d0081ec017c27daae20'
 // const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
@@ -95,9 +100,24 @@ function closeChat() {
 
 function toggleMinimize() {
   isMinimized.value = !isMinimized.value
-  
+
   // Перерисовываем PDF при разворачивании
   if (!isMinimized.value && activeTab.value === 'pdf' && pdfDoc) {
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value)
+    })
+  }
+}
+
+function toggleOrientation() {
+  orientation.value = orientation.value === 'landscape' ? 'portrait' : 'landscape'
+  // 16:9 = 800x450, 9:16 = 600x650
+  const isLandscape = orientation.value === 'landscape'
+  chatWidth.value = isLandscape ? 800 : 600
+  chatHeight.value = isLandscape ? 450 : 650
+
+  // Перерисовываем PDF при изменении размеров
+  if (activeTab.value === 'pdf' && pdfDoc) {
     nextTick(() => {
       renderPDFPage(pdfPageNum.value)
     })
@@ -923,7 +943,7 @@ watch(() => props.isVisible, (isVisible) => {
       <div 
         class="ai-chat-window"
         :class="{ 'minimized': isMinimized }"
-        :style="{ height: isMinimized ? '60px' : chatHeight + 'px' }"
+        :style="{ width: chatWidth + 'px', height: isMinimized ? '60px' : chatHeight + 'px' }"
       >
         <!-- Заголовок -->
         <div class="chat-header unified-header">
@@ -983,6 +1003,15 @@ watch(() => props.isVisible, (isVisible) => {
               {{ isPdfFullscreen ? '⊡' : '⛶' }}
             </button>
           </div>
+
+          <!-- Кнопка ориентации -->
+          <button
+            class="header-orientation-btn"
+            @click="toggleOrientation"
+            :title="orientation === 'landscape' ? 'Вертикальная ориентация (9:16)' : 'Горизонтальная ориентация (16:9)'"
+          >
+            {{ orientation === 'landscape' ? '📱' : '💻' }}
+          </button>
 
           <!-- Управление окном -->
           <div class="header-controls">
@@ -1179,7 +1208,7 @@ watch(() => props.isVisible, (isVisible) => {
 
 /* Окно чата */
 .ai-chat-window {
-  width: 800px;
+  width: v-bind(chatWidth + 'px');
   background: v-bind('props.theme === "dark" ? "#1e1e1e" : "#ffffff"');
   border-radius: 16px;
   overflow: hidden;
@@ -1187,7 +1216,7 @@ watch(() => props.isVisible, (isVisible) => {
   flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
   border: 1px solid v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"');
-  transition: height 0.3s ease;
+  transition: width 0.3s ease, height 0.3s ease;
   position: relative;
 }
 
@@ -1341,6 +1370,28 @@ watch(() => props.isVisible, (isVisible) => {
 .control-btn.close:hover {
   background: #ff5f56;
   color: white;
+}
+
+/* Кнопка ориентации */
+.header-orientation-btn {
+  background: transparent;
+  border: none;
+  color: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.6)" : "rgba(0, 0, 0, 0.6)"');
+  font-size: 18px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  margin-right: 4px;
+}
+
+.header-orientation-btn:hover {
+  background: v-bind('props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"');
+  color: v-bind('props.theme === "dark" ? "white" : "black"');
 }
 
 /* Ручка изменения размера */
