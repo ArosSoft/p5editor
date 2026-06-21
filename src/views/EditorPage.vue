@@ -923,6 +923,12 @@ const currentP5Version = computed(() => {
           <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
         </div>
 
+        <button @click="resetToExample" class="menu-item" title="Новый скетч"
+                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
+          <span class="menu-icon">➕</span>
+          <span class="menu-text" v-show="isMenuExpanded">Новый скетч</span>
+        </button>
+
         <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
                 @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)"
                 :disabled="isSaving">
@@ -1000,12 +1006,6 @@ const currentP5Version = computed(() => {
                 @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">⌨️</span>
           <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
-        </button>
-
-        <button @click="resetToExample" class="menu-item" title="Восстановить пример"
-                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
-          <span class="menu-icon">🔄</span>
-          <span class="menu-text" v-show="isMenuExpanded">Сброс</span>
         </button>
 
         <!-- Переключатель версии p5.js -->
