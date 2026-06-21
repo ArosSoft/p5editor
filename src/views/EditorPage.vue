@@ -741,7 +741,7 @@ function getTooltipText(item: string): string {
     'undo': 'Отмена (Ctrl+Z)',
     'redo': 'Повтор (Ctrl+Y)',
     'copy': 'Копировать код',
-    'reset': 'Восстановить пример',
+    'reset': 'Удалить код и начать с шаблона',
     'console-clear': 'Очистить консоль',
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
     'theme': 'Сменить тему',
@@ -915,15 +915,10 @@ const currentP5Version = computed(() => {
            @mouseleave="toggleMenuExpand">
 
         <div class="menu-logo">
-          <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28">
-            <path d="M12 2L2 7v10l10 5 10-5V7l-10-5z" fill="#646cff" stroke="currentColor" stroke-width="1"/>
-            <path d="M12 12l4-2v4l-4 2-4-2v-4l4 2z" fill="#ffffff" opacity="0.8"/>
-            <circle cx="12" cy="12" r="2" fill="#ff6b6b"/>
-          </svg>
-          <span class="logo-text" v-show="isMenuExpanded">p5.js</span>
+          <img src="/images/logo.png" alt="p5.js" class="logo-image" />
         </div>
 
-        <button @click="resetToExample" class="menu-item" title="Новый скетч"
+        <button @click="resetToExample" class="menu-item" title="Удалить код и начать с шаблона"
                 @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
           <span class="menu-icon">➕</span>
           <span class="menu-text" v-show="isMenuExpanded">Новый скетч</span>
@@ -1503,24 +1498,17 @@ const currentP5Version = computed(() => {
 .menu-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   padding: 0 8px;
   width: 100%;
   margin-bottom: 8px;
 }
 
-.logo-icon {
+.logo-image {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
   flex-shrink: 0;
-}
-
-.logo-text {
-  font-weight: bold;
-  font-size: 13px;
-  white-space: nowrap;
-  background: linear-gradient(135deg, #646cff, #9089fc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .menu-item {

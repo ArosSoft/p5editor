@@ -211,12 +211,12 @@ function start(userCode: string) {
     });
 
     // Фикс путей ресурсов
-    var APP_BASE = "${basePath}";
+    var APP_BASE = "${origin}${basePath}";
     function fixResourcePath(path) {
       if (typeof path !== 'string') return path;
       if (path.indexOf('://') !== -1 || path.indexOf('data:') === 0) return path;
-      if (path.startsWith('/') && !path.startsWith(APP_BASE)) return APP_BASE + path.substring(1);
-      if (!path.startsWith('/') && !path.startsWith(APP_BASE)) return APP_BASE + path;
+      if (!path.startsWith(APP_BASE) && !path.startsWith('/')) return APP_BASE + path;
+      if (path.startsWith('/') && !path.startsWith(APP_BASE)) return origin + path;
       return path;
     }
 
