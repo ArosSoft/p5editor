@@ -21,7 +21,8 @@
       "Read(//d:/p5editor/**)",
       "Bash(get-content *)",
       "Bash(foreach-object *)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(timeout *)"
     ]
   },
   "$version": 4
