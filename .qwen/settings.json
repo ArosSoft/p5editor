@@ -20,7 +20,8 @@
       "Read(//d:\\p5editor/**)",
       "Read(//d:/p5editor/**)",
       "Bash(get-content *)",
-      "Bash(foreach-object *)"
+      "Bash(foreach-object *)",
+      "Bash(true)"
     ]
   },
   "$version": 4

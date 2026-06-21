@@ -1,31 +1,45 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed, shallowRef, defineAsyncComponent } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import P5Canvas from '../components/P5Canvas.vue'
-import ConsoleOutput from '../components/ConsoleOutput.vue'
-import AuthModal from '../components/AuthModal.vue'
-import UserProfile from '../components/UserProfile.vue'
-import { useAuth } from '../composables/useAuth'
-import { useSketches } from '../composables/useSketches'
-import { saveAs } from 'file-saver'
-import beautify from 'js-beautify'
-import { supabase } from '../lib/supabase'
+import {
+  ref,
+  watch,
+  onMounted,
+  onUnmounted,
+  computed,
+  shallowRef,
+  defineAsyncComponent,
+} from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import P5Canvas from '../components/P5Canvas.vue';
+import ConsoleOutput from '../components/ConsoleOutput.vue';
+import AuthModal from '../components/AuthModal.vue';
+import UserProfile from '../components/UserProfile.vue';
+import { useAuth } from '../composables/useAuth';
+import { useSketches } from '../composables/useSketches';
+import { saveAs } from 'file-saver';
+import beautify from 'js-beautify';
+import { supabase } from '../lib/supabase';
 
 // Ленивая загрузка тяжёлых компонентов
-const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
-const ExamplesPanel = defineAsyncComponent(() => import('../components/ExamplesPanel.vue'))
-const PalettePanel = defineAsyncComponent(() => import('../components/PalettePanel.vue'))
-const AIChat = defineAsyncComponent(() => import('../components/AIChat.vue'))
+const CodeEditor = defineAsyncComponent(
+  () => import('../components/CodeEditor.vue')
+);
+const ExamplesPanel = defineAsyncComponent(
+  () => import('../components/ExamplesPanel.vue')
+);
+const PalettePanel = defineAsyncComponent(
+  () => import('../components/PalettePanel.vue')
+);
+const AIChat = defineAsyncComponent(() => import('../components/AIChat.vue'));
 
-const route = useRoute()
-const router = useRouter()
-const { isAuthenticated, user } = useAuth()
-const { updateSketch, getSketchById } = useSketches()
-const showAuthModal = ref(false)
+const route = useRoute();
+const router = useRouter();
+const { isAuthenticated, user } = useAuth();
+const { updateSketch, getSketchById } = useSketches();
+const showAuthModal = ref(false);
 
 // ID текущего скетча (если загружен из БД)
-const currentSketchId = ref<string | null>(null)
-const isSaving = ref(false)
+const currentSketchId = ref<string | null>(null);
+const isSaving = ref(false);
 
 const code = ref(`function setup() {
   // установка размеров холста
@@ -42,85 +56,85 @@ function draw() {
     fill(frameCount % 256, 100, 100);
   // напиши свой код ниже
 
-}`)
+}`);
 
-const originalCode = ref(code.value)
+const originalCode = ref(code.value);
 
-const messages = ref<string[]>([])
-const canvasRef = ref<InstanceType<typeof P5Canvas> | null>(null)
-const fileInput = ref<HTMLInputElement | null>(null)
+const messages = ref<string[]>([]);
+const canvasRef = ref<InstanceType<typeof P5Canvas> | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 
-const showExamples = ref(false)
-const showPalette = ref(false)
+const showExamples = ref(false);
+const showPalette = ref(false);
 
-const fontSize = ref(19)
-const fontFamily = ref('Consolas, Monaco, monospace')
+const fontSize = ref(19);
+const fontFamily = ref('Consolas, Monaco, monospace');
 
-type Theme = 'dark' | 'light'
-const theme = ref<Theme>('dark')
+type Theme = 'dark' | 'light';
+const theme = ref<Theme>('dark');
 
-const history = ref<string[]>([])
-const historyIndex = ref(-1)
+const history = ref<string[]>([]);
+const historyIndex = ref(-1);
 
-const consoleHeight = ref(150)
-const isConsoleVisible = ref(true)
-const isDragging = ref(false)
-const startY = ref(0)
-const startHeight = ref(150)
+const consoleHeight = ref(150);
+const isConsoleVisible = ref(true);
+const isDragging = ref(false);
+const startY = ref(0);
+const startHeight = ref(150);
 
 // Минимальные ширины панелей (в пикселях)
-const MIN_EXAMPLES_WIDTH = 250
-const MIN_EDITOR_WIDTH = 300
-const MIN_CANVAS_WIDTH = 450
+const MIN_EXAMPLES_WIDTH = 250;
+const MIN_EDITOR_WIDTH = 300;
+const MIN_CANVAS_WIDTH = 450;
 
 // Ширины панелей в пикселях (будут рассчитаны при монтировании)
-const examplesWidth = ref(420)
-const canvasWidth = ref(810)
+const examplesWidth = ref(420);
+const canvasWidth = ref(810);
 
 // Состояние перетаскивания разделителей
-const draggingDivider = ref<'examples-editor' | 'editor-canvas' | null>(null)
-let dragStartX = 0
-let dragStartExamplesWidth = 0
-let dragStartCanvasWidth = 0
+const draggingDivider = ref<'examples-editor' | 'editor-canvas' | null>(null);
+let dragStartX = 0;
+let dragStartExamplesWidth = 0;
+let dragStartCanvasWidth = 0;
 
 // Управление боковым меню
-const isMenuExpanded = ref(false)
-const activeMenuItem = ref<string | null>(null)
+const isMenuExpanded = ref(false);
+const activeMenuItem = ref<string | null>(null);
 
-const showAIChat = ref(false)
+const showAIChat = ref(false);
 
-const sketchName = ref('Мой первый скетч')
+const sketchName = ref('Мой первый скетч');
 
-const mouseX = ref(0)
-const mouseY = ref(0)
+const mouseX = ref(0);
+const mouseY = ref(0);
 
 // Настройки версии p5.js
-type P5Source = 'cdn' | 'local'
-const savedSource = localStorage.getItem('p5editor-p5-source')
+type P5Source = 'cdn' | 'local';
+const savedSource = localStorage.getItem('p5editor-p5-source');
 const p5Source = ref<P5Source>(
   savedSource === 'cdn' || savedSource === 'local' ? savedSource : 'local'
-)
-const savedVersion = localStorage.getItem('p5editor-p5-cdn-version')
-const p5CdnVersion = ref(savedVersion || '1.11.13')
-const p5LocalVersion = '1.11.13' // Версия локальных файлов в папке p5/
+);
+const savedVersion = localStorage.getItem('p5editor-p5-cdn-version');
+const p5CdnVersion = ref(savedVersion || '1.11.13');
+const p5LocalVersion = '1.11.13'; // Версия локальных файлов в папке p5/
 
 // Состояние подключения к БД
-const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking')
+const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking');
 
 // Ref на main контейнер для расчётов
-const mainRef = ref<HTMLElement | null>(null)
+const mainRef = ref<HTMLElement | null>(null);
 
 // Добавляем новые переменные для "призрачного" ресайза
-const ghostDividerX = ref<number | null>(null) // позиция призрачной линии
+const ghostDividerX = ref<number | null>(null); // позиция призрачной линии
 
 // Переменные для таймеров автосохранения
-let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null
-let saveCodeTimer: ReturnType<typeof setTimeout> | null = null
-let lastSavedCode = ''
+let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null;
+let saveCodeTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSavedCode = '';
 
 function updateMouseCoordinates(x: number, y: number) {
-  mouseX.value = Math.round(x)
-  mouseY.value = Math.round(y)
+  mouseX.value = Math.round(x);
+  mouseY.value = Math.round(y);
 }
 
 function handleAIMessage(message: string) {
@@ -130,405 +144,443 @@ function handleAIMessage(message: string) {
 // Функция проверки подключения к Supabase
 async function checkSupabaseConnection() {
   try {
-    const { error } = await supabase
-      .from('sketches')
-      .select('id')
-      .limit(1)
-    
+    const { error } = await supabase.from('sketches').select('id').limit(1);
+
     if (error) {
       // Если есть ошибка, но это не ошибка сети - считаем что соединение есть
       if (error.code && ['400', '401', '403'].includes(error.code)) {
-        supabaseStatus.value = 'connected'
+        supabaseStatus.value = 'connected';
       } else {
-        supabaseStatus.value = 'error'
+        supabaseStatus.value = 'error';
       }
     } else {
-      supabaseStatus.value = 'connected'
+      supabaseStatus.value = 'connected';
     }
   } catch (e) {
     // Ошибка сети или таймаут
-    supabaseStatus.value = 'error'
+    supabaseStatus.value = 'error';
   }
 }
 
 // === Обработчики для изменения размера консоли ===
 function startConsoleResize(e: MouseEvent) {
-  isDragging.value = true
-  startY.value = e.clientY
-  startHeight.value = consoleHeight.value
-  document.body.style.cursor = 'row-resize'
-  document.body.style.userSelect = 'none'
+  isDragging.value = true;
+  startY.value = e.clientY;
+  startHeight.value = consoleHeight.value;
+  document.body.style.cursor = 'row-resize';
+  document.body.style.userSelect = 'none';
 }
 
 function onConsoleResize(e: MouseEvent) {
-  if (!isDragging.value) return
-  const deltaY = startY.value - e.clientY
+  if (!isDragging.value) return;
+  const deltaY = startY.value - e.clientY;
   const newHeight = Math.min(
     Math.max(50, startHeight.value + deltaY),
     window.innerHeight * 0.5
-  )
-  consoleHeight.value = newHeight
+  );
+  consoleHeight.value = newHeight;
 }
 
 function stopConsoleResize() {
-  if (!isDragging.value) return
-  isDragging.value = false
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
+  if (!isDragging.value) return;
+  isDragging.value = false;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
 }
 
 // === Обработчики для перетаскивания вертикальных разделителей ===
-function startDividerDrag(divider: 'examples-editor' | 'editor-canvas', e: MouseEvent) {
-  draggingDivider.value = divider
-  dragStartX = e.clientX
-  dragStartExamplesWidth = examplesWidth.value
-  dragStartCanvasWidth = canvasWidth.value
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
+function startDividerDrag(
+  divider: 'examples-editor' | 'editor-canvas',
+  e: MouseEvent
+) {
+  draggingDivider.value = divider;
+  dragStartX = e.clientX;
+  dragStartExamplesWidth = examplesWidth.value;
+  dragStartCanvasWidth = canvasWidth.value;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
 
   // Отключаем transition во время перетаскивания
-  document.documentElement.classList.add('resizing-panels')
+  document.documentElement.classList.add('resizing-panels');
 }
 
 function onDividerDrag(e: MouseEvent) {
-  if (!draggingDivider.value || !mainRef.value) return
+  if (!draggingDivider.value || !mainRef.value) return;
 
   // Вместо обновления реальных размеров — просто двигаем "призрачную линию"
-  ghostDividerX.value = e.clientX
+  ghostDividerX.value = e.clientX;
 }
 
 function stopDividerDrag() {
-  if (!draggingDivider.value || !mainRef.value) return
+  if (!draggingDivider.value || !mainRef.value) return;
 
   // Теперь применяем финальные размеры ОДИН раз
-  const deltaX = (ghostDividerX.value ?? dragStartX) - dragStartX
-  const totalWidth = mainRef.value.clientWidth
-  const dividerCount = (showExamples.value || showPalette.value) ? 2 : 1
-  const availableWidth = totalWidth - dividerCount * 8
+  const deltaX = (ghostDividerX.value ?? dragStartX) - dragStartX;
+  const totalWidth = mainRef.value.clientWidth;
+  const dividerCount = showExamples.value || showPalette.value ? 2 : 1;
+  const availableWidth = totalWidth - dividerCount * 8;
 
   if (draggingDivider.value === 'examples-editor') {
-    const newExamplesWidth = dragStartExamplesWidth + deltaX
-    const editorWidth = availableWidth - newExamplesWidth - canvasWidth.value
-    if (newExamplesWidth >= MIN_EXAMPLES_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      examplesWidth.value = newExamplesWidth
+    const newExamplesWidth = dragStartExamplesWidth + deltaX;
+    const editorWidth = availableWidth - newExamplesWidth - canvasWidth.value;
+    if (
+      newExamplesWidth >= MIN_EXAMPLES_WIDTH &&
+      editorWidth >= MIN_EDITOR_WIDTH
+    ) {
+      examplesWidth.value = newExamplesWidth;
     }
   } else if (draggingDivider.value === 'editor-canvas') {
-    const newCanvasWidth = dragStartCanvasWidth - deltaX
-    const exW = (showExamples.value || showPalette.value) ? examplesWidth.value : 0
-    const editorWidth = availableWidth - exW - newCanvasWidth
+    const newCanvasWidth = dragStartCanvasWidth - deltaX;
+    const exW =
+      showExamples.value || showPalette.value ? examplesWidth.value : 0;
+    const editorWidth = availableWidth - exW - newCanvasWidth;
     if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
-      canvasWidth.value = newCanvasWidth
+      canvasWidth.value = newCanvasWidth;
     }
   }
 
   // Очищаем состояние
-  ghostDividerX.value = null
-  draggingDivider.value = null
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  document.documentElement.classList.remove('resizing-panels')
+  ghostDividerX.value = null;
+  draggingDivider.value = null;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  document.documentElement.classList.remove('resizing-panels');
 }
 
 function toggleConsole() {
-  isConsoleVisible.value = !isConsoleVisible.value
+  isConsoleVisible.value = !isConsoleVisible.value;
 }
 
 // Вычисляемая ширина редактора
 const editorFlexStyle = computed(() => {
   // Редактор занимает всё оставшееся пространство
-  return { flex: '1', minWidth: MIN_EDITOR_WIDTH + 'px' }
-})
+  return { flex: '1', minWidth: MIN_EDITOR_WIDTH + 'px' };
+});
 
 // Watch для обработки изменения sketch_id в route и localStorage
-let isFirstWatchRun = true
+let isFirstWatchRun = true;
 watch(
   () => ({
     routeId: route.params.id,
     querySketch: route.query.sketch,
     queryT: route.query.t,
-    storageSketchId: localStorage.getItem('p5editor_current_sketch_id')
+    storageSketchId: localStorage.getItem('p5editor_current_sketch_id'),
   }),
   async (newVal, oldVal) => {
-    const sketchId = (newVal.routeId as string) || (newVal.querySketch as string) || newVal.storageSketchId
-    const oldId = (oldVal?.routeId as string) || (oldVal?.querySketch as string) || oldVal?.storageSketchId
+    const sketchId =
+      (newVal.routeId as string) ||
+      (newVal.querySketch as string) ||
+      newVal.storageSketchId;
+    const oldId =
+      (oldVal?.routeId as string) ||
+      (oldVal?.querySketch as string) ||
+      oldVal?.storageSketchId;
 
     // Пропускаем первый запуск если нет sketch_id
     if (isFirstWatchRun && !sketchId) {
-      isFirstWatchRun = false
+      isFirstWatchRun = false;
       // Загружаем код из localStorage только если есть
-      const savedCode = localStorage.getItem('p5editor_current_code')
-      const savedName = localStorage.getItem('p5editor_current_name')
+      const savedCode = localStorage.getItem('p5editor_current_code');
+      const savedName = localStorage.getItem('p5editor_current_name');
       if (savedCode) {
-        console.log('[EditorPage] Загрузка кода из localStorage при старте')
-        code.value = savedCode
-        originalCode.value = savedCode
-        lastSavedCode = savedCode
+        console.log('[EditorPage] Загрузка кода из localStorage при старте');
+        code.value = savedCode;
+        originalCode.value = savedCode;
+        lastSavedCode = savedCode;
       }
       if (savedName) {
-        sketchName.value = savedName
+        sketchName.value = savedName;
       }
-      return
+      return;
     }
-    
-    isFirstWatchRun = false
+
+    isFirstWatchRun = false;
 
     // Загружаем только если ID изменился или появился новый
     if (sketchId && sketchId !== oldId) {
-      console.log('[EditorPage] sketch_id изменился, загружаю скетч:', sketchId)
-      await loadSketchFromDatabase(sketchId)
+      console.log(
+        '[EditorPage] sketch_id изменился, загружаю скетч:',
+        sketchId
+      );
+      await loadSketchFromDatabase(sketchId);
     }
   },
   { immediate: true } // Вызвать сразу при создании watch
-)
+);
 
 // Watch для автосохранения названия скетча в localStorage
 watch(sketchName, (newVal) => {
   if (newVal) {
-    localStorage.setItem('p5editor_current_name', newVal)
+    localStorage.setItem('p5editor_current_name', newVal);
   }
-})
+});
 
 onMounted(async () => {
-  window.addEventListener('mousemove', onGlobalMouseMove)
-  window.addEventListener('mouseup', onGlobalMouseUp)
-  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('mousemove', onGlobalMouseMove);
+  window.addEventListener('mouseup', onGlobalMouseUp);
+  window.addEventListener('keydown', handleKeyDown);
 
   // Обработка изменения localStorage из других вкладок/окон
-  window.addEventListener('storage', handleStorageChange)
+  window.addEventListener('storage', handleStorageChange);
 
   // Загрузка темы из localStorage
-  const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null
+  const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null;
   if (savedTheme === 'dark' || savedTheme === 'light') {
-    theme.value = savedTheme
+    theme.value = savedTheme;
   }
 
-  console.log('[EditorPage] onMounted')
+  console.log('[EditorPage] onMounted');
 
   // Проверка подключения к Supabase
-  checkSupabaseConnection()
+  checkSupabaseConnection();
 
   // Проверка параметра auth:required для открытия модального окна входа
   if (route.query.auth === 'required') {
-    showAuthModal.value = true
+    showAuthModal.value = true;
     // Очищаем query параметр
-    router.replace({ query: {} })
+    router.replace({ query: {} });
   }
-})
+});
 
 // Обработка изменений localStorage
 function handleStorageChange(event: StorageEvent) {
   if (event.key === 'p5editor_current_sketch_id' && event.newValue) {
-    console.log('[EditorPage] storage change: p5editor_current_sketch_id =', event.newValue)
-    loadSketchFromDatabase(event.newValue)
+    console.log(
+      '[EditorPage] storage change: p5editor_current_sketch_id =',
+      event.newValue
+    );
+    loadSketchFromDatabase(event.newValue);
   }
 }
 
 // Загрузка скетча из базы данных
 async function loadSketchFromDatabase(sketchId: string) {
   try {
-    addMessage(`📂 Загрузка скетча из облака...`)
-    const result = await getSketchById(sketchId)
+    addMessage(`📂 Загрузка скетча из облака...`);
+    const result = await getSketchById(sketchId);
 
     if (result.success && result.data) {
-      const sketch = result.data as any
-      code.value = sketch.code
-      sketchName.value = sketch.title || 'Скетч из БД'
-      currentSketchId.value = sketchId
+      const sketch = result.data as any;
+      code.value = sketch.code;
+      sketchName.value = sketch.title || 'Скетч из БД';
+      currentSketchId.value = sketchId;
 
       // Сохраняем в localStorage
-      localStorage.setItem('p5editor_current_code', sketch.code)
-      localStorage.setItem('p5editor_current_name', sketch.title || 'Скетч из БД')
-      localStorage.setItem('p5editor_current_sketch_id', sketchId)
-      
-      // Обновляем lastSavedCode для корректной работы автосохранения
-      lastSavedCode = sketch.code
+      localStorage.setItem('p5editor_current_code', sketch.code);
+      localStorage.setItem(
+        'p5editor_current_name',
+        sketch.title || 'Скетч из БД'
+      );
+      localStorage.setItem('p5editor_current_sketch_id', sketchId);
 
-      addMessage(`✅ Скетч "${sketch.title}" загружен`)
+      // Обновляем lastSavedCode для корректной работы автосохранения
+      lastSavedCode = sketch.code;
+
+      addMessage(`✅ Скетч "${sketch.title}" загружен`);
     } else {
-      addMessage(`❌ Ошибка загрузки скетча: ${result.error}`)
+      addMessage(`❌ Ошибка загрузки скетча: ${result.error}`);
       // Очищаем ID и загружаем из localStorage
-      currentSketchId.value = null
-      localStorage.removeItem('p5editor_current_sketch_id')
+      currentSketchId.value = null;
+      localStorage.removeItem('p5editor_current_sketch_id');
     }
   } catch (error) {
-    console.error('Load sketch error:', error)
-    addMessage('❌ Ошибка загрузки скетча из базы данных')
-    currentSketchId.value = null
-    localStorage.removeItem('p5editor_current_sketch_id')
+    console.error('Load sketch error:', error);
+    addMessage('❌ Ошибка загрузки скетча из базы данных');
+    currentSketchId.value = null;
+    localStorage.removeItem('p5editor_current_sketch_id');
   }
 }
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onGlobalMouseMove)
-  window.removeEventListener('mouseup', onGlobalMouseUp)
-  window.removeEventListener('keydown', handleKeyDown)
-  window.removeEventListener('storage', handleStorageChange)
-})
+  window.removeEventListener('mousemove', onGlobalMouseMove);
+  window.removeEventListener('mouseup', onGlobalMouseUp);
+  window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('storage', handleStorageChange);
+});
 
 // Единый обработчик mousemove
 function onGlobalMouseMove(e: MouseEvent) {
-  onConsoleResize(e)
-  onDividerDrag(e)
+  onConsoleResize(e);
+  onDividerDrag(e);
 }
 
 // Единый обработчик mouseup
 function onGlobalMouseUp() {
-  stopConsoleResize()
-  stopDividerDrag()
+  stopConsoleResize();
+  stopDividerDrag();
 }
 
 function addMessage(msg: string) {
-  messages.value.push(msg)
+  messages.value.push(msg);
   setTimeout(() => {
-    const consoleEl = document.querySelector('.console-content')
+    const consoleEl = document.querySelector('.console-content');
     if (consoleEl) {
-      consoleEl.scrollTop = consoleEl.scrollHeight
+      consoleEl.scrollTop = consoleEl.scrollHeight;
     }
-  }, 100)
+  }, 100);
 }
 
 function clearConsole() {
-  messages.value = []
-  addMessage('🧹 Консоль очищена')
+  messages.value = [];
+  addMessage('🧹 Консоль очищена');
 }
 
 function startSketch() {
   try {
-    canvasRef.value?.start(code.value)
+    canvasRef.value?.start(code.value);
   } catch (e: any) {
-    addMessage(`❌ Ошибка запуска: ${e.message}`)
+    addMessage(`❌ Ошибка запуска: ${e.message}`);
   }
 }
 
 function stopSketch() {
-  canvasRef.value?.stop()
+  canvasRef.value?.stop();
 }
 
 async function saveSketch() {
-  console.log('[EditorPage] saveSketch вызвана')
-  console.log('[EditorPage] currentSketchId:', currentSketchId.value)
-  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
-  console.log('[EditorPage] user:', user.value)
-  
-  const cleanName = sketchName.value
-    .replace(/[^a-zа-яё0-9\s_-]/gi, '')
-    .replace(/\s+/g, '_')
-    .toLowerCase() || 'sketch'
-  const fileName = `${cleanName}.js`
-  const blob = new Blob([code.value], { type: 'text/javascript;charset=utf-8' })
-  
-  console.log('[EditorPage] Сохраняю файл:', fileName)
-  saveAs(blob, fileName)
-  console.log('[EditorPage] Файл сохранён')
+  console.log('[EditorPage] saveSketch вызвана');
+  console.log('[EditorPage] currentSketchId:', currentSketchId.value);
+  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value);
+  console.log('[EditorPage] user:', user.value);
+
+  const cleanName =
+    sketchName.value
+      .replace(/[^a-zа-яё0-9\s_-]/gi, '')
+      .replace(/\s+/g, '_')
+      .toLowerCase() || 'sketch';
+  const fileName = `${cleanName}.js`;
+  const blob = new Blob([code.value], {
+    type: 'text/javascript;charset=utf-8',
+  });
+
+  console.log('[EditorPage] Сохраняю файл:', fileName);
+  saveAs(blob, fileName);
+  console.log('[EditorPage] Файл сохранён');
 
   // Если скетч загружен из БД и пользователь авторизован - сохраняем в БД
   if (currentSketchId.value && isAuthenticated.value && user.value) {
-    console.log('[EditorPage] Вызываю saveToDatabase')
+    console.log('[EditorPage] Вызываю saveToDatabase');
     try {
-      await saveToDatabase()
-      console.log('[EditorPage] saveToDatabase завершена успешно')
+      await saveToDatabase();
+      console.log('[EditorPage] saveToDatabase завершена успешно');
     } catch (e) {
-      console.error('[EditorPage] Ошибка в saveToDatabase:', e)
+      console.error('[EditorPage] Ошибка в saveToDatabase:', e);
     }
   } else {
-    console.log('[EditorPage] Не выполняются условия для saveToDatabase')
-    console.log('[EditorPage] currentSketchId exists:', !!currentSketchId.value)
-    console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
-    console.log('[EditorPage] user exists:', !!user.value)
-    addMessage(`💾 Скетч сохранён как "${fileName}". Чтобы сохранить в облако, сначала поделитесь с сообществом`)
+    console.log('[EditorPage] Не выполняются условия для saveToDatabase');
+    console.log(
+      '[EditorPage] currentSketchId exists:',
+      !!currentSketchId.value
+    );
+    console.log('[EditorPage] isAuthenticated:', isAuthenticated.value);
+    console.log('[EditorPage] user exists:', !!user.value);
+    addMessage(
+      `💾 Скетч сохранён как "${fileName}". Чтобы сохранить в облако, сначала поделитесь с сообществом`
+    );
   }
 }
 
 // Сохранение в базу данных Supabase
 async function saveToDatabase() {
   if (!currentSketchId.value || !user.value) {
-    addMessage('❌ Ошибка: скетч не найден в базе данных')
-    console.error('[EditorPage] saveToDatabase: нет currentSketchId или user')
-    return
+    addMessage('❌ Ошибка: скетч не найден в базе данных');
+    console.error('[EditorPage] saveToDatabase: нет currentSketchId или user');
+    return;
   }
 
-  console.log('[EditorPage] saveToDatabase: сохраняю скетч', currentSketchId.value)
-  console.log('[EditorPage] saveToDatabase: длина кода:', code.value.length)
-  
-  isSaving.value = true
+  console.log(
+    '[EditorPage] saveToDatabase: сохраняю скетч',
+    currentSketchId.value
+  );
+  console.log('[EditorPage] saveToDatabase: длина кода:', code.value.length);
+
+  isSaving.value = true;
   try {
     const result = await updateSketch(currentSketchId.value, {
-      code: code.value
-    })
+      code: code.value,
+    });
 
-    console.log('[EditorPage] saveToDatabase: результат updateSketch:', result)
+    console.log('[EditorPage] saveToDatabase: результат updateSketch:', result);
 
     if (result.success) {
       // Принудительно перезагружаем скетч из БД для получения актуальных данных
-      const freshResult = await getSketchById(currentSketchId.value)
-      console.log('[EditorPage] saveToDatabase: результат getSketchById:', freshResult)
-      
+      const freshResult = await getSketchById(currentSketchId.value);
+      console.log(
+        '[EditorPage] saveToDatabase: результат getSketchById:',
+        freshResult
+      );
+
       if (freshResult.success && freshResult.data) {
-        const freshSketch = freshResult.data as any
-        code.value = freshSketch.code
-        lastSavedCode = freshSketch.code
-        console.log('[EditorPage] saveToDatabase: код обновлён из БД, длина:', freshSketch.code.length)
+        const freshSketch = freshResult.data as any;
+        code.value = freshSketch.code;
+        lastSavedCode = freshSketch.code;
+        console.log(
+          '[EditorPage] saveToDatabase: код обновлён из БД, длина:',
+          freshSketch.code.length
+        );
       }
-      
-      addMessage('💾 Скетч сохранён в облако')
+
+      addMessage('💾 Скетч сохранён в облако');
       // Сохраняем код в localStorage как резервную копию
-      localStorage.setItem('p5editor_current_code', code.value)
-      localStorage.setItem('p5editor_current_name', sketchName.value)
-      localStorage.setItem('p5editor_current_sketch_id', currentSketchId.value)
+      localStorage.setItem('p5editor_current_code', code.value);
+      localStorage.setItem('p5editor_current_name', sketchName.value);
+      localStorage.setItem('p5editor_current_sketch_id', currentSketchId.value);
     } else {
-      addMessage(`❌ Ошибка сохранения: ${result.error}`)
+      addMessage(`❌ Ошибка сохранения: ${result.error}`);
     }
   } catch (error) {
-    console.error('[EditorPage] saveToDatabase: ошибка:', error)
-    addMessage('❌ Ошибка сохранения в базу данных')
+    console.error('[EditorPage] saveToDatabase: ошибка:', error);
+    addMessage('❌ Ошибка сохранения в базу данных');
   } finally {
-    isSaving.value = false
+    isSaving.value = false;
   }
 }
 
 function loadSketch() {
-  fileInput.value?.click()
+  fileInput.value?.click();
 }
 
 function handleFileUpload(event: Event) {
-  const target = event.target as HTMLInputElement
+  const target = event.target as HTMLInputElement;
   if (target.files && target.files[0]) {
-    const file = target.files[0]
-    const reader = new FileReader()
+    const file = target.files[0];
+    const reader = new FileReader();
     reader.onload = (e) => {
-      saveToHistory()
-      code.value = e.target?.result as string
-      const fileName = file.name.replace('.js', '').replace(/_/g, ' ')
-      sketchName.value = fileName
+      saveToHistory();
+      code.value = e.target?.result as string;
+      const fileName = file.name.replace('.js', '').replace(/_/g, ' ');
+      sketchName.value = fileName;
       // Сбрасываем ID скетча, так как это теперь новый локальный файл
-      currentSketchId.value = null
-      localStorage.removeItem('p5editor_current_sketch_id')
-      addMessage(`📂 Скетч загружен: ${file.name}`)
-    }
-    reader.readAsText(file)
+      currentSketchId.value = null;
+      localStorage.removeItem('p5editor_current_sketch_id');
+      addMessage(`📂 Скетч загружен: ${file.name}`);
+    };
+    reader.readAsText(file);
   }
 }
 
 function increaseFontSize() {
-  fontSize.value = Math.min(40, fontSize.value + 1)
+  fontSize.value = Math.min(40, fontSize.value + 1);
 }
 
 function decreaseFontSize() {
-  fontSize.value = Math.max(8, fontSize.value - 1)
+  fontSize.value = Math.max(8, fontSize.value - 1);
 }
 
 function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  localStorage.setItem('p5editor-theme', theme.value)
-  addMessage(`🎨 Тема изменена на ${theme.value === 'dark' ? 'тёмную' : 'светлую'}`)
+  theme.value = theme.value === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('p5editor-theme', theme.value);
+  addMessage(
+    `🎨 Тема изменена на ${theme.value === 'dark' ? 'тёмную' : 'светлую'}`
+  );
 }
 
 function resetToExample() {
   if (confirm('Восстановить стартовый шаблон?')) {
-    saveToHistory()
+    saveToHistory();
     // Сбрасываем ID скетча, чтобы не сохранять в облако
-    currentSketchId.value = null
-    localStorage.removeItem('p5editor_current_sketch_id')
+    currentSketchId.value = null;
+    localStorage.removeItem('p5editor_current_sketch_id');
     // Восстанавливаем стартовый шаблон
     code.value = `function setup() {
   // установка размеров холста
@@ -545,70 +597,75 @@ function draw() {
     fill(frameCount % 256, 100, 100);
   // напиши свой код ниже
 
-}`
-    originalCode.value = code.value
+}`;
+    originalCode.value = code.value;
     // Устанавливаем название "Шаблон"
-    sketchName.value = 'Шаблон'
-    localStorage.setItem('p5editor_current_name', 'Шаблон')
-    
+    sketchName.value = 'Шаблон';
+    localStorage.setItem('p5editor_current_name', 'Шаблон');
+
     // Очищаем адресную строку от ID скетча
     // Это нужно чтобы случайно не перезаписать сохранённый скетч
     if (route.params.id || route.query.sketch) {
-      router.replace({ path: '/', query: {} })
-      console.log('[EditorPage] Адресная строка очищена от ID скетча')
+      router.replace({ path: '/', query: {} });
+      console.log('[EditorPage] Адресная строка очищена от ID скетча');
     }
-    
-    addMessage('🔄 Скетч сброшен к стартовому шаблону')
+
+    addMessage('🔄 Скетч сброшен к стартовому шаблону');
   }
 }
 
 function copyToClipboard() {
-  navigator.clipboard.writeText(code.value).then(() => {
-    addMessage('📋 Код скопирован в буфер обмена')
-  }).catch(() => {
-    addMessage('❌ Не удалось скопировать код')
-  })
+  navigator.clipboard
+    .writeText(code.value)
+    .then(() => {
+      addMessage('📋 Код скопирован в буфер обмена');
+    })
+    .catch(() => {
+      addMessage('❌ Не удалось скопировать код');
+    });
 }
 
 // Сохранение холста
 function saveCanvas() {
   try {
-    const iframe = canvasRef.value?.$el?.querySelector('iframe')
+    const iframe = canvasRef.value?.$el?.querySelector('iframe');
     if (!iframe || !iframe.contentWindow) {
-      addMessage('❌ Не удалось найти холст')
-      return
+      addMessage('❌ Не удалось найти холст');
+      return;
     }
 
-    const canvas = iframe.contentWindow.document.querySelector('canvas')
+    const canvas = iframe.contentWindow.document.querySelector('canvas');
     if (!canvas) {
-      addMessage('❌ Холст не найден')
-      return
+      addMessage('❌ Холст не найден');
+      return;
     }
 
     // Получаем данные из canvas
-    const dataURL = canvas.toDataURL('image/png')
-    const link = document.createElement('a')
-    link.download = `${sketchName.value || 'sketch'}.png`
-    link.href = dataURL
-    link.click()
-    
+    const dataURL = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `${sketchName.value || 'sketch'}.png`;
+    link.href = dataURL;
+    link.click();
+
     // Сохраняем изображение в localStorage для страницы "Поделиться"
     try {
-      localStorage.setItem('p5editor_canvas_snapshot', dataURL)
-      addMessage('📸 Холст сохранён и скопирован в память')
+      localStorage.setItem('p5editor_canvas_snapshot', dataURL);
+      addMessage('📸 Холст сохранён и скопирован в память');
     } catch (e) {
       // Если localStorage переполнен (DataURL может быть большим)
-      addMessage('📸 Холст сохранён. Изображение слишком большое для автосохранения')
+      addMessage(
+        '📸 Холст сохранён. Изображение слишком большое для автосохранения'
+      );
     }
   } catch (e) {
-    console.error('Ошибка сохранения холста:', e)
-    addMessage('❌ Ошибка сохранения: ' + (e as Error).message)
+    console.error('Ошибка сохранения холста:', e);
+    addMessage('❌ Ошибка сохранения: ' + (e as Error).message);
   }
 }
 
 function formatCode() {
   try {
-    saveToHistory()
+    saveToHistory();
     const formatted = beautify(code.value, {
       indent_size: 2,
       indent_char: ' ',
@@ -624,217 +681,233 @@ function formatCode() {
       wrap_line_length: 80,
       comma_first: false,
       e4x: false,
-      indent_empty_lines: false
-    })
-    code.value = formatted
-    addMessage('✨ Код отформатирован')
+      indent_empty_lines: false,
+    });
+    code.value = formatted;
+    addMessage('✨ Код отформатирован');
   } catch (e) {
-    console.error('Ошибка форматирования:', e)
-    addMessage('❌ Ошибка форматирования')
+    console.error('Ошибка форматирования:', e);
+    addMessage('❌ Ошибка форматирования');
   }
 }
 
 function saveToHistory() {
   if (code.value !== history.value[historyIndex.value]) {
-    history.value = history.value.slice(0, historyIndex.value + 1)
-    history.value.push(code.value)
-    historyIndex.value = history.value.length - 1
+    history.value = history.value.slice(0, historyIndex.value + 1);
+    history.value.push(code.value);
+    historyIndex.value = history.value.length - 1;
   }
 }
 
 function undo() {
   if (historyIndex.value > 0) {
-    historyIndex.value--
-    const prevCode = history.value[historyIndex.value]
+    historyIndex.value--;
+    const prevCode = history.value[historyIndex.value];
     if (prevCode) {
-      code.value = prevCode
+      code.value = prevCode;
     }
-    addMessage('↩️ Отмена действия')
+    addMessage('↩️ Отмена действия');
   } else {
-    addMessage('⚠️ Нечего отменять')
+    addMessage('⚠️ Нечего отменять');
   }
 }
 
 function redo() {
   if (historyIndex.value < history.value.length - 1) {
-    historyIndex.value++
-    const nextCode = history.value[historyIndex.value]
+    historyIndex.value++;
+    const nextCode = history.value[historyIndex.value];
     if (nextCode) {
-      code.value = nextCode
+      code.value = nextCode;
     }
-    addMessage('↪️ Возврат действия')
+    addMessage('↪️ Возврат действия');
   } else {
-    addMessage('⚠️ Нечего возвращать')
+    addMessage('⚠️ Нечего возвращать');
   }
 }
 
 function showShortcuts() {
-  addMessage('⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор, Ctrl+` - консоль')
+  addMessage(
+    '⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор, Ctrl+` - консоль'
+  );
 }
 
 function toggleExamples() {
-  showExamples.value = !showExamples.value
-  if (showExamples.value) showPalette.value = false
+  showExamples.value = !showExamples.value;
+  if (showExamples.value) showPalette.value = false;
   if (showExamples.value) {
-    addMessage('📚 Открыта галерея примеров')
+    addMessage('📚 Открыта галерея примеров');
   } else {
-    addMessage('📚 Галерея примеров закрыта')
+    addMessage('📚 Галерея примеров закрыта');
   }
 }
 
 function togglePalette() {
-  showPalette.value = !showPalette.value
-  if (showPalette.value) showExamples.value = false
+  showPalette.value = !showPalette.value;
+  if (showPalette.value) showExamples.value = false;
   if (showPalette.value) {
-    addMessage('🎨 Открыта палитра цветов')
+    addMessage('🎨 Открыта палитра цветов');
   } else {
-    addMessage('🎨 Палитра цветов закрыта')
+    addMessage('🎨 Палитра цветов закрыта');
   }
 }
 
 function loadExample(exampleCode: string) {
-  saveToHistory()
-  code.value = exampleCode
-  addMessage('📋 Пример загружен в редактор')
-  startSketch()
+  saveToHistory();
+  code.value = exampleCode;
+  addMessage('📋 Пример загружен в редактор');
+  startSketch();
 }
 
 function handleKeyDown(e: KeyboardEvent) {
   if (e.ctrlKey && e.key === 'Enter') {
-    e.preventDefault()
-    startSketch()
+    e.preventDefault();
+    startSketch();
   }
   if (e.ctrlKey && e.key === 's') {
-    e.preventDefault()
-    saveSketch()
+    e.preventDefault();
+    saveSketch();
   }
-  if (e.ctrlKey && e.key === 'z' && !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')) {
-    e.preventDefault()
-    undo()
+  if (
+    e.ctrlKey &&
+    e.key === 'z' &&
+    !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')
+  ) {
+    e.preventDefault();
+    undo();
   }
-  if (e.ctrlKey && e.key === 'y' && !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')) {
-    e.preventDefault()
-    redo()
+  if (
+    e.ctrlKey &&
+    e.key === 'y' &&
+    !(e.target as HTMLElement)?.matches?.('textarea, input, .cm-content')
+  ) {
+    e.preventDefault();
+    redo();
   }
   if (e.ctrlKey && e.key === '`') {
-    e.preventDefault()
-    toggleConsole()
+    e.preventDefault();
+    toggleConsole();
   }
 }
 
 function toggleMenuExpand() {
-  isMenuExpanded.value = !isMenuExpanded.value
+  isMenuExpanded.value = !isMenuExpanded.value;
 }
 
 function setActiveMenuItem(item: string | null) {
-  activeMenuItem.value = item
+  activeMenuItem.value = item;
 }
 
 function getTooltipText(item: string): string {
   const tooltips: Record<string, string> = {
-    'save': 'Сохранить скетч (Ctrl+S)',
-    'load': 'Загрузить скетч',
-    'ai': 'p5.js помощник (справочник)',
-    'palette': 'Палитра цветов',
+    save: 'Сохранить скетч (Ctrl+S)',
+    load: 'Загрузить скетч',
+    ai: 'p5.js помощник (справочник)',
+    palette: 'Палитра цветов',
     'font-up': 'Увеличить шрифт',
     'font-down': 'Уменьшить шрифт',
-    'undo': 'Отмена (Ctrl+Z)',
-    'redo': 'Повтор (Ctrl+Y)',
-    'copy': 'Копировать код',
-    'reset': 'Удалить код и начать с шаблона',
+    undo: 'Отмена (Ctrl+Z)',
+    redo: 'Повтор (Ctrl+Y)',
+    copy: 'Копировать код',
+    reset: 'Удалить код и начать с шаблона',
     'console-clear': 'Очистить консоль',
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
-    'theme': 'Сменить тему',
-    'shortcuts': 'Горячие клавиши'
-  }
-  return tooltips[item] || item
+    theme: 'Сменить тему',
+    shortcuts: 'Горячие клавиши',
+  };
+  return tooltips[item] || item;
 }
 
 function debouncedSaveToHistory() {
-  if (saveHistoryTimer) clearTimeout(saveHistoryTimer)
-  saveHistoryTimer = setTimeout(() => saveToHistory(), 500)
-  saveCodeToStorage()
+  if (saveHistoryTimer) clearTimeout(saveHistoryTimer);
+  saveHistoryTimer = setTimeout(() => saveToHistory(), 500);
+  saveCodeToStorage();
 }
 
 // Автосохранение кода в localStorage (только если код изменился)
 function saveCodeToStorage() {
-  if (saveCodeTimer) clearTimeout(saveCodeTimer)
+  if (saveCodeTimer) clearTimeout(saveCodeTimer);
   saveCodeTimer = setTimeout(() => {
     if (code.value !== lastSavedCode) {
-      localStorage.setItem('p5editor_current_code', code.value)
-      localStorage.setItem('p5editor_current_name', sketchName.value)
-      lastSavedCode = code.value
+      localStorage.setItem('p5editor_current_code', code.value);
+      localStorage.setItem('p5editor_current_name', sketchName.value);
+      lastSavedCode = code.value;
     }
-  }, 2000)
+  }, 2000);
 }
 
 // Навигация к странице «Исследуй»
 function navigateToExplore() {
-  router.push('/explore')
+  router.push('/explore');
 }
 
 // Навигация к странице «Поделиться»
 async function navigateToShare() {
-  console.log('[EditorPage] navigateToShare: начинаем переход на SharePage')
-  console.log('[EditorPage] currentSketchId:', currentSketchId.value)
-  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value)
-  
+  console.log('[EditorPage] navigateToShare: начинаем переход на SharePage');
+  console.log('[EditorPage] currentSketchId:', currentSketchId.value);
+  console.log('[EditorPage] isAuthenticated:', isAuthenticated.value);
+
   // Если скетч загружен из БД и пользователь авторизован — сохраняем в БД
   if (currentSketchId.value && isAuthenticated.value && user.value) {
-    console.log('[EditorPage] Сохраняем код в БД перед переходом...')
-    addMessage('💾 Сохранение перед публикацией...')
+    console.log('[EditorPage] Сохраняем код в БД перед переходом...');
+    addMessage('💾 Сохранение перед публикацией...');
     try {
       const result = await updateSketch(currentSketchId.value, {
-        code: code.value
-      })
+        code: code.value,
+      });
       if (result.success) {
-        lastSavedCode = code.value
-        console.log('[EditorPage] Код сохранён в БД перед публикацией')
-        addMessage('✅ Скетч сохранён в облако')
+        lastSavedCode = code.value;
+        console.log('[EditorPage] Код сохранён в БД перед публикацией');
+        addMessage('✅ Скетч сохранён в облако');
       } else {
-        console.warn('[EditorPage] Не удалось сохранить в БД:', result.error)
-        addMessage('⚠️ Не удалось сохранить в облако, но переходим на публикацию')
+        console.warn('[EditorPage] Не удалось сохранить в БД:', result.error);
+        addMessage(
+          '⚠️ Не удалось сохранить в облако, но переходим на публикацию'
+        );
       }
     } catch (e) {
-      console.error('[EditorPage] Ошибка сохранения в БД:', e)
-      addMessage('⚠️ Ошибка сохранения, но переходим на публикацию')
+      console.error('[EditorPage] Ошибка сохранения в БД:', e);
+      addMessage('⚠️ Ошибка сохранения, но переходим на публикацию');
     }
   }
-  
+
   // Сохраняем код и название в localStorage (синхронно, без задержки)
-  localStorage.setItem('p5editor_current_code', code.value)
-  localStorage.setItem('p5editor_current_name', sketchName.value)
+  localStorage.setItem('p5editor_current_code', code.value);
+  localStorage.setItem('p5editor_current_name', sketchName.value);
   if (code.value !== lastSavedCode) {
-    lastSavedCode = code.value
+    lastSavedCode = code.value;
   }
-  console.log('[EditorPage] Код сохранён в localStorage перед переходом на SharePage')
-  router.push('/share')
+  console.log(
+    '[EditorPage] Код сохранён в localStorage перед переходом на SharePage'
+  );
+  router.push('/share');
 }
 
 // Навигация к странице «Личный кабинет»
 function navigateToDashboard() {
-  router.push('/dashboard')
+  router.push('/dashboard');
 }
 
 // Функции переключения версии p5.js
 function setP5Source(source: P5Source) {
-  p5Source.value = source
-  localStorage.setItem('p5editor-p5-source', source)
-  addMessage(`📦 Источник p5.js: ${source === 'cdn' ? 'CDN' : 'локальная папка'}`)
+  p5Source.value = source;
+  localStorage.setItem('p5editor-p5-source', source);
+  addMessage(
+    `📦 Источник p5.js: ${source === 'cdn' ? 'CDN' : 'локальная папка'}`
+  );
 }
 
 function updateP5CdnVersion() {
-  localStorage.setItem('p5editor-p5-cdn-version', p5CdnVersion.value)
-  addMessage(`📦 Версия CDN обновлена: ${p5CdnVersion.value}`)
+  localStorage.setItem('p5editor-p5-cdn-version', p5CdnVersion.value);
+  addMessage(`📦 Версия CDN обновлена: ${p5CdnVersion.value}`);
 }
 
 // Вычисляемое свойство для отображения текущей версии
 const currentP5Version = computed(() => {
   if (p5Source.value === 'cdn') {
-    return `CDN ${p5CdnVersion.value}`
+    return `CDN ${p5CdnVersion.value}`;
   }
-  return `Local ${p5LocalVersion}`
-})
+  return `Local ${p5LocalVersion}`;
+});
 </script>
 
 <template>
@@ -850,7 +923,11 @@ const currentP5Version = computed(() => {
     <!-- Верхняя панель -->
     <header class="top-bar" :class="`theme-${theme}`">
       <div class="top-bar-left">
-        <button @click="startSketch" class="top-btn" title="Запустить скетч (Ctrl+Enter)">
+        <button
+          @click="startSketch"
+          class="top-btn"
+          title="Запустить скетч (Ctrl+Enter)"
+        >
           <span class="btn-icon">▶</span>
           <span class="btn-text">Старт</span>
         </button>
@@ -872,22 +949,39 @@ const currentP5Version = computed(() => {
           />
         </div>
 
-        <button @click="toggleExamples" class="top-btn examples-btn" :class="{ 'active': showExamples }" title="Учебник по примерам">
+        <button
+          @click="toggleExamples"
+          class="top-btn examples-btn"
+          :class="{ active: showExamples }"
+          title="Учебник по примерам"
+        >
           <span class="btn-icon">📚</span>
           <span class="btn-text">Учебник по примерам</span>
         </button>
 
-        <button @click="navigateToExplore" class="top-btn explore-btn" title="Галерея скетчей сообщества">
+        <button
+          @click="navigateToExplore"
+          class="top-btn explore-btn"
+          title="Галерея скетчей сообщества"
+        >
           <span class="btn-icon">🌍</span>
           <span class="btn-text">Исследуй</span>
         </button>
 
-        <button @click="navigateToDashboard" class="top-btn dashboard-btn" title="Личный кабинет">
+        <button
+          @click="navigateToDashboard"
+          class="top-btn dashboard-btn"
+          title="Личный кабинет"
+        >
           <span class="btn-icon">📊</span>
           <span class="btn-text">Личный кабинет</span>
         </button>
 
-        <button @click="navigateToShare" class="top-btn share-btn" title="Поделиться скетчем">
+        <button
+          @click="navigateToShare"
+          class="top-btn share-btn"
+          title="Поделиться скетчем"
+        >
           <span class="btn-icon">📤</span>
           <span class="btn-text">Поделиться</span>
         </button>
@@ -898,7 +992,11 @@ const currentP5Version = computed(() => {
           <UserProfile />
         </template>
         <template v-else>
-          <button @click="showAuthModal = true" class="top-btn auth-btn" title="Войти">
+          <button
+            @click="showAuthModal = true"
+            class="top-btn auth-btn"
+            title="Войти"
+          >
             <span class="btn-icon">🔑</span>
             <span class="btn-text">Войти</span>
           </button>
@@ -909,96 +1007,180 @@ const currentP5Version = computed(() => {
     <!-- Основной контент -->
     <div class="main-content">
       <!-- Боковое меню -->
-      <div class="side-menu"
-           :class="{ 'expanded': isMenuExpanded }"
-           @mouseenter="toggleMenuExpand"
-           @mouseleave="toggleMenuExpand">
-
+      <div
+        class="side-menu"
+        :class="{ expanded: isMenuExpanded }"
+        @mouseenter="toggleMenuExpand"
+        @mouseleave="toggleMenuExpand"
+      >
         <div class="menu-logo">
           <img src="/images/logo.png" alt="p5.js" class="logo-image" />
         </div>
 
-        <button @click="resetToExample" class="menu-item" title="Удалить код и начать с шаблона"
-                @mouseenter="setActiveMenuItem('reset')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="resetToExample"
+          class="menu-item"
+          title="Удалить код и начать с шаблона"
+          @mouseenter="setActiveMenuItem('reset')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">➕</span>
           <span class="menu-text" v-show="isMenuExpanded">Новый скетч</span>
         </button>
 
-        <button @click="saveSketch" class="menu-item" title="Сохранить скетч (Ctrl+S)"
-                @mouseenter="setActiveMenuItem('save')" @mouseleave="setActiveMenuItem(null)"
-                :disabled="isSaving">
+        <button
+          @click="saveSketch"
+          class="menu-item"
+          title="Сохранить скетч (Ctrl+S)"
+          @mouseenter="setActiveMenuItem('save')"
+          @mouseleave="setActiveMenuItem(null)"
+          :disabled="isSaving"
+        >
           <span class="menu-icon">{{ isSaving ? '⏳' : '💾' }}</span>
-          <span class="menu-text" v-show="isMenuExpanded">{{ isSaving ? 'Сохранение...' : 'Сохранить' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{
+            isSaving ? 'Сохранение...' : 'Сохранить'
+          }}</span>
         </button>
 
-        <button @click="loadSketch" class="menu-item" title="Загрузить скетч"
-                @mouseenter="setActiveMenuItem('load')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="loadSketch"
+          class="menu-item"
+          title="Загрузить скетч"
+          @mouseenter="setActiveMenuItem('load')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">📂</span>
           <span class="menu-text" v-show="isMenuExpanded">Загрузить</span>
         </button>
 
-        <button @click="showAIChat = true" class="menu-item" title="p5.js помощник (справочник)"
-                @mouseenter="setActiveMenuItem('ai')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="showAIChat = true"
+          class="menu-item"
+          title="p5.js помощник (справочник)"
+          @mouseenter="setActiveMenuItem('ai')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">📚</span>
           <span class="menu-text" v-show="isMenuExpanded">Справочник</span>
         </button>
 
-        <button @click="togglePalette" class="menu-item" :class="{ 'active': showPalette }" title="Палитра цветов"
-                @mouseenter="setActiveMenuItem('palette')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="togglePalette"
+          class="menu-item"
+          :class="{ active: showPalette }"
+          title="Палитра цветов"
+          @mouseenter="setActiveMenuItem('palette')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">🎨</span>
           <span class="menu-text" v-show="isMenuExpanded">Палитра</span>
         </button>
 
-        <button @click="increaseFontSize" class="menu-item" title="Увеличить шрифт"
-                @mouseenter="setActiveMenuItem('font-up')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="increaseFontSize"
+          class="menu-item"
+          title="Увеличить шрифт"
+          @mouseenter="setActiveMenuItem('font-up')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">+</span>
           <span class="menu-text" v-show="isMenuExpanded">Увеличить</span>
         </button>
 
-        <button @click="decreaseFontSize" class="menu-item" title="Уменьшить шрифт"
-                @mouseenter="setActiveMenuItem('font-down')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="decreaseFontSize"
+          class="menu-item"
+          title="Уменьшить шрифт"
+          @mouseenter="setActiveMenuItem('font-down')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">−</span>
           <span class="menu-text" v-show="isMenuExpanded">Уменьшить</span>
         </button>
 
-        <button @click="undo" class="menu-item" title="Отмена (Ctrl+Z)"
-                @mouseenter="setActiveMenuItem('undo')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="undo"
+          class="menu-item"
+          title="Отмена (Ctrl+Z)"
+          @mouseenter="setActiveMenuItem('undo')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">↩️</span>
           <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
         </button>
 
-        <button @click="redo" class="menu-item" title="Повтор (Ctrl+Y)"
-                @mouseenter="setActiveMenuItem('redo')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="redo"
+          class="menu-item"
+          title="Повтор (Ctrl+Y)"
+          @mouseenter="setActiveMenuItem('redo')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">↪️</span>
           <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
         </button>
 
-        <button @click="copyToClipboard" class="menu-item" title="Копировать код"
-                @mouseenter="setActiveMenuItem('copy')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="copyToClipboard"
+          class="menu-item"
+          title="Копировать код"
+          @mouseenter="setActiveMenuItem('copy')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">📋</span>
           <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
         </button>
 
-        <button @click="clearConsole" class="menu-item" title="Очистить консоль"
-                @mouseenter="setActiveMenuItem('console-clear')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="clearConsole"
+          class="menu-item"
+          title="Очистить консоль"
+          @mouseenter="setActiveMenuItem('console-clear')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">🧹</span>
-          <span class="menu-text" v-show="isMenuExpanded">Очистить консоль</span>
+          <span class="menu-text" v-show="isMenuExpanded"
+            >Очистить консоль</span
+          >
         </button>
 
-        <button @click="toggleConsole" class="menu-item" :title="isConsoleVisible ? 'Скрыть консоль (Ctrl+`)' : 'Показать консоль (Ctrl+`)'"
-                @mouseenter="setActiveMenuItem('console-toggle')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="toggleConsole"
+          class="menu-item"
+          :title="
+            isConsoleVisible
+              ? 'Скрыть консоль (Ctrl+`)'
+              : 'Показать консоль (Ctrl+`)'
+          "
+          @mouseenter="setActiveMenuItem('console-toggle')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">{{ isConsoleVisible ? '📟' : '📭' }}</span>
-          <span class="menu-text" v-show="isMenuExpanded">{{ isConsoleVisible ? 'Скрыть' : 'Показать' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{
+            isConsoleVisible ? 'Скрыть' : 'Показать'
+          }}</span>
         </button>
 
-        <button @click="toggleTheme" class="menu-item" :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
-                @mouseenter="setActiveMenuItem('theme')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="toggleTheme"
+          class="menu-item"
+          :title="`Тема: ${theme === 'dark' ? 'тёмная' : 'светлая'}`"
+          @mouseenter="setActiveMenuItem('theme')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
-          <span class="menu-text" v-show="isMenuExpanded">{{ theme === 'dark' ? 'Тёмная' : 'Светлая' }}</span>
+          <span class="menu-text" v-show="isMenuExpanded">{{
+            theme === 'dark' ? 'Тёмная' : 'Светлая'
+          }}</span>
         </button>
 
-        <button @click="showShortcuts" class="menu-item" title="Горячие клавиши"
-                @mouseenter="setActiveMenuItem('shortcuts')" @mouseleave="setActiveMenuItem(null)">
+        <button
+          @click="showShortcuts"
+          class="menu-item"
+          title="Горячие клавиши"
+          @mouseenter="setActiveMenuItem('shortcuts')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
           <span class="menu-icon">⌨️</span>
           <span class="menu-text" v-show="isMenuExpanded">Клавиши</span>
         </button>
@@ -1045,7 +1227,13 @@ const currentP5Version = computed(() => {
 
       <!-- Рабочая область -->
       <div class="main" ref="mainRef">
-        <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" accept=".js" />
+        <input
+          type="file"
+          ref="fileInput"
+          style="display: none"
+          @change="handleFileUpload"
+          accept=".js"
+        />
 
         <!-- Левая панель: примеры / палитра -->
         <div
@@ -1059,18 +1247,14 @@ const currentP5Version = computed(() => {
             @load-example="loadExample"
             @close="toggleExamples"
           />
-          <PalettePanel
-            v-else
-            :theme="theme"
-            @close="togglePalette"
-          />
+          <PalettePanel v-else :theme="theme" @close="togglePalette" />
         </div>
 
         <!-- Разделитель: примеры ↔ редактор -->
         <div
           v-if="showExamples || showPalette"
           class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'examples-editor' }"
+          :class="{ resizing: draggingDivider === 'examples-editor' }"
           @mousedown.prevent="startDividerDrag('examples-editor', $event)"
         >
           <div class="resize-handle-grip"></div>
@@ -1099,11 +1283,14 @@ const currentP5Version = computed(() => {
           </div>
 
           <!-- Консоль под редактором -->
-          <div class="console-wrapper" :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }">
+          <div
+            class="console-wrapper"
+            :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }"
+          >
             <div
               class="console-resize-handle"
               @mousedown.prevent="startConsoleResize"
-              :class="{ 'dragging': isDragging }"
+              :class="{ dragging: isDragging }"
             >
               <div class="handle-line"></div>
               <div class="handle-line"></div>
@@ -1116,17 +1303,14 @@ const currentP5Version = computed(() => {
         <!-- Разделитель: редактор ↔ холст -->
         <div
           class="resize-handle-vertical"
-          :class="{ 'resizing': draggingDivider === 'editor-canvas' }"
+          :class="{ resizing: draggingDivider === 'editor-canvas' }"
           @mousedown.prevent="startDividerDrag('editor-canvas', $event)"
         >
           <div class="resize-handle-grip"></div>
         </div>
 
         <!-- Панель холста -->
-        <div
-          class="canvas-panel"
-          :style="{ width: canvasWidth + 'px' }"
-        >
+        <div class="canvas-panel" :style="{ width: canvasWidth + 'px' }">
           <div class="canvas-container">
             <div class="canvas-header">
               <span class="canvas-title"></span>
@@ -1136,10 +1320,17 @@ const currentP5Version = computed(() => {
                 <span class="coord-separator">/</span>
                 <span class="coord-item">Y = {{ mouseY }}</span>
               </div>
-              <button @click="saveCanvas" class="canvas-btn" title="Сохранить холст">
+              <button
+                @click="saveCanvas"
+                class="canvas-btn"
+                title="Сохранить холст"
+              >
                 📸
               </button>
-              <div class="canvas-indicator" :class="'status-' + supabaseStatus"></div>
+              <div
+                class="canvas-indicator"
+                :class="'status-' + supabaseStatus"
+              ></div>
             </div>
             <div class="canvas-content">
               <P5Canvas
@@ -1160,7 +1351,12 @@ const currentP5Version = computed(() => {
           :theme="theme"
           :code="code"
           @send-message="handleAIMessage"
-          @suggest-code="(newCode) => { code = newCode; addMessage('🤖 AI предложил код'); }"
+          @suggest-code="
+            (newCode) => {
+              code = newCode;
+              addMessage('🤖 AI предложил код');
+            }
+          "
         />
 
         <!-- Призрачная линия при ресайзе -->
@@ -1171,11 +1367,7 @@ const currentP5Version = computed(() => {
         />
 
         <!-- Оверлей, чтобы iframe не перехватывал мышь -->
-        <div
-          v-if="draggingDivider"
-          class="drag-overlay"
-        />
-
+        <div v-if="draggingDivider" class="drag-overlay" />
       </div>
     </div>
 
@@ -1195,7 +1387,9 @@ const currentP5Version = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  transition: background-color 0.3s, color 0.3s;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
   position: relative;
   overflow: hidden;
 }
@@ -1269,7 +1463,7 @@ const currentP5Version = computed(() => {
 
 /* Тёмная тема */
 .app.theme-dark {
-  background-color: #1a1a1a;
+  background-color: #0d1117;
   color: #ffffff;
 }
 
@@ -1282,9 +1476,9 @@ const currentP5Version = computed(() => {
 /* Верхняя панель */
 .top-bar {
   height: 60px;
-  background: rgba(30, 30, 30, 0.8);
+  background: rgba(15, 15, 15, 0.8);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid #404040;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1366,8 +1560,8 @@ const currentP5Version = computed(() => {
 .sketch-name-input {
   padding: 8px 16px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
   color: inherit;
   font-size: 14px;
   min-width: 200px;
@@ -1377,7 +1571,7 @@ const currentP5Version = computed(() => {
 .sketch-name-input:focus {
   outline: none;
   border-color: #646cff;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .theme-light .sketch-name-input {
@@ -1419,7 +1613,7 @@ const currentP5Version = computed(() => {
 
 /* Учебник по примерам — мягкий фиолетовый */
 .examples-btn {
-  background-color: rgba(147, 112, 219, 0.20);
+  background-color: rgba(147, 112, 219, 0.2);
 }
 .examples-btn:hover,
 .examples-btn.active {
@@ -1428,7 +1622,7 @@ const currentP5Version = computed(() => {
 
 /* Исследуй — мягкий бирюзовый */
 .explore-btn {
-  background-color: rgba(64, 179, 162, 0.20);
+  background-color: rgba(64, 179, 162, 0.2);
 }
 .explore-btn:hover {
   background-color: rgba(64, 179, 162, 0.28);
@@ -1436,7 +1630,7 @@ const currentP5Version = computed(() => {
 
 /* Личный кабинет — мягкий фиолетовый */
 .dashboard-btn {
-  background-color: rgba(139, 92, 246, 0.20);
+  background-color: rgba(139, 92, 246, 0.2);
 }
 .dashboard-btn:hover {
   background-color: rgba(139, 92, 246, 0.28);
@@ -1447,7 +1641,7 @@ const currentP5Version = computed(() => {
   background-color: rgba(242, 153, 74, 0.22);
 }
 .share-btn:hover {
-  background-color: rgba(242, 153, 74, 0.30);
+  background-color: rgba(242, 153, 74, 0.3);
 }
 
 /* Войти — спокойный контурный серо-синий */
@@ -1470,9 +1664,9 @@ const currentP5Version = computed(() => {
 .side-menu {
   width: 60px;
   height: 100%;
-  background: rgba(30, 30, 30, 0.95);
+  background: rgba(20, 20, 20, 0.95);
   backdrop-filter: blur(10px);
-  border-right: 1px solid #404040;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1768,13 +1962,14 @@ const currentP5Version = computed(() => {
 }
 
 /* Заголовки редактора и холста */
-.editor-header, .canvas-header {
+.editor-header,
+.canvas-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   min-height: 26px;
 }
@@ -1808,7 +2003,8 @@ const currentP5Version = computed(() => {
   background: #27c93f;
 }
 
-.editor-title, .canvas-title {
+.editor-title,
+.canvas-title {
   font-size: 12px;
   opacity: 0.7;
 }
@@ -1859,18 +2055,25 @@ const currentP5Version = computed(() => {
 }
 
 @keyframes pulse-error {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-.editor-container, .canvas-container {
+.editor-container,
+.canvas-container {
   height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.editor-content, .canvas-content {
+.editor-content,
+.canvas-content {
   flex: 1;
   overflow: auto;
   min-height: 0;
@@ -1882,7 +2085,7 @@ const currentP5Version = computed(() => {
   z-index: 10;
   transition: height 0.2s ease;
   overflow: hidden;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
@@ -1932,10 +2135,10 @@ const currentP5Version = computed(() => {
   margin-right: 10px;
   font-family: 'Consolas', monospace;
   font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.35);
   padding: 4px 10px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .app.theme-light .mouse-coordinates {
@@ -1960,18 +2163,35 @@ const currentP5Version = computed(() => {
 
 /* Анимации */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* Скроллбары */
@@ -1981,16 +2201,16 @@ const currentP5Version = computed(() => {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 108, 255, 0.3);
+  background: rgba(100, 108, 255, 0.4);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 108, 255, 0.5);
+  background: rgba(100, 108, 255, 0.6);
 }
 
 .side-menu::-webkit-scrollbar {
