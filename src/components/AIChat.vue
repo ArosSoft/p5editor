@@ -1697,10 +1697,11 @@ function searchInReference(query: string): string {
   }
 
   // Формирование ответа
-  let response = `📚 **Найдено функций: ${matchedFunctions.length}**\n`;
+  let response = `📚 **Найдено упоминаний: ${matchedFunctions.length}**\n`;
   response += `🔍 **Запрос:** "${query}"\n---\n`;
 
-  matchedFunctions.forEach((fn, index) => {
+  // Выводим первые 5 результатов полностью, остальные - кратко
+  matchedFunctions.slice(0, 5).forEach((fn, index) => {
     // Подсвечиваем совпавшие слова в описании
     let highlightedDesc = fn.description;
     fn.matchedWords.forEach((word) => {
@@ -1717,11 +1718,18 @@ function searchInReference(query: string): string {
       response += `\`\`\`javascript\n${example}\n\`\`\`\n`;
     }
 
-    // Добавляем тонкую горизонтальную черту между функциями (но не после последней)
-    if (index < matchedFunctions.length - 1) {
+    // Добавляем тонкую горизонтальную черту между функциями (но не после последней полной)
+    if (index < Math.min(5, matchedFunctions.length) - 1) {
       response += `---\n`;
     }
   });
+
+  // Остальные результаты - кратко одной строкой
+  if (matchedFunctions.length > 5) {
+    response += `---\n`;
+    const remaining = matchedFunctions.slice(5);
+    response += `**И ещё ${remaining.length}:** ${remaining.map(fn => fn.name).join(', ')}\n`;
+  }
 
   return response;
 }

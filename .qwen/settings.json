@@ -22,7 +22,11 @@
       "Bash(get-content *)",
       "Bash(foreach-object *)",
       "Bash(true)",
-      "Bash(timeout *)"
+      "Bash(timeout *)",
+      "Read(//d/p5editor/src/components/**)",
+      "Read(//d/p5editor/**)",
+      "Bash(powershell *)",
+      "Read(//c/Users/rozanov.an/Documents/p5editor/src/components/**)"
     ]
   },
   "$version": 4
