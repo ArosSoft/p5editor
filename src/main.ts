@@ -2,15 +2,15 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { clickOutside } from './directives/clickOutside'
+import { initAuth } from './composables/useAuth'
 
-const app = createApp(App)
-app.use(router)
-app.directive('click-outside', clickOutside)
+async function bootstrap() {
+  await initAuth()
 
-// Монтируем приложение сразу для быстрой отрисовки
-app.mount('#app')
+  const app = createApp(App)
+  app.use(router)
+  app.directive('click-outside', clickOutside)
+  app.mount('#app')
+}
 
-// Инициализация авторизации в фоне (не блокирует рендеринг)
-import('./composables/useAuth').then(({ initAuth }) => {
-  initAuth()
-})
+bootstrap()

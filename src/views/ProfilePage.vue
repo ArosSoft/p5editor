@@ -8,7 +8,7 @@ import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
 const route = useRoute()
-const { user, profile, isAuthenticated, updateProfile, uploadAvatar, isReady, readyPromise } = useAuth()
+const { user, profile, session, isAuthenticated, updateProfile, uploadAvatar, isReady, readyPromise } = useAuth()
 const { getUserSketches, deleteSketch } = useSketches()
 const { uploadAvatar: uploadAvatarStorage, uploading: uploadingAvatar } = useStorage()
 
@@ -40,8 +40,8 @@ onMounted(async () => {
     await readyPromise.value
   }
 
-  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
-  if (!user.value) {
+  // Проверяем авторизацию через восстановленную сессию
+  if (!user.value && !session.value) {
     router.push('/')
     return
   }

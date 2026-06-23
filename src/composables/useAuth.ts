@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 import type { Profile } from '../types/supabase'
 import router from '../router'
 
+const AUTH_CACHE_KEY = 'p5editor-auth-cache'
+const AUTH_GRACE_MS = 15 * 60 * 1000
+
 // Глобальное состояние для хранения данных авторизации
 const globalUser = ref<User | null>(null)
 const globalProfile = ref<Profile | null>(null)
@@ -14,9 +17,57 @@ const authReady = ref(false)
 const readyPromise = ref<Promise<void> | null>(null)
 let authInitialized = false
 let authUnsubscribe: (() => void) | null = null
+let profileLoadPromise: Promise<void> | null = null
 
 // Состояние для сброса пароля
 const passwordRecoveryMode = ref(false)
+
+function saveAuthCache(session: Session | null) {
+  try {
+    if (!session?.user) {
+      localStorage.removeItem(AUTH_CACHE_KEY)
+      return
+    }
+
+    localStorage.setItem(
+      AUTH_CACHE_KEY,
+      JSON.stringify({
+        session,
+        savedAt: Date.now()
+      })
+    )
+  } catch (e) {
+    console.warn('[Auth] Не удалось сохранить кеш сессии', e)
+  }
+}
+
+function loadAuthCache(): { session: Session; savedAt: number } | null {
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as { session?: Session; savedAt?: number }
+    if (!parsed.session?.user || !parsed.savedAt) return null
+
+    return { session: parsed.session, savedAt: parsed.savedAt }
+  } catch (e) {
+    console.warn('[Auth] Не удалось прочитать кеш сессии', e)
+    return null
+  }
+}
+
+async function hydrateSession(session: Session | null) {
+  globalSession.value = session
+  globalUser.value = session?.user ?? null
+  saveAuthCache(session)
+
+  if (session?.user) {
+    await loadProfileInternal(session.user.id)
+  } else {
+    globalProfile.value = null
+    localStorage.removeItem('user_role')
+  }
+}
 
 // Инициализация авторизации (вызывается один раз при старте приложения)
 export async function initAuth() {
@@ -29,41 +80,39 @@ export async function initAuth() {
 
   readyPromise.value = (async () => {
     try {
+      const cached = loadAuthCache()
+      if (cached?.session) {
+        const age = Date.now() - cached.savedAt
+        if (age <= AUTH_GRACE_MS) {
+          await hydrateSession(cached.session)
+        }
+      }
+
       // Загрузка текущей сессии
       const { data: { session } } = await supabase.auth.getSession()
-      globalSession.value = session
-      globalUser.value = session?.user ?? null
-
-      if (session?.user) {
-        await loadProfileInternal(session.user.id)
-      }
+      await hydrateSession(session)
 
       // Подписка на изменения авторизации
       const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         console.log('[Auth] Event:', event)
-
-        // Приведение к string для поддержки всех возможных событий (включая TOKEN_REFRESH_FAILED)
         const eventStr = event as string
 
-        // Обработка события истечения/неудачи обновления токена
         if (eventStr === 'TOKEN_REFRESH_FAILED' || eventStr === 'SIGNED_OUT') {
           globalSession.value = null
           globalUser.value = null
           globalProfile.value = null
           localStorage.removeItem('user_role')
+          localStorage.removeItem(AUTH_CACHE_KEY)
           passwordRecoveryMode.value = false
           globalError.value = 'Сессия истекла. Пожалуйста, войдите снова.'
           console.warn('[Auth] Сессия истекла или токен не обновился')
           return
         }
 
-        // Обработка события сброса пароля
         if (eventStr === 'PASSWORD_RECOVERY') {
           console.log('[Auth] Режим восстановления пароля')
           passwordRecoveryMode.value = true
-          globalSession.value = newSession
-          globalUser.value = newSession?.user ?? null
-          // Перенаправляем на страницу обновления пароля
+          await hydrateSession(newSession)
           try {
             router.push('/update-password')
           } catch (e) {
@@ -72,20 +121,11 @@ export async function initAuth() {
           return
         }
 
-        // Сброс режима восстановления при входе/выходе
-        if (eventStr === 'SIGNED_IN' || eventStr === 'INITIAL_SESSION') {
+        if (eventStr === 'SIGNED_IN' || eventStr === 'INITIAL_SESSION' || eventStr === 'TOKEN_REFRESHED') {
           passwordRecoveryMode.value = false
         }
 
-        globalSession.value = newSession
-        globalUser.value = newSession?.user ?? null
-
-        if (newSession?.user) {
-          await loadProfileInternal(newSession.user.id)
-        } else {
-          globalProfile.value = null
-          localStorage.removeItem('user_role')
-        }
+        await hydrateSession(newSession)
       })
 
       authUnsubscribe = authListener.subscription.unsubscribe
@@ -93,7 +133,7 @@ export async function initAuth() {
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : 'Ошибка инициализации сессии'
       console.error('Session init error:', e)
-      authReady.value = true // Всё равно помечаем как готовую, даже с ошибкой
+      authReady.value = true
     } finally {
       globalLoading.value = false
     }
@@ -113,24 +153,34 @@ export function cleanupAuth() {
 
 // Внутренняя функция загрузки профиля
 async function loadProfileInternal(userId: string) {
-  try {
-    const { data, error: fetchError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (fetchError) throw fetchError
-    globalProfile.value = data as Profile
-
-    // Сохраняем роль в localStorage для защиты маршрутов
-    if (data?.role) {
-      localStorage.setItem('user_role', data.role)
-    }
-  } catch (e) {
-    globalError.value = e instanceof Error ? e.message : 'Ошибка загрузки профиля'
-    console.error('Error loading profile:', e)
+  if (profileLoadPromise) {
+    await profileLoadPromise
+    return
   }
+
+  profileLoadPromise = (async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (fetchError) throw fetchError
+      globalProfile.value = data as Profile
+
+      if (data?.role) {
+        localStorage.setItem('user_role', data.role)
+      }
+    } catch (e) {
+      globalError.value = e instanceof Error ? e.message : 'Ошибка загрузки профиля'
+      console.error('Error loading profile:', e)
+    } finally {
+      profileLoadPromise = null
+    }
+  })()
+
+  await profileLoadPromise
 }
 
 export function useAuth() {
@@ -146,12 +196,10 @@ export function useAuth() {
     globalProfile.value?.role === 'moderator' || globalProfile.value?.role === 'admin'
   )
 
-  // Загрузка профиля пользователя
   async function loadProfile(userId: string) {
     await loadProfileInternal(userId)
   }
 
-  // Вход (email + пароль)
   async function login(email: string, password: string) {
     try {
       globalLoading.value = true
@@ -164,13 +212,7 @@ export function useAuth() {
 
       if (loginError) throw loginError
 
-      globalUser.value = data.user
-      globalSession.value = data.session
-
-      if (data.user) {
-        await loadProfileInternal(data.user.id)
-      }
-
+      await hydrateSession(data.session)
       return { success: true }
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : 'Ошибка входа'
@@ -181,7 +223,6 @@ export function useAuth() {
     }
   }
 
-  // Регистрация (email + пароль + display name)
   async function register(email: string, password: string, displayName?: string) {
     try {
       globalLoading.value = true
@@ -199,14 +240,7 @@ export function useAuth() {
 
       if (registerError) throw registerError
 
-      globalUser.value = data.user
-      globalSession.value = data.session
-
-      // Профиль создаётся автоматически через триггер в БД
-      if (data.user) {
-        await loadProfileInternal(data.user.id)
-      }
-
+      await hydrateSession(data.session)
       return { success: true }
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : 'Ошибка регистрации'
@@ -217,7 +251,6 @@ export function useAuth() {
     }
   }
 
-  // Выход
   async function logout() {
     try {
       globalLoading.value = true
@@ -229,9 +262,8 @@ export function useAuth() {
       globalUser.value = null
       globalSession.value = null
       globalProfile.value = null
-
-      // Очищаем роль из localStorage
       localStorage.removeItem('user_role')
+      localStorage.removeItem(AUTH_CACHE_KEY)
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : 'Ошибка выхода'
       console.error('Logout error:', e)
@@ -240,23 +272,17 @@ export function useAuth() {
     }
   }
 
-  // Сброс пароля
   async function resetPassword(email: string) {
     try {
       globalLoading.value = true
       globalError.value = null
 
-      // Определяем базовый путь (без хэша!)
-      // На GitHub Pages путь /p5editor/, локально — /
       let basePath = '/'
       const pathname = window.location.pathname
       if (pathname === '/p5editor' || pathname.startsWith('/p5editor/')) {
         basePath = '/p5editor/'
       }
 
-      // ВАЖНО: Supabase некорректно обрабатывает хэш в redirectTo
-      // Поэтому перенаправляем на корень, а дальше роутер сам перекинет на /update-password
-      // после события PASSWORD_RECOVERY
       const redirectTo = `${window.location.origin}${basePath}`
       console.log('[Auth] Password reset redirectTo:', redirectTo)
 
@@ -276,7 +302,6 @@ export function useAuth() {
     }
   }
 
-  // Обновление пароля после сброса
   async function updatePassword(newPassword: string) {
     try {
       globalLoading.value = true
@@ -290,12 +315,11 @@ export function useAuth() {
 
       passwordRecoveryMode.value = false
 
-      // Обновляем данные пользователя и сессию
       if (data.user) {
         globalUser.value = data.user
-        // Получаем актуальную сессию
         const { data: sessionData } = await supabase.auth.getSession()
         globalSession.value = sessionData.session
+        saveAuthCache(sessionData.session)
       }
 
       return { success: true }
@@ -308,7 +332,6 @@ export function useAuth() {
     }
   }
 
-  // Обновление профиля
   async function updateProfile(updates: { display_name?: string | null; bio?: string | null; avatar_url?: string | null }) {
     try {
       globalLoading.value = true
@@ -338,7 +361,6 @@ export function useAuth() {
     }
   }
 
-  // Загрузка аватара
   async function uploadAvatar(file: File) {
     try {
       globalLoading.value = true
@@ -352,19 +374,16 @@ export function useAuth() {
       const fileName = `${globalUser.value.id}-${Date.now()}.${fileExt}`
       const filePath = `avatars/${fileName}`
 
-      // Загрузка файла в Storage
       const { error: uploadError } = await supabase.storage
         .from('user-content')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
-      // Получение публичной ссылки
       const { data: urlData } = supabase.storage
         .from('user-content')
         .getPublicUrl(filePath)
 
-      // Обновление профиля
       const { success, error: updateError } = await updateProfile({
         avatar_url: urlData.publicUrl
       })

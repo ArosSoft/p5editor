@@ -6,7 +6,7 @@ import { useSketches } from '../composables/useSketches'
 import type { Sketch, SketchWithProfile } from '../types/supabase'
 
 const router = useRouter()
-const { user, profile, isAuthenticated, isAdmin, isModerator, isReady, readyPromise } = useAuth()
+const { user, profile, session, isAuthenticated, isAdmin, isModerator, isReady, readyPromise } = useAuth()
 const { getGallerySketches, getUserSketches, getPendingSketches } = useSketches()
 
 // Состояние
@@ -32,8 +32,8 @@ onMounted(async () => {
     await readyPromise.value
   }
 
-  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
-  if (!user.value) {
+  // Проверяем авторизацию через восстановленную сессию
+  if (!user.value && !session.value) {
     router.push('/')
     return
   }

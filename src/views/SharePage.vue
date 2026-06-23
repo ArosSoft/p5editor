@@ -7,7 +7,7 @@ import { useStorage } from '../composables/useStorage'
 import { supabase } from '../lib/supabase'
 
 const router = useRouter()
-const { user, profile, isAuthenticated, isReady, readyPromise } = useAuth()
+const { user, profile, isAuthenticated, isReady, readyPromise, session } = useAuth()
 const { createSketch } = useSketches()
 const { uploadFile, uploading } = useStorage()
 
@@ -249,8 +249,8 @@ onMounted(async () => {
     await readyPromise.value
   }
 
-  // Проверяем авторизацию через user.value (надёжнее, чем localStorage)
-  if (!user.value) {
+  // Если пользователь ещё не подгрузился, но есть валидная сессия, ждём и доверяем supabase session
+  if (!session.value && !user.value) {
     alert('Для публикации скетча необходимо войти в систему')
     router.push('/')
     return

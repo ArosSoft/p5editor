@@ -8,17 +8,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Создаем кастомный fetch с таймаутом для работы на медленном соединении
+const isSlowConnection = (() => {
+  if (typeof navigator === 'undefined') return false
+
+  const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection
+  const effectiveType = connection?.effectiveType
+
+  return effectiveType === 'slow-2g' || effectiveType === '2g' || effectiveType === '3g'
+})()
+
+// Создаем кастомный fetch с адаптивным таймаутом для нестабильных соединений
 const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   const controller = new AbortController()
-  
-  // Если передан внешний signal, используем его для отмены
-  // Иначе создаём свой таймаут на 60 секунд
+  const timeoutMs = isSlowConnection ? 180000 : 60000
   let timeout: ReturnType<typeof setTimeout> | null = null
-  
+
   if (init?.signal) {
-    // Если есть внешний signal, просто передаём его
-    // и не создаём свой таймаут
     const fetchInit: RequestInit = {
       ...init,
       signal: init.signal
@@ -26,11 +31,10 @@ const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
 
     return fetch(input, fetchInit)
   }
-  
-  // Если нет внешнего signal, используем свой таймаут
+
   timeout = setTimeout(() => {
     controller.abort()
-  }, 60000) // 60 секунд таймаут на любой запрос
+  }, timeoutMs)
 
   const fetchInit: RequestInit = {
     ...init,
@@ -44,12 +48,14 @@ const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   })
 }
 
-// Используем упрощённый клиент с настройками таймаутов
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+    storageKey: 'p5editor-auth',
+    storage: localStorage
   },
   // @ts-ignore - кастомный fetch для таймаутов
   fetch: customFetch

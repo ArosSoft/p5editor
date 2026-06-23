@@ -82,31 +82,27 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Получаем состояние авторизации
-  const { user, isReady, readyPromise } = useAuth()
+  const { user, session, isReady, readyPromise } = useAuth()
   
   // Ждём готовности авторизации перед проверкой прав
   if (!isReady.value && readyPromise.value) {
     await readyPromise.value
   }
 
-  // Проверка авторизации через реального пользователя (надёжнее localStorage)
+  // Проверка авторизации через восстанавливаемую сессию
   if (to.meta.requiresAuth) {
-    if (!user.value) {
-      // Перенаправляем на главную с параметром для открытия модального окна входа
+    if (!user.value && !session.value) {
       next({ path: '/', query: { auth: 'required' } })
       return
     }
   }
 
-  // Проверка доступа к админ-панели (также через user и profile)
+  // Проверка доступа к админ-панели (также через session)
   if (to.meta.requiresModerator) {
-    // Если пользователь не авторизован - на главную
-    if (!user.value) {
+    if (!user.value && !session.value) {
       next('/')
       return
     }
-    // Проверка роли происходит на стороне компонента через isModerator
-    // Здесь просто пропускаем, так как роль загружается асинхронно
   }
 
   next()
