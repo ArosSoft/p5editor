@@ -1,7 +1,7 @@
 <!-- components/AIChat.vue -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { P5_EXAMPLES } from '../lib/p5-examples';
+import { P5_EXAMPLES, P5_EXAMPLES_IMAGES } from '../lib/p5-examples';
 import { p5functions } from '../lib/p5-reference';
 import hljs from 'highlight.js/lib/common';
 import 'highlight.js/styles/github.css';
@@ -210,6 +210,11 @@ function searchInReference(query: string): string {
     if (example) {
       response += `\`\`\`javascript\n${example}\n\`\`\`\n`;
     }
+    // Добавляем изображение, если оно есть для этой функции
+    const imageName = P5_EXAMPLES_IMAGES[fnNameClean as keyof typeof P5_EXAMPLES_IMAGES];
+    if (imageName) {
+      response += `![${fnNameClean}](images/${imageName})\n`;
+    }
 
     // Добавляем тонкую горизонтальную черту между функциями (но не после последней полной)
     if (index < Math.min(5, matchedFunctions.length) - 1) {
@@ -260,6 +265,8 @@ function parseMarkdown(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Курсив
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Изображения
+    .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" style="max-width:100%;margin:8px 0;">')
     // Заголовки
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')

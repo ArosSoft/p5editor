@@ -462,3 +462,10 @@ saveStrings(lines, 'output.txt');`,
 
   'second': `print(second()); // Текущая секунда (0-59)`
 };
+
+// Изображения для примеров (путь к файлу в папке public/images/)
+export const P5_EXAMPLES_IMAGES: Record<string, string> = {
+  'circle': 'круг.png',
+  'ellipse': 'эллипс.png',
+
+};
