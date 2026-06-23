@@ -33,8 +33,24 @@ const avatarInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const notification = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
+// Тема (синхронизация с редактором)
+type Theme = 'dark' | 'light'
+const currentTheme = ref<Theme>('dark')
+
+function syncThemeFromStorage() {
+  const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    currentTheme.value = savedTheme
+  }
+}
+
+const themeClass = computed(() =>
+  currentTheme.value === 'dark' ? 'theme-dark' : 'theme-light'
+)
+
 // Проверка авторизации и загрузка скетчей
 onMounted(async () => {
+  syncThemeFromStorage()
   // Ждём готовности авторизации
   if (!isReady.value && readyPromise.value) {
     await readyPromise.value
@@ -265,7 +281,7 @@ const statusText = (status: string) => {
 </script>
 
 <template>
-  <div class="profile-page">
+  <div :class="['profile-page', themeClass]">
     <!-- Уведомление -->
     <Transition name="fade">
       <div v-if="notification" :class="['notification', notification.type]">
@@ -366,23 +382,23 @@ const statusText = (status: string) => {
           <span class="stat-label">Всего скетчей</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: #64c864">{{ stats.approved }}</span>
+          <span class="stat-value stat-color-approved">{{ stats.approved }}</span>
           <span class="stat-label">Одобренные</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: #ffc864">{{ stats.pending }}</span>
+          <span class="stat-value stat-color-pending">{{ stats.pending }}</span>
           <span class="stat-label">На модерации</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: #ff6464">{{ stats.rejected }}</span>
+          <span class="stat-value stat-color-rejected">{{ stats.rejected }}</span>
           <span class="stat-label">Отклонённые</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: #667eea">{{ stats.totalLikes }}</span>
+          <span class="stat-value stat-color-likes">{{ stats.totalLikes }}</span>
           <span class="stat-label">Лайков</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value" style="color: #764ba2">{{ stats.totalViews }}</span>
+          <span class="stat-value stat-color-views">{{ stats.totalViews }}</span>
           <span class="stat-label">Просмотров</span>
         </div>
       </div>
@@ -518,7 +534,7 @@ const statusText = (status: string) => {
     <!-- Модальное окно подтверждения удаления -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+        <div v-if="showDeleteModal" :class="['modal-overlay', themeClass]" @click="closeDeleteModal">
           <div class="modal" @click.stop>
             <div class="modal-header">
               <h3>🗑️ Удаление скетча</h3>
@@ -544,11 +560,113 @@ const statusText = (status: string) => {
 </template>
 
 <style scoped>
+/* Переменные тем */
+.theme-dark {
+  --page-bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  --page-text: #ffffff;
+  --header-bg: rgba(0, 0, 0, 0.3);
+  --header-border: rgba(255, 255, 255, 0.1);
+  --surface-bg: rgba(255, 255, 255, 0.05);
+  --surface-border: rgba(255, 255, 255, 0.1);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --btn-bg: rgba(255, 255, 255, 0.1);
+  --btn-border: rgba(255, 255, 255, 0.2);
+  --btn-hover-bg: rgba(255, 255, 255, 0.2);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --text-subtle: rgba(255, 255, 255, 0.7);
+  --text-bio: rgba(255, 255, 255, 0.8);
+  --input-bg: rgba(255, 255, 255, 0.1);
+  --input-border: rgba(255, 255, 255, 0.2);
+  --input-focus-border: #667eea;
+  --input-focus-bg: rgba(255, 255, 255, 0.15);
+  --label-color: rgba(255, 255, 255, 0.9);
+  --table-header-bg: rgba(102, 126, 234, 0.2);
+  --table-header-border: rgba(102, 126, 234, 0.3);
+  --table-header-text: rgba(255, 255, 255, 0.9);
+  --table-row-bg: rgba(255, 255, 255, 0.03);
+  --table-row-border: rgba(255, 255, 255, 0.05);
+  --table-row-hover-bg: rgba(255, 255, 255, 0.08);
+  --table-row-hover-border: rgba(102, 126, 234, 0.3);
+  --modal-bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  --modal-border: rgba(255, 255, 255, 0.1);
+  --modal-text: rgba(255, 255, 255, 0.9);
+  --tooltip-bg: rgba(0, 0, 0, 0.95);
+  --tooltip-text: #ffffff;
+  --role-user-bg: rgba(255, 255, 255, 0.1);
+  --role-user-text: rgba(255, 255, 255, 0.7);
+  --role-user-border: rgba(255, 255, 255, 0.2);
+  --status-draft-bg: rgba(255, 255, 255, 0.1);
+  --status-draft-text: rgba(255, 255, 255, 0.6);
+  --status-draft-border: rgba(255, 255, 255, 0.15);
+  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --title-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --avatar-border: rgba(102, 126, 234, 0.5);
+  --icon-btn-bg: rgba(255, 255, 255, 0.1);
+  --icon-btn-border: rgba(255, 255, 255, 0.15);
+  --icon-btn-text: rgba(255, 255, 255, 0.8);
+  --icon-btn-hover-bg: rgba(255, 255, 255, 0.2);
+  --icon-btn-hover-border: rgba(255, 255, 255, 0.3);
+  --stat-default-color: #667eea;
+}
+
+.theme-light {
+  --page-bg: #f8f9fa;
+  --page-text: #1f2937;
+  --header-bg: #ffffff;
+  --header-border: #e5e7eb;
+  --surface-bg: #ffffff;
+  --surface-border: #e5e7eb;
+  --surface-hover: #f3f4f6;
+  --btn-bg: rgba(0, 0, 0, 0.04);
+  --btn-border: #e5e7eb;
+  --btn-hover-bg: rgba(0, 0, 0, 0.08);
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-subtle: #6b7280;
+  --text-bio: #374151;
+  --input-bg: #f9fafb;
+  --input-border: #e5e7eb;
+  --input-focus-border: #646cff;
+  --input-focus-bg: #ffffff;
+  --label-color: #374151;
+  --table-header-bg: rgba(100, 108, 255, 0.08);
+  --table-header-border: rgba(100, 108, 255, 0.2);
+  --table-header-text: #374151;
+  --table-row-bg: #ffffff;
+  --table-row-border: #e5e7eb;
+  --table-row-hover-bg: #f9fafb;
+  --table-row-hover-border: rgba(100, 108, 255, 0.3);
+  --modal-bg: #ffffff;
+  --modal-border: #e5e7eb;
+  --modal-text: #374151;
+  --tooltip-bg: #1f2937;
+  --tooltip-text: #ffffff;
+  --role-user-bg: #f3f4f6;
+  --role-user-text: #6b7280;
+  --role-user-border: #e5e7eb;
+  --status-draft-bg: #f3f4f6;
+  --status-draft-text: #6b7280;
+  --status-draft-border: #e5e7eb;
+  --accent-gradient: linear-gradient(135deg, #646cff 0%, #764ba2 100%);
+  --title-gradient: linear-gradient(135deg, #646cff 0%, #764ba2 100%);
+  --avatar-border: rgba(100, 108, 255, 0.4);
+  --icon-btn-bg: rgba(0, 0, 0, 0.04);
+  --icon-btn-border: #e5e7eb;
+  --icon-btn-text: #374151;
+  --icon-btn-hover-bg: rgba(0, 0, 0, 0.08);
+  --icon-btn-hover-border: #d1d5db;
+  --stat-default-color: #646cff;
+}
+
 .profile-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  color: #ffffff;
+  background: var(--page-bg);
+  color: var(--page-text);
   padding-bottom: 3rem;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* Уведомление */
@@ -589,23 +707,23 @@ const statusText = (status: string) => {
   align-items: center;
   gap: 2rem;
   padding: 1.5rem 3rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
 }
 
 .back-btn {
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
   border-radius: 8px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .back-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--btn-hover-bg);
   transform: translateX(-2px);
 }
 
@@ -616,7 +734,7 @@ const statusText = (status: string) => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--title-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -639,8 +757,8 @@ const statusText = (status: string) => {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 2rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
   border-radius: 16px;
   padding: 2rem;
   margin-bottom: 2rem;
@@ -665,7 +783,7 @@ const statusText = (status: string) => {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(102, 126, 234, 0.5);
+  border: 3px solid var(--avatar-border);
 }
 
 .avatar-overlay {
@@ -687,7 +805,7 @@ const statusText = (status: string) => {
 
 .avatar-hint {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
 }
 
 .profile-info {
@@ -706,18 +824,18 @@ const statusText = (status: string) => {
   font-size: 2rem;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .profile-email {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .profile-bio {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-bio);
   margin: 0.5rem 0;
   line-height: 1.6;
 }
@@ -731,7 +849,7 @@ const statusText = (status: string) => {
 
 .meta-item {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-subtle);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -761,18 +879,18 @@ const statusText = (status: string) => {
 }
 
 .role-user {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--role-user-bg);
+  color: var(--role-user-text);
+  border: 1px solid var(--role-user-border);
 }
 
 .edit-btn {
   margin-top: 1rem;
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
   border-radius: 8px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -780,7 +898,7 @@ const statusText = (status: string) => {
 }
 
 .edit-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--btn-hover-bg);
 }
 
 .edit-mode {
@@ -798,16 +916,16 @@ const statusText = (status: string) => {
 .form-label {
   font-size: 0.95rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--label-color);
 }
 
 .form-input,
 .form-textarea {
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 1rem;
   font-family: inherit;
   transition: all 0.2s;
@@ -816,8 +934,8 @@ const statusText = (status: string) => {
 .form-input:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: #667eea;
-  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--input-focus-border);
+  background: var(--input-focus-bg);
 }
 
 .form-textarea {
@@ -842,17 +960,17 @@ const statusText = (status: string) => {
 }
 
 .cancel-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  color: var(--text-primary);
 }
 
 .cancel-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--btn-hover-bg);
 }
 
 .save-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent-gradient);
   border: none;
   color: #fff;
 }
@@ -876,8 +994,8 @@ const statusText = (status: string) => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
   border-radius: 12px;
   padding: 1.5rem;
   display: flex;
@@ -890,18 +1008,24 @@ const statusText = (status: string) => {
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #667eea;
+  color: var(--stat-default-color);
 }
+
+.stat-color-approved { color: #64c864; }
+.stat-color-pending { color: #ffc864; }
+.stat-color-rejected { color: #ff6464; }
+.stat-color-likes { color: #667eea; }
+.stat-color-views { color: #764ba2; }
 
 .stat-label {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 /* Скетчи */
 .sketches-section {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
   border-radius: 16px;
   padding: 1.5rem;
 }
@@ -919,6 +1043,7 @@ const statusText = (status: string) => {
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
+  color: var(--text-primary);
 }
 
 .tabs {
@@ -929,21 +1054,21 @@ const statusText = (status: string) => {
 
 .tab-btn {
   padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-subtle);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .tab-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--btn-hover-bg);
 }
 
 .tab-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent-gradient);
   border-color: transparent;
   color: #fff;
 }
@@ -956,6 +1081,7 @@ const statusText = (status: string) => {
   justify-content: center;
   padding: 3rem;
   gap: 1rem;
+  color: var(--text-secondary);
 }
 
 .loading-spinner {
@@ -980,12 +1106,12 @@ const statusText = (status: string) => {
   grid-template-columns: 100px 1fr 140px 120px 100px 140px;
   gap: 1rem;
   padding: 1rem;
-  background: rgba(102, 126, 234, 0.2);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: var(--table-header-bg);
+  border: 1px solid var(--table-header-border);
   border-radius: 8px 8px 0 0;
   font-weight: 600;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--table-header-text);
 }
 
 .table-row {
@@ -993,8 +1119,8 @@ const statusText = (status: string) => {
   grid-template-columns: 100px 1fr 140px 120px 100px 140px;
   gap: 1rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--table-row-bg);
+  border: 1px solid var(--table-row-border);
   border-top: none;
   transition: all 0.2s;
   align-items: center;
@@ -1005,12 +1131,12 @@ const statusText = (status: string) => {
 }
 
 .table-row + .table-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--table-row-border);
 }
 
 .table-row:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(102, 126, 234, 0.3);
+  background: var(--table-row-hover-bg);
+  border-color: var(--table-row-hover-border);
 }
 
 /* Квадратное изображение 1:1 */
@@ -1036,7 +1162,7 @@ const statusText = (status: string) => {
 .thumbnail-placeholder-square {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1055,7 +1181,7 @@ const statusText = (status: string) => {
   font-size: 0.95rem;
   font-weight: 600;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
   line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -1065,7 +1191,7 @@ const statusText = (status: string) => {
 
 .row-description {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1102,8 +1228,8 @@ const statusText = (status: string) => {
   position: absolute;
   bottom: 100%;
   left: 0;
-  background: rgba(0, 0, 0, 0.95);
-  color: #fff;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-size: 0.75rem;
@@ -1125,7 +1251,7 @@ const statusText = (status: string) => {
   display: flex;
   align-items: center;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 /* Статистика */
@@ -1139,7 +1265,7 @@ const statusText = (status: string) => {
 
 .stat-icon {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-subtle);
 }
 
 /* Действия - выровненные кнопки */
@@ -1169,25 +1295,25 @@ const statusText = (status: string) => {
 }
 
 .icon-btn.view-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--icon-btn-bg);
+  color: var(--icon-btn-text);
+  border: 1px solid var(--icon-btn-border);
 }
 
 .icon-btn.view-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--icon-btn-hover-bg);
+  border-color: var(--icon-btn-hover-border);
 }
 
 .icon-btn.edit-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--icon-btn-bg);
+  color: var(--icon-btn-text);
+  border: 1px solid var(--icon-btn-border);
 }
 
 .icon-btn.edit-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--icon-btn-hover-bg);
+  border-color: var(--icon-btn-hover-border);
 }
 
 .icon-btn.delete-btn {
@@ -1240,9 +1366,9 @@ const statusText = (status: string) => {
 }
 
 .status-draft {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--status-draft-bg);
+  color: var(--status-draft-text);
+  border: 1px solid var(--status-draft-border);
 }
 
 /* Нет скетчей */
@@ -1260,17 +1386,17 @@ const statusText = (status: string) => {
 .no-sketches h3 {
   font-size: 1.5rem;
   margin: 0 0 0.5rem 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .no-sketches p {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   margin-bottom: 1.5rem;
 }
 
 .create-sketch-btn {
   padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent-gradient);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -1301,11 +1427,11 @@ const statusText = (status: string) => {
 .not-auth h2 {
   font-size: 1.75rem;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .not-auth p {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-subtle);
   margin: 0;
   font-size: 1.1rem;
 }
@@ -1313,7 +1439,7 @@ const statusText = (status: string) => {
 .login-btn {
   margin-top: 1rem;
   padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent-gradient);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -1418,7 +1544,7 @@ const statusText = (status: string) => {
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--surface-border);
   }
 
   .col-thumbnail {
@@ -1474,12 +1600,13 @@ const statusText = (status: string) => {
 }
 
 .modal {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
   border-radius: 16px;
   max-width: 400px;
   width: 100%;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
 }
 
 .modal-header {
@@ -1487,20 +1614,20 @@ const statusText = (status: string) => {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--modal-border);
 }
 
 .modal-header h3 {
   font-size: 1.25rem;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .modal-close {
   background: none;
   border: none;
   font-size: 2rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   width: 2rem;
@@ -1513,8 +1640,8 @@ const statusText = (status: string) => {
 }
 
 .modal-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--btn-bg);
+  color: var(--text-primary);
 }
 
 .modal-content {
@@ -1523,7 +1650,7 @@ const statusText = (status: string) => {
 
 .modal-content p {
   margin: 0 0 1rem 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--modal-text);
   font-size: 1rem;
 }
 
@@ -1536,7 +1663,7 @@ const statusText = (status: string) => {
   display: flex;
   gap: 1rem;
   padding: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--modal-border);
 }
 
 .modal-btn {
@@ -1550,14 +1677,14 @@ const statusText = (status: string) => {
   border: none;
 }
 
-.cancel-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.modal-actions .cancel-btn {
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--btn-border);
 }
 
-.cancel-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+.modal-actions .cancel-btn:hover:not(:disabled) {
+  background: var(--btn-hover-bg);
 }
 
 .modal-btn.delete-btn {

@@ -23,14 +23,20 @@ const notification = ref<{ message: string; type: 'success' | 'error' } | null>(
 type Theme = 'dark' | 'light'
 const currentTheme = ref<Theme>('dark')
 
-// Проверка доступа при загрузке
-onMounted(async () => {
-  // Загрузка темы из localStorage
+function syncThemeFromStorage() {
   const savedTheme = localStorage.getItem('p5editor-theme') as Theme | null
   if (savedTheme === 'dark' || savedTheme === 'light') {
     currentTheme.value = savedTheme
   }
+}
 
+const themeClass = computed(() =>
+  currentTheme.value === 'dark' ? 'theme-dark' : 'theme-light'
+)
+
+// Проверка доступа при загрузке
+onMounted(async () => {
+  syncThemeFromStorage()
   // Ждём готовности авторизации
   if (!isReady.value && readyPromise.value) {
     await readyPromise.value
@@ -146,7 +152,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
 </script>
 
 <template>
-  <div :class="['admin-dashboard', currentTheme === 'dark' ? 'theme-dark' : 'theme-light']">
+  <div :class="['admin-dashboard', themeClass]">
     <!-- Уведомление -->
     <Transition name="fade">
       <div v-if="notification" :class="['notification', notification.type]">
@@ -317,7 +323,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
     <!-- Модальное окно одобрения -->
     <Teleport to="body">
       <Transition name="modal">
-        <div v-if="showApproveModal" class="modal-overlay" @click="closeApproveModal">
+        <div v-if="showApproveModal" :class="['modal-overlay', themeClass]" @click="closeApproveModal">
           <div class="modal" @click.stop>
             <div class="modal-header">
               <h3>Одобрение скетча</h3>
@@ -351,7 +357,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
     <!-- Модальное окно отклонения -->
     <Teleport to="body">
       <Transition name="modal">
-        <div v-if="showRejectModal" class="modal-overlay" @click="closeRejectModal">
+        <div v-if="showRejectModal" :class="['modal-overlay', themeClass]" @click="closeRejectModal">
           <div class="modal" @click.stop>
             <div class="modal-header">
               <h3>Отклонение скетча</h3>
@@ -399,26 +405,26 @@ const hasSketches = computed(() => sketches.value.length > 0)
 .theme-dark {
   --bg-primary: #1a1a1a;
   --bg-secondary: rgba(30, 30, 30, 0.8);
-  --bg-card: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.05);
   --bg-panel: rgba(255, 255, 255, 0.05);
   --bg-input: rgba(255, 255, 255, 0.08);
   --border-color: rgba(255, 255, 255, 0.1);
-  --border-light: #404040;
+  --border-light: rgba(255, 255, 255, 0.15);
   --text-primary: #ffffff;
   --text-secondary: #aaaaaa;
   --text-muted: #666666;
   --accent-color: #646cff;
-  --accent-soft: #eef2ff;
+  --accent-soft: rgba(100, 108, 255, 0.1);
   --success-color: #10b981;
-  --success-bg: #d1fae5;
-  --success-text: #065f46;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-text: #10b981;
   --error-color: #ef4444;
-  --error-bg: #fee2e2;
-  --error-text: #991b1b;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-text: #ef4444;
   --warning-color: #f59e0b;
-  --warning-bg: #fef3c7;
-  --warning-text: #92400e;
-  --code-bg: #1f2937;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-text: #f59e0b;
+  --code-bg: #0d1117;
   --code-text: #e5e7eb;
 }
 
@@ -430,19 +436,19 @@ const hasSketches = computed(() => sketches.value.length > 0)
   --bg-input: #f9fafb;
   --border-color: #e5e7eb;
   --border-light: #e5e7eb;
-  --text-primary: #111827;
+  --text-primary: #1f2937;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   --accent-color: #646cff;
-  --accent-soft: #eef2ff;
+  --accent-soft: rgba(100, 108, 255, 0.1);
   --success-color: #10b981;
-  --success-bg: #d1fae5;
+  --success-bg: #f0fdf4;
   --success-text: #065f46;
   --error-color: #ef4444;
-  --error-bg: #fee2e2;
+  --error-bg: #fef2f2;
   --error-text: #991b1b;
   --warning-color: #f59e0b;
-  --warning-bg: #fef3c7;
+  --warning-bg: #fffbeb;
   --warning-text: #92400e;
   --code-bg: #1f2937;
   --code-text: #e5e7eb;
@@ -454,7 +460,8 @@ const hasSketches = computed(() => sketches.value.length > 0)
   padding: 2rem;
   min-height: 100vh;
   background-color: var(--bg-primary);
-  transition: background-color 0.3s ease;
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Уведомление */
@@ -592,7 +599,7 @@ const hasSketches = computed(() => sketches.value.length > 0)
 }
 
 .btn-secondary:hover {
-  background: #d1d5db;
+  background: var(--bg-input);
 }
 
 /* Контент */
@@ -957,7 +964,9 @@ const hasSketches = computed(() => sketches.value.length > 0)
 }
 
 .modal {
-  background: #000000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   border-radius: 8px;
   max-width: 480px;
   width: 90%;

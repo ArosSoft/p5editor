@@ -4,6 +4,13 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStorage } from '../composables/useStorage'
 
+const props = withDefaults(
+  defineProps<{
+    theme?: 'dark' | 'light'
+  }>(),
+  { theme: 'dark' }
+)
+
 const router = useRouter()
 const { user, profile, updateProfile, uploadAvatar, logout, loading, isModerator } = useAuth()
 const { uploadAvatar: uploadAvatarStorage, uploading } = useStorage()
@@ -123,7 +130,11 @@ function handleClickOutside(event: MouseEvent) {
 </script>
 
 <template>
-  <div class="user-profile-container" v-click-outside="handleClickOutside">
+  <div
+    class="user-profile-container"
+    :class="`theme-${theme}`"
+    v-click-outside="handleClickOutside"
+  >
     <input
       ref="avatarInput"
       type="file"
@@ -381,6 +392,33 @@ function handleClickOutside(event: MouseEvent) {
 .dropdown-icon-svg {
   color: var(--text-secondary, #888);
   flex-shrink: 0;
+}
+
+.theme-light .user-button {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.theme-light .user-button:hover,
+.theme-light .user-button.open {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: var(--accent-color, #646cff);
+}
+
+.theme-light .user-dropdown {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+.theme-light .dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.theme-light .dropdown-item.logout:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.theme-light .dropdown-item.admin-link:hover {
+  background: rgba(139, 92, 246, 0.08);
 }
 
 /* Edit Modal */

@@ -953,10 +953,10 @@ const currentP5Version = computed(() => {
           @click="toggleExamples"
           class="top-btn examples-btn"
           :class="{ active: showExamples }"
-          title="Учебник по примерам"
+          title="Примеры"
         >
           <span class="btn-icon">📚</span>
-          <span class="btn-text">Учебник по примерам</span>
+          <span class="btn-text">Примеры</span>
         </button>
 
         <button
@@ -989,7 +989,7 @@ const currentP5Version = computed(() => {
 
       <div class="top-bar-right">
         <template v-if="isAuthenticated">
-          <UserProfile />
+          <UserProfile :theme="theme" />
         </template>
         <template v-else>
           <button
@@ -1168,9 +1168,9 @@ const currentP5Version = computed(() => {
           @mouseenter="setActiveMenuItem('theme')"
           @mouseleave="setActiveMenuItem(null)"
         >
-          <span class="menu-icon">{{ theme === 'dark' ? '🌙' : '☀️' }}</span>
+          <span class="menu-icon">{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
           <span class="menu-text" v-show="isMenuExpanded">{{
-            theme === 'dark' ? 'Тёмная' : 'Светлая'
+            theme === 'dark' ? 'Светлая' : 'Тёмная'
           }}</span>
         </button>
 
@@ -1465,12 +1465,26 @@ const currentP5Version = computed(() => {
 .app.theme-dark {
   background-color: #0d1117;
   color: #ffffff;
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #333333;
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --border-color: #333333;
+  --accent-color: #42b883;
 }
 
 /* Светлая тема */
 .app.theme-light {
   background-color: #f8f9fa;
   color: #2c3e50;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --bg-tertiary: #e5e7eb;
+  --text-primary: #2c3e50;
+  --text-secondary: #64748b;
+  --border-color: #e0e0e0;
+  --accent-color: #646cff;
 }
 
 /* Верхняя панель */
