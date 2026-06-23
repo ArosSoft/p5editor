@@ -1,0 +1,1 @@
+- [communities-development-plan](project/communities-plan.md) — 5-уровневый план сообществ с коллективными холстами, форк-цепочками и лабораториями
