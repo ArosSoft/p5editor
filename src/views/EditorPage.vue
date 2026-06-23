@@ -127,6 +127,8 @@ const mainRef = ref<HTMLElement | null>(null);
 // Добавляем новые переменные для "призрачного" ресайза
 const ghostDividerX = ref<number | null>(null); // позиция призрачной линии
 
+let autoOpenAIChatTimer: ReturnType<typeof setTimeout> | null = null;
+
 // Переменные для таймеров автосохранения
 let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null;
 let saveCodeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -316,6 +318,10 @@ watch(sketchName, (newVal) => {
 });
 
 onMounted(async () => {
+  autoOpenAIChatTimer = setTimeout(() => {
+    showAIChat.value = true;
+  }, 5000);
+
   window.addEventListener('mousemove', onGlobalMouseMove);
   window.addEventListener('mouseup', onGlobalMouseUp);
   window.addEventListener('keydown', handleKeyDown);
@@ -392,6 +398,11 @@ async function loadSketchFromDatabase(sketchId: string) {
 }
 
 onUnmounted(() => {
+  if (autoOpenAIChatTimer) {
+    clearTimeout(autoOpenAIChatTimer);
+    autoOpenAIChatTimer = null;
+  }
+
   window.removeEventListener('mousemove', onGlobalMouseMove);
   window.removeEventListener('mouseup', onGlobalMouseUp);
   window.removeEventListener('keydown', handleKeyDown);

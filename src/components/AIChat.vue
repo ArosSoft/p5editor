@@ -25,7 +25,7 @@ const emit = defineEmits<{
 }>();
 
 type TabType = 'chat' | 'pdf';
-const activeTab = ref<TabType>('chat');
+const activeTab = ref<TabType>('pdf');
 
 // PDF viewer state
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
