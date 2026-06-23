@@ -11,6 +11,8 @@ const { uploadAvatar: uploadAvatarStorage, uploading } = useStorage()
 const isEditing = ref(false)
 const showDropdown = ref(false)
 
+const isLoggingOut = ref(false)
+
 const editForm = ref({
   display_name: '',
   bio: ''
@@ -39,8 +41,17 @@ function toggleDropdown() {
 }
 
 async function handleLogout() {
-  await logout()
+  if (isLoggingOut.value) return
+
+  isLoggingOut.value = true
   closeDropdown()
+
+  try {
+    await logout()
+    await router.push('/')
+  } finally {
+    isLoggingOut.value = false
+  }
 }
 
 function startEditing() {
@@ -171,11 +182,11 @@ function handleClickOutside(event: MouseEvent) {
 
         <div class="dropdown-divider"></div>
 
-        <button class="dropdown-item logout" @click="handleLogout">
+        <button class="dropdown-item logout" @click.stop="handleLogout" :disabled="isLoggingOut">
           <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
             <path fill="currentColor" d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
           </svg>
-          Выйти
+          {{ isLoggingOut ? 'Выход...' : 'Выйти' }}
         </button>
       </div>
     </Transition>

@@ -76,7 +76,7 @@ const typingInterval = ref<number | null>(null);
 // Orientation state: 'landscape' (16:9) or 'portrait' (9:16)
 type OrientationType = 'landscape' | 'portrait';
 const orientation = ref<OrientationType>('landscape');
-const chatWidth = ref(800);
+const chatWidth = ref(780);
 
 // Временная заглушка - API отключено
 // const DEEPSEEK_API_KEY = 'sk-de29f369b0f44d0081ec017c27daae20'
@@ -122,9 +122,9 @@ function toggleMinimize() {
 function toggleOrientation() {
   orientation.value =
     orientation.value === 'landscape' ? 'portrait' : 'landscape';
-  // 16:9 = 800x450, 9:16 = 600x650
+  // 16:9 = 780x450, 9:16 = 600x650
   const isLandscape = orientation.value === 'landscape';
-  chatWidth.value = isLandscape ? 800 : 600;
+  chatWidth.value = isLandscape ? 780 : 600;
   chatHeight.value = isLandscape ? 450 : 650;
 
   // Перерисовываем PDF при изменении размеров
@@ -597,7 +597,10 @@ watch(
         class="ai-chat-window"
         :class="{ minimized: isMinimized }"
         :style="{
-          width: chatWidth + 'px',
+          width:
+            orientation === 'landscape'
+              ? `min(${chatWidth}px, calc(100vw - 60px))`
+              : `min(${chatWidth}px, calc(100vw - 40px))`,
           height: isMinimized ? '60px' : chatHeight + 'px',
         }"
       >

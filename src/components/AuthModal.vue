@@ -12,6 +12,12 @@ const emit = defineEmits<{
 
 const { login, register, resetPassword, loading, error } = useAuth()
 
+function switchTab(tab: 'login' | 'register' | 'reset') {
+  activeTab.value = tab
+  formError.value = ''
+  successMessage.value = ''
+}
+
 const activeTab = ref<'login' | 'register' | 'reset'>('login')
 
 // Формы
@@ -143,20 +149,20 @@ function handleKeydown(e: KeyboardEvent) {
           <div class="auth-tabs">
             <button
               :class="['tab-btn', { active: activeTab === 'login' }]"
-              @click="activeTab = 'login'"
+              @click="switchTab('login')"
             >
               Вход
             </button>
             <button
               :class="['tab-btn', { active: activeTab === 'register' }]"
-              @click="activeTab = 'register'"
+              @click="switchTab('register')"
             >
               Регистрация
             </button>
           </div>
 
           <!-- Вкладка входа -->
-          <div v-if="activeTab === 'login'" class="auth-form">
+          <form v-if="activeTab === 'login'" class="auth-form" @submit.prevent="handleLogin">
             <h2>Вход</h2>
 
             <div class="form-group">
@@ -181,17 +187,17 @@ function handleKeydown(e: KeyboardEvent) {
               />
             </div>
 
-            <button class="submit-btn" :disabled="loading" @click="handleLogin">
+            <button type="submit" class="submit-btn" :disabled="loading">
               {{ loading ? 'Вход...' : 'Войти' }}
             </button>
 
-            <button class="link-btn" @click="activeTab = 'reset'">
+            <button type="button" class="link-btn" @click="switchTab('reset')">
               Забыли пароль?
             </button>
-          </div>
+          </form>
 
           <!-- Вкладка регистрации -->
-          <div v-if="activeTab === 'register'" class="auth-form">
+          <form v-if="activeTab === 'register'" class="auth-form" @submit.prevent="handleRegister">
             <h2>Регистрация</h2>
 
             <div class="form-group">
@@ -241,13 +247,13 @@ function handleKeydown(e: KeyboardEvent) {
               />
             </div>
 
-            <button class="submit-btn" :disabled="loading" @click="handleRegister">
+            <button type="submit" class="submit-btn" :disabled="loading">
               {{ loading ? 'Регистрация...' : 'Зарегистрироваться' }}
             </button>
-          </div>
+          </form>
 
           <!-- Вкладка сброса пароля -->
-          <div v-if="activeTab === 'reset'" class="auth-form">
+          <form v-if="activeTab === 'reset'" class="auth-form" @submit.prevent="handleReset">
             <h2>Сброс пароля</h2>
             <p class="form-hint">
               Введите ваш email, и мы отправим инструкцию по сбросу пароля.
@@ -264,14 +270,14 @@ function handleKeydown(e: KeyboardEvent) {
               />
             </div>
 
-            <button class="submit-btn" :disabled="loading" @click="handleReset">
+            <button type="submit" class="submit-btn" :disabled="loading">
               {{ loading ? 'Отправка...' : 'Отправить' }}
             </button>
 
-            <button class="link-btn" @click="activeTab = 'login'">
+            <button type="button" class="link-btn" @click="switchTab('login')">
               Вернуться ко входу
             </button>
-          </div>
+          </form>
 
           <!-- Сообщения об ошибках/успехе -->
           <div v-if="formError || error" class="error-message">
