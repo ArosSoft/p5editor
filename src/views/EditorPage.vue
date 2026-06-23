@@ -2196,7 +2196,7 @@ const currentP5Version = computed(() => {
 
 /* Скроллбары */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 9px;
   height: 6px;
 }
 

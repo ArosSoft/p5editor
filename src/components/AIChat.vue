@@ -1119,7 +1119,7 @@ watch(
 
 /* Ручка изменения размера */
 .chat-resize-handle {
-  height: 8px;
+  height: 12px;
   cursor: row-resize;
   display: flex;
   align-items: center;
@@ -1517,7 +1517,7 @@ watch(
 
 /* Скроллбар */
 .chat-messages::-webkit-scrollbar {
-  width: 5px;
+  width: 8px;
 }
 
 .chat-messages::-webkit-scrollbar-track {

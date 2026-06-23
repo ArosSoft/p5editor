@@ -28,7 +28,8 @@
       "Bash(powershell *)",
       "Read(//c/Users/rozanov.an/Documents/p5editor/src/components/**)",
       "Agent(general-purpose)",
-      "Bash(sed *)"
+      "Bash(sed *)",
+      "Read(//c:/Users/rozanov.an/Documents/p5editor/**)"
     ]
   },
   "$version": 4

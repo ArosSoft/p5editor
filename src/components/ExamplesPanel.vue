@@ -697,7 +697,7 @@ function goToNextStep() {
   overflow-y: auto;
   padding: 12px 16px;
 }
-.scroll::-webkit-scrollbar { width: 4px; }
+.scroll::-webkit-scrollbar { width: 9px; }
 .scroll::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 2px; }
 
 .empty {
