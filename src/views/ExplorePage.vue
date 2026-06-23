@@ -546,25 +546,29 @@ const pages = computed(() => {
 }
 
 .tag-btn {
-  padding: 0.3rem 0.7rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.8rem;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
 }
 
 .tag-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: #667eea;
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
 }
 
 .tag-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: transparent;
+  background: rgba(100, 108, 255, 0.3);
+  border-color: #646cff;
   color: #fff;
 }
 
@@ -581,19 +585,27 @@ const pages = computed(() => {
 }
 
 .filter-select-compact {
-  padding: 0.6rem 0.8rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.85rem;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 34px;
+}
+
+.filter-select-compact:hover {
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
 }
 
 .filter-select-compact:focus {
   outline: none;
-  border-color: #667eea;
+  background: rgba(100, 108, 255, 0.2);
+  border-color: #646cff;
 }
 
 .filter-select-compact option {
@@ -601,22 +613,30 @@ const pages = computed(() => {
   color: #fff;
 }
 
-.back-btn {
-  padding: 0.6rem 1.2rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateX(-2px);
-}
+ .back-btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 8px 12px;
+   background: rgba(100, 108, 255, 0.3);
+   border: 1px solid #646cff;
+   border-radius: 6px;
+   color: #fff;
+   font-size: 13px;
+   font-weight: 500;
+   cursor: pointer;
+   transition: all 0.2s;
+   white-space: nowrap;
+ }
+ 
+ .back-btn:hover {
+   background: rgba(100, 108, 255, 0.4);
+   box-shadow: 0 0 0 1px rgba(100, 108, 255, 0.15);
+ }
+ 
+ .back-btn:active {
+   background: rgba(100, 108, 255, 0.5);
+ }
 
 /* Информация о результатах */
 .results-info {
@@ -681,18 +701,22 @@ const pages = computed(() => {
 
 .retry-btn {
   margin-top: 1rem;
-  padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .retry-btn:hover {
-  transform: scale(1.05);
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
 }
 
 /* Сетка скетчей */
@@ -819,11 +843,16 @@ const pages = computed(() => {
 }
 
 .view-btn {
-  padding: 0.6rem 1.25rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(100, 108, 255, 0.3);
+  border: 1px solid #646cff;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 /* Компактная информация */
@@ -875,10 +904,10 @@ const pages = computed(() => {
 .edit-icon-btn {
   width: 28px;
   height: 28px;
-  background: rgba(102, 126, 234, 0.2);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  color: #667eea;
+  color: inherit;
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -889,10 +918,9 @@ const pages = computed(() => {
 }
 
 .edit-icon-btn:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: transparent;
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
   color: #fff;
-  transform: scale(1.05);
 }
 
 /* Бейджи */
@@ -959,18 +987,22 @@ const pages = computed(() => {
 }
 
 .reset-filters-btn {
-  padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .reset-filters-btn:hover {
-  transform: scale(1.05);
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
 }
 
 /* Пагинация */
@@ -984,19 +1016,22 @@ const pages = computed(() => {
 }
 
 .pagination-btn {
-  padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .pagination-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
+  background: rgba(100, 108, 255, 0.2);
+  border-color: rgba(100, 108, 255, 0.35);
 }
 
 .pagination-btn:disabled {
@@ -1005,8 +1040,8 @@ const pages = computed(() => {
 }
 
 .pagination-btn.page-number.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: transparent;
+  background: rgba(100, 108, 255, 0.3);
+  border-color: #646cff;
   font-weight: 600;
 }
 
