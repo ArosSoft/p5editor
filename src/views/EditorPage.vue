@@ -101,6 +101,9 @@ let dragStartCanvasWidth = 0;
 const isMenuExpanded = ref(false);
 const activeMenuItem = ref<string | null>(null);
 
+const AUTO_OPEN_AI_CHAT_KEY = 'p5editor_ai_chat_last_auto_open_at';
+const AUTO_OPEN_AI_CHAT_INTERVAL_MS = 60 * 60 * 1000;
+
 const showAIChat = ref(false);
 
 const sketchName = ref('Мой первый скетч');
@@ -133,6 +136,28 @@ let autoOpenAIChatTimer: ReturnType<typeof setTimeout> | null = null;
 let saveHistoryTimer: ReturnType<typeof setTimeout> | null = null;
 let saveCodeTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedCode = '';
+
+function shouldAutoOpenAIChat() {
+  try {
+    const raw = localStorage.getItem(AUTO_OPEN_AI_CHAT_KEY);
+    if (!raw) return true;
+
+    const lastOpenedAt = Number(raw);
+    if (!Number.isFinite(lastOpenedAt)) return true;
+
+    return Date.now() - lastOpenedAt >= AUTO_OPEN_AI_CHAT_INTERVAL_MS;
+  } catch {
+    return true;
+  }
+}
+
+function markAIChatAutoOpened() {
+  try {
+    localStorage.setItem(AUTO_OPEN_AI_CHAT_KEY, String(Date.now()));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function updateMouseCoordinates(x: number, y: number) {
   mouseX.value = Math.round(x);
@@ -318,9 +343,12 @@ watch(sketchName, (newVal) => {
 });
 
 onMounted(async () => {
-  autoOpenAIChatTimer = setTimeout(() => {
-    showAIChat.value = true;
-  }, 5000);
+  if (shouldAutoOpenAIChat()) {
+    autoOpenAIChatTimer = setTimeout(() => {
+      showAIChat.value = true;
+      markAIChatAutoOpened();
+    }, 5000);
+  }
 
   window.addEventListener('mousemove', onGlobalMouseMove);
   window.addEventListener('mouseup', onGlobalMouseUp);

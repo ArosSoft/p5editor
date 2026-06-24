@@ -565,11 +565,16 @@ watch(activeTab, (newTab) => {
 watch(
   () => props.isVisible,
   (isVisible) => {
-    if (isVisible && activeTab.value === 'pdf' && pdfDoc) {
-      nextTick(() => {
-        renderPDFPage(pdfPageNum.value);
-      });
+    if (!isVisible || activeTab.value !== 'pdf') return;
+
+    if (!pdfDoc) {
+      loadPDF();
+      return;
     }
+
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value);
+    });
   }
 );
 </script>
