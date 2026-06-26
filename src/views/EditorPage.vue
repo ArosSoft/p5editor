@@ -120,6 +120,8 @@ const p5Source = ref<P5Source>(
 const savedVersion = localStorage.getItem('p5editor-p5-cdn-version');
 const p5CdnVersion = ref(savedVersion || '1.11.13');
 const p5LocalVersion = '1.11.13'; // Версия локальных файлов в папке p5/
+const savedCsg = localStorage.getItem('p5editor-p5-csg-enabled');
+const p5CsgEnabled = ref(savedCsg === 'true');
 
 // Состояние подключения к БД
 const supabaseStatus = ref<'checking' | 'connected' | 'error'>('checking');
@@ -852,6 +854,7 @@ function getTooltipText(item: string): string {
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
     theme: 'Сменить тему',
     shortcuts: 'Горячие клавиши',
+    csg: 'p5.csg библиотека для 3D CSG операций',
   };
   return tooltips[item] || item;
 }
@@ -938,6 +941,12 @@ function setP5Source(source: P5Source) {
 function updateP5CdnVersion() {
   localStorage.setItem('p5editor-p5-cdn-version', p5CdnVersion.value);
   addMessage(`📦 Версия CDN обновлена: ${p5CdnVersion.value}`);
+}
+
+function toggleP5Csg() {
+  p5CsgEnabled.value = !p5CsgEnabled.value;
+  localStorage.setItem('p5editor-p5-csg-enabled', String(p5CsgEnabled.value));
+  addMessage(`🔧 p5.csg: ${p5CsgEnabled.value ? 'включён' : 'выключен'}`);
 }
 
 // Вычисляемое свойство для отображения текущей версии
@@ -1259,6 +1268,20 @@ const currentP5Version = computed(() => {
           </div>
         </div>
 
+        <!-- Переключатель p5.csg -->
+        <div class="p5-version-section" v-show="isMenuExpanded">
+          <div class="version-label">Библиотека CSG</div>
+          <button
+            class="version-btn"
+            :class="{ active: p5CsgEnabled }"
+            @click="toggleP5Csg"
+            @mouseenter="setActiveMenuItem('csg')"
+            @mouseleave="setActiveMenuItem(null)"
+          >
+            {{ p5CsgEnabled ? 'Включено' : 'Выключено' }}
+          </button>
+        </div>
+
         <div class="menu-tooltip" v-if="!isMenuExpanded && activeMenuItem">
           {{ getTooltipText(activeMenuItem) }}
         </div>
@@ -1378,6 +1401,7 @@ const currentP5Version = computed(() => {
                 :theme="theme"
                 :p5-source="p5Source"
                 :p5-cdn-version="p5CdnVersion"
+                :p5-csg-enabled="p5CsgEnabled"
                 @mouse-move="updateMouseCoordinates"
               />
             </div>

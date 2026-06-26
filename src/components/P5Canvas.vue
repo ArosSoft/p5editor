@@ -5,7 +5,8 @@ const props = defineProps<{
   addMessage: (msg: string) => void,
   theme?: 'dark' | 'light',
   p5Source?: 'cdn' | 'local',
-  p5CdnVersion?: string
+  p5CdnVersion?: string,
+  p5CsgEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +52,16 @@ function start(userCode: string) {
     p5ScriptSrc = `https://cdn.jsdelivr.net/npm/p5@${version}/lib/p5.min.js`
   }
 
+  // Определяем URL для p5.csg (если включён)
+  let csgScriptSrc: string | null = null
+  if (props.p5CsgEnabled) {
+    if (props.p5Source === 'local') {
+      csgScriptSrc = origin + baseUrl + 'p5/p5.csg.js'
+    } else {
+      csgScriptSrc = 'https://cdn.jsdelivr.net/npm/@davepagurek/p5.csg@0.0.3'
+    }
+  }
+
   // Отладка: отправляем URL в родительское окно
   window.parent.postMessage({
     type: 'log',
@@ -68,6 +79,7 @@ function start(userCode: string) {
   <meta charset="utf-8" />
   <title>p5.js Sketch</title>
   <script src="${p5ScriptSrc}"><\/script>
+  ${csgScriptSrc ? `<script src="${csgScriptSrc}"><\/script>` : ''}
   <style>
     body { margin: 0; overflow: hidden; background: ${backgroundColor}; color: ${textColor}; }
     canvas { display: block; }
