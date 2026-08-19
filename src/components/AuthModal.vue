@@ -131,18 +131,12 @@ async function handleReset() {
   }
 }
 
-// Закрытие по ESC
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    closeModal()
-  }
-}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="isVisible" class="auth-modal-overlay" @click="closeModal" @keydown.esc="handleKeydown" tabindex="-1">
+      <div v-if="isVisible" class="auth-modal-overlay">
         <div class="auth-modal" @click.stop>
           <button class="close-btn" @click="closeModal">&times;</button>
 

@@ -138,6 +138,9 @@ const statusText = (status: string) => {
   <div :class="['dashboard', currentTheme === 'dark' ? 'theme-dark' : 'theme-light']">
     <!-- Заголовок -->
     <header class="dashboard-header">
+      <button @click="navigateTo('/')" class="btn-editor">
+        ← Назад к редактору
+      </button>
       <div class="header-content">
         <h1 class="page-title">Личный кабинет</h1>
         <p class="page-subtitle">
@@ -145,9 +148,6 @@ const statusText = (status: string) => {
         </p>
       </div>
       <div class="header-actions">
-        <button @click="navigateTo('/')" class="btn btn-ghost">
-          Редактор
-        </button>
         <button @click="navigateTo('/profile')" class="btn btn-primary">
           Профиль
         </button>
@@ -476,6 +476,32 @@ const statusText = (status: string) => {
 .btn-text:hover {
   color: var(--accent-hover);
   text-decoration: underline;
+}
+
+/* Кнопка «Редактор» в стиле страницы профиля */
+.btn-editor {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-editor:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateX(-2px);
+}
+
+.theme-light .btn-editor {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.theme-light .btn-editor:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 
 /* Контент */

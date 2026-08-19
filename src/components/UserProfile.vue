@@ -110,6 +110,11 @@ function navigateToAdmin() {
   closeDropdown()
 }
 
+function navigateToCreateUsers() {
+  router.push('/create-users')
+  closeDropdown()
+}
+
 function navigateToDashboard() {
   router.push('/dashboard')
   closeDropdown()
@@ -168,6 +173,13 @@ function handleClickOutside(event: MouseEvent) {
             <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v6c0 4.48-3.07 8.75-7 9.96-3.93-1.21-7-5.48-7-9.96V6.3l7-3.12zM11 7v2H9v2h2v2h2v-2h2V9h-2V7h-2zm0 12c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
           </svg>
           Админ-панель
+        </button>
+
+        <button v-if="isModerator" class="dropdown-item admin-link" @click="navigateToCreateUsers">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+          </svg>
+          Создать пользователей
         </button>
 
         <button class="dropdown-item" @click="navigateToDashboard">
