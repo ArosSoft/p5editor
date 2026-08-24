@@ -116,8 +116,8 @@ async function handleDeleteSketch() {
 
       console.log('[SketchDetailPage] previousRoute.value:', previousRoute.value)
 
-      // Всегда переходим на дашборд после удаления
-      router.push('/dashboard')
+      // Всегда переходим на «Мои программы» после удаления
+      router.push('/my-programs')
     } else {
       alert(result.error || 'Ошибка удаления скетча')
     }

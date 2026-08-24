@@ -947,9 +947,9 @@ async function navigateToShare() {
   router.push('/share');
 }
 
-// Навигация к странице «Личный кабинет»
+// Навигация к странице «Мои программы»
 function navigateToDashboard() {
-  router.push('/dashboard');
+  router.push('/my-programs');
 }
 
 // Функции переключения версии p5.js

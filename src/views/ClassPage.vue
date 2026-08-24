@@ -50,7 +50,7 @@ function onJoined(roomTitle: string) {
 <template>
   <div class="class-page">
     <header class="top-bar">
-      <button class="back-btn" @click="router.push('/dashboard')" title="В личный кабинет">
+      <button class="back-btn" @click="router.push('/my-programs')" title="В личный кабинет">
         ←
       </button>
       <h1>Класс</h1>

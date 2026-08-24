@@ -9,12 +9,10 @@ const SharePage = () => import('../views/SharePage.vue')
 const AdminDashboard = () => import('../views/AdminDashboard.vue')
 const CreateUsersPage = () => import('../views/CreateUsersPage.vue')
 const AdminUsersPage = () => import('../views/AdminUsersPage.vue')
-const ProfilePage = () => import('../views/ProfilePage.vue')
-const DashboardPage = () => import('../views/DashboardPage.vue')
-const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
 const UpdatePasswordPage = () => import('../views/UpdatePasswordPage.vue')
 const ClassPage = () => import('../views/ClassPage.vue')
 const RoomPage = () => import('../views/RoomPage.vue')
+const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
 
 const routes = [
   {
@@ -60,24 +58,6 @@ const routes = [
     meta: { title: 'Управление пользователями', requiresAdmin: true }
   },
   {
-    path: '/profile',
-    name: 'profile',
-    component: ProfilePage,
-    meta: { title: 'Профиль', requiresAuth: true }
-  },
-  {
-    path: '/dashboard',
-    name: 'dashboard',
-    component: DashboardPage,
-    meta: { title: 'Личный кабинет', requiresAuth: true }
-  },
-  {
-    path: '/my-programs',
-    name: 'my-programs',
-    component: MyProgramsPage,
-    meta: { title: 'Мои программы', requiresAuth: true }
-  },
-  {
     path: '/update-password',
     name: 'update-password',
     component: UpdatePasswordPage,
@@ -94,6 +74,12 @@ const routes = [
     name: 'room',
     component: RoomPage,
     meta: { title: 'Комната', requiresAuth: true }
+  },
+  {
+    path: '/my-programs',
+    name: 'my-programs',
+    component: MyProgramsPage,
+    meta: { title: 'Мои программы', requiresAuth: true }
   }
 ]
 
