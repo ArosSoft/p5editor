@@ -10,6 +10,7 @@ import {
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import P5Canvas from '../components/P5Canvas.vue';
+import { useClassRooms } from '../composables/useClassRooms';
 import ConsoleOutput from '../components/ConsoleOutput.vue';
 import AuthModal from '../components/AuthModal.vue';
 import UserProfile from '../components/UserProfile.vue';
@@ -35,7 +36,8 @@ const AIChat = defineAsyncComponent(() => import('../components/AIChat.vue'));
 const route = useRoute();
 const router = useRouter();
 const { isAuthenticated, user } = useAuth();
-const { updateSketch, getSketchById } = useSketches();
+const { createSketch, updateSketch, getSketchById, generateNumericSketchId } = useSketches();
+const { hasRoom, loadHasRoom } = useClassRooms();
 const showAuthModal = ref(false);
 const showReportModal = ref(false);
 
@@ -378,6 +380,18 @@ onMounted(async () => {
     // Очищаем query параметр
     router.replace({ query: {} });
   }
+
+  // Показывать ссылку «Класс» только тем, у кого уже есть комнаты.
+  // Не блокируем рендер редактора ожиданием запроса.
+  if (isAuthenticated.value && user.value) {
+    loadHasRoom();
+  }
+});
+
+// Обновляем флаг при входе/выходе пользователя
+watch(user, async (u) => {
+  if (u) await loadHasRoom();
+  else hasRoom.value = false;
 });
 
 // Обработка изменений localStorage
@@ -465,7 +479,6 @@ function addMessage(msg: string) {
 
 function clearConsole() {
   messages.value = [];
-  addMessage('🧹 Консоль очищена');
 }
 
 function startSketch() {
@@ -500,8 +513,9 @@ async function saveSketch() {
   saveAs(blob, fileName);
   console.log('[EditorPage] Файл сохранён');
 
-  // Если скетч загружен из БД и пользователь авторизован - сохраняем в БД
-  if (currentSketchId.value && isAuthenticated.value && user.value) {
+  // Если пользователь авторизован — сохраняем/создаём скетч в облаке
+  // (saveToDatabase сам решает: создать новый или обновить существующий)
+  if (isAuthenticated.value && user.value) {
     console.log('[EditorPage] Вызываю saveToDatabase');
     try {
       await saveToDatabase();
@@ -510,61 +524,82 @@ async function saveSketch() {
       console.error('[EditorPage] Ошибка в saveToDatabase:', e);
     }
   } else {
-    console.log('[EditorPage] Не выполняются условия для saveToDatabase');
-    console.log(
-      '[EditorPage] currentSketchId exists:',
-      !!currentSketchId.value
-    );
-    console.log('[EditorPage] isAuthenticated:', isAuthenticated.value);
-    console.log('[EditorPage] user exists:', !!user.value);
     addMessage(
-      `💾 Скетч сохранён как "${fileName}". Чтобы сохранить в облако, сначала поделитесь с сообществом`
+      `💾 Скетч сохранён как "${fileName}". Войдите, чтобы сохранить в облако`
     );
   }
 }
 
 // Сохранение в базу данных Supabase
 async function saveToDatabase() {
-  if (!currentSketchId.value || !user.value) {
-    addMessage('❌ Ошибка: скетч не найден в базе данных');
-    console.error('[EditorPage] saveToDatabase: нет currentSketchId или user');
+  if (!user.value) {
+    addMessage('❌ Войдите, чтобы сохранить в облако');
+    console.error('[EditorPage] saveToDatabase: нет user');
     return;
   }
 
-  console.log(
-    '[EditorPage] saveToDatabase: сохраняю скетч',
-    currentSketchId.value
-  );
-  console.log('[EditorPage] saveToDatabase: длина кода:', code.value.length);
-
   isSaving.value = true;
   try {
+    // Уникальный цифровой ID (для URL и присоединения к комнатам)
+    const numericId = (await generateNumericSketchId()).data ?? null;
+
+    // Новый скетч (ещё не в БД) — создаём со статусом 'saved'
+    if (!currentSketchId.value) {
+      console.log('[EditorPage] saveToDatabase: создаю новый скетч со статусом saved');
+      const createResult = await createSketch({
+        user_id: user.value.id,
+        title: sketchName.value || 'Без названия',
+        description: '',
+        code: code.value,
+        status: 'saved',
+        numeric_sketch_id: numericId ?? undefined
+      });
+
+      if (!createResult.success || !createResult.data) {
+        addMessage(`❌ Ошибка сохранения: ${createResult.error}`);
+        console.error('[EditorPage] saveToDatabase: createSketch не удался');
+        return;
+      }
+
+      const newSketchId = (createResult.data as any).id as string;
+      currentSketchId.value = newSketchId;
+      localStorage.setItem('p5editor_current_sketch_id', newSketchId);
+
+      const freshResult = await getSketchById(newSketchId);
+      if (freshResult.success && freshResult.data) {
+        const freshSketch = freshResult.data as any;
+        code.value = freshSketch.code;
+        lastSavedCode = freshSketch.code;
+      }
+
+      addMessage('💾 Скетч сохранён в облако');
+      localStorage.setItem('p5editor_current_code', code.value);
+      localStorage.setItem('p5editor_current_name', sketchName.value);
+      return;
+    }
+
+    // Существующий скетч — обновляем (статус не меняем, numeric ID только дописываем)
+    console.log('[EditorPage] saveToDatabase: обновляю скетч', currentSketchId.value);
+    const pre = await getSketchById(currentSketchId.value);
+    const existingNumId = (pre.data as any)?.numeric_sketch_id ?? null;
+    const finalNumId = existingNumId ?? numericId;
+
     const result = await updateSketch(currentSketchId.value, {
       code: code.value,
+      ...(finalNumId != null ? { numeric_sketch_id: finalNumId } : {}),
     });
 
     console.log('[EditorPage] saveToDatabase: результат updateSketch:', result);
 
     if (result.success) {
-      // Принудительно перезагружаем скетч из БД для получения актуальных данных
       const freshResult = await getSketchById(currentSketchId.value);
-      console.log(
-        '[EditorPage] saveToDatabase: результат getSketchById:',
-        freshResult
-      );
-
       if (freshResult.success && freshResult.data) {
         const freshSketch = freshResult.data as any;
         code.value = freshSketch.code;
         lastSavedCode = freshSketch.code;
-        console.log(
-          '[EditorPage] saveToDatabase: код обновлён из БД, длина:',
-          freshSketch.code.length
-        );
       }
 
       addMessage('💾 Скетч сохранён в облако');
-      // Сохраняем код в localStorage как резервную копию
       localStorage.setItem('p5editor_current_code', code.value);
       localStorage.setItem('p5editor_current_name', sketchName.value);
       localStorage.setItem('p5editor_current_sketch_id', currentSketchId.value);
@@ -613,9 +648,6 @@ function decreaseFontSize() {
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark';
   localStorage.setItem('p5editor-theme', theme.value);
-  addMessage(
-    `🎨 Тема изменена на ${theme.value === 'dark' ? 'тёмную' : 'светлую'}`
-  );
 }
 
 function resetToExample() {
@@ -770,34 +802,23 @@ function redo() {
 
 function showShortcuts() {
   addMessage(
-    '⌨️ Горячие клавиши: Ctrl+Enter - запуск, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор, Ctrl+` - консоль'
+    '⌨️ Горячие клавиши: Ctrl+F - поиск и замена, Ctrl+S - сохранить, Ctrl+Z - отмена, Ctrl+Y - повтор, Ctrl+` - консоль'
   );
 }
 
 function toggleExamples() {
   showExamples.value = !showExamples.value;
   if (showExamples.value) showPalette.value = false;
-  if (showExamples.value) {
-    addMessage('📚 Открыта галерея примеров');
-  } else {
-    addMessage('📚 Галерея примеров закрыта');
-  }
 }
 
 function togglePalette() {
   showPalette.value = !showPalette.value;
   if (showPalette.value) showExamples.value = false;
-  if (showPalette.value) {
-    addMessage('🎨 Открыта палитра цветов');
-  } else {
-    addMessage('🎨 Палитра цветов закрыта');
-  }
 }
 
 function loadExample(exampleCode: string) {
   saveToHistory();
   code.value = exampleCode;
-  addMessage('📋 Пример загружен в редактор');
   startSketch();
 }
 
@@ -985,7 +1006,7 @@ const currentP5Version = computed(() => {
           <span class="btn-icon">■</span>
           <span class="btn-text">Стоп</span>
         </button>
-        <button @click="formatCode" class="top-btn" title="Форматировать код">
+        <button @click="formatCode" class="top-btn format-btn" title="Форматировать код">
           <span class="btn-icon">✨</span>
           <span class="btn-text">Форматировать</span>
         </button>
@@ -998,16 +1019,6 @@ const currentP5Version = computed(() => {
             v-model="sketchName"
           />
         </div>
-
-        <button
-          @click="toggleExamples"
-          class="top-btn examples-btn"
-          :class="{ active: showExamples }"
-          title="Примеры"
-        >
-          <span class="btn-icon">📚</span>
-          <span class="btn-text">Примеры</span>
-        </button>
 
         <button
           @click="navigateToExplore"
@@ -1026,6 +1037,15 @@ const currentP5Version = computed(() => {
           <span class="btn-icon">📤</span>
           <span class="btn-text">Поделиться</span>
         </button>
+
+        <button
+          @click="router.push('/class')"
+          class="top-btn class-btn"
+          title="Класс"
+        >
+          <span class="btn-icon">🏫</span>
+          <span class="btn-text">Класс</span>
+        </button>
       </div>
 
       <div class="top-bar-right">
@@ -1034,7 +1054,7 @@ const currentP5Version = computed(() => {
           class="top-btn report-btn"
           title="Сообщить об ошибке"
         >
-          <span class="btn-icon">⚠</span>
+          <span class="btn-icon">⚠️</span>
           <span class="btn-text">Сообщить об ошибке</span>
         </button>
 
@@ -1104,14 +1124,27 @@ const currentP5Version = computed(() => {
         </button>
 
         <button
-          @click="showAIChat = true"
+          @click="showAIChat = !showAIChat"
           class="menu-item"
+          :class="{ active: showAIChat }"
           title="p5.js помощник (справочник)"
           @mouseenter="setActiveMenuItem('ai')"
           @mouseleave="setActiveMenuItem(null)"
         >
-          <span class="menu-icon">📚</span>
+          <span class="menu-icon">📖</span>
           <span class="menu-text" v-show="isMenuExpanded">Справочник</span>
+        </button>
+
+        <button
+          @click="toggleExamples"
+          class="menu-item"
+          :class="{ active: showExamples }"
+          title="Примеры"
+          @mouseenter="setActiveMenuItem('examples')"
+          @mouseleave="setActiveMenuItem(null)"
+        >
+          <span class="menu-icon">📚</span>
+          <span class="menu-text" v-show="isMenuExpanded">Примеры</span>
         </button>
 
         <button
@@ -1154,6 +1187,7 @@ const currentP5Version = computed(() => {
           title="Отмена (Ctrl+Z)"
           @mouseenter="setActiveMenuItem('undo')"
           @mouseleave="setActiveMenuItem(null)"
+          style="display: none"
         >
           <span class="menu-icon">↩️</span>
           <span class="menu-text" v-show="isMenuExpanded">Отмена</span>
@@ -1165,6 +1199,7 @@ const currentP5Version = computed(() => {
           title="Повтор (Ctrl+Y)"
           @mouseenter="setActiveMenuItem('redo')"
           @mouseleave="setActiveMenuItem(null)"
+          style="display: none"
         >
           <span class="menu-icon">↪️</span>
           <span class="menu-text" v-show="isMenuExpanded">Повтор</span>
@@ -1176,39 +1211,10 @@ const currentP5Version = computed(() => {
           title="Копировать код"
           @mouseenter="setActiveMenuItem('copy')"
           @mouseleave="setActiveMenuItem(null)"
+          style="display: none"
         >
           <span class="menu-icon">📋</span>
           <span class="menu-text" v-show="isMenuExpanded">Копировать</span>
-        </button>
-
-        <button
-          @click="clearConsole"
-          class="menu-item"
-          title="Очистить консоль"
-          @mouseenter="setActiveMenuItem('console-clear')"
-          @mouseleave="setActiveMenuItem(null)"
-        >
-          <span class="menu-icon">🧹</span>
-          <span class="menu-text" v-show="isMenuExpanded"
-            >Очистить консоль</span
-          >
-        </button>
-
-        <button
-          @click="toggleConsole"
-          class="menu-item"
-          :title="
-            isConsoleVisible
-              ? 'Скрыть консоль (Ctrl+`)'
-              : 'Показать консоль (Ctrl+`)'
-          "
-          @mouseenter="setActiveMenuItem('console-toggle')"
-          @mouseleave="setActiveMenuItem(null)"
-        >
-          <span class="menu-icon">{{ isConsoleVisible ? '📟' : '📭' }}</span>
-          <span class="menu-text" v-show="isMenuExpanded">{{
-            isConsoleVisible ? 'Скрыть' : 'Показать'
-          }}</span>
         </button>
 
         <button
@@ -1349,10 +1355,11 @@ const currentP5Version = computed(() => {
           <!-- Консоль под редактором -->
           <div
             class="console-wrapper"
-            :style="{ height: isConsoleVisible ? consoleHeight + 'px' : '0px' }"
+            :style="{ height: isConsoleVisible ? consoleHeight + 'px' : 'auto' }"
           >
             <div
               class="console-resize-handle"
+              v-show="isConsoleVisible"
               @mousedown.prevent="startConsoleResize"
               :class="{ dragging: isDragging }"
             >
@@ -1360,7 +1367,7 @@ const currentP5Version = computed(() => {
               <div class="handle-line"></div>
               <div class="handle-line"></div>
             </div>
-            <ConsoleOutput :messages="messages" :theme="theme" />
+            <ConsoleOutput :messages="messages" :theme="theme" :collapsed="!isConsoleVisible" @toggle="toggleConsole" @clear="clearConsole" />
           </div>
         </div>
 
@@ -1689,10 +1696,10 @@ const currentP5Version = computed(() => {
 }
 
 /* Форматировать — мягкий синий */
-.top-btn:nth-of-type(3) {
-  background-color: rgba(86, 156, 214, 0.18);
+.format-btn {
+  background-color: transparent;
 }
-.top-btn:nth-of-type(3):hover {
+.format-btn:hover {
   background-color: rgba(86, 156, 214, 0.24);
 }
 
@@ -1707,7 +1714,7 @@ const currentP5Version = computed(() => {
 
 /* Исследуй — мягкий бирюзовый */
 .explore-btn {
-  background-color: rgba(64, 179, 162, 0.2);
+  background-color: transparent;
 }
 .explore-btn:hover {
   background-color: rgba(64, 179, 162, 0.28);
@@ -1723,10 +1730,18 @@ const currentP5Version = computed(() => {
 
 /* Поделиться — мягкий оранжевый */
 .share-btn {
-  background-color: rgba(242, 153, 74, 0.22);
+  background-color: transparent;
 }
 .share-btn:hover {
   background-color: rgba(242, 153, 74, 0.3);
+}
+
+/* Класс — без фона до наведения */
+.class-btn {
+  background-color: transparent;
+}
+.class-btn:hover {
+  background-color: rgba(255, 255, 255, 0.14);
 }
 
 /* Войти — спокойный контурный серо-синий */
@@ -1743,6 +1758,36 @@ const currentP5Version = computed(() => {
 }
 .theme-light .auth-btn:hover {
   background-color: rgba(148, 163, 184, 0.14);
+}
+
+.theme-light .explore-btn,
+.theme-light .share-btn,
+.theme-light .class-btn,
+.theme-light .report-btn,
+.theme-light .format-btn {
+  background-color: transparent;
+}
+.theme-light .explore-btn:hover,
+.theme-light .share-btn:hover,
+.theme-light .class-btn:hover,
+.theme-light .report-btn:hover,
+.theme-light .format-btn:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Сообщить об ошибке — приглушённый серо-синий, менее заметный */
+.report-btn {
+  background-color: transparent;
+}
+.report-btn:hover {
+  background-color: rgba(148, 163, 184, 0.16);
+}
+
+.theme-light .report-btn {
+  background-color: transparent;
+}
+.theme-light .report-btn:hover {
+  background-color: rgba(100, 116, 139, 0.13);
 }
 
 /* Боковое меню */
@@ -1820,6 +1865,15 @@ const currentP5Version = computed(() => {
   font-size: 18px;
   min-width: 26px;
   text-align: center;
+  filter: grayscale(100%);
+  opacity: 0.7;
+  transition: filter 0.2s, opacity 0.2s;
+}
+
+.menu-item:hover .menu-icon,
+.menu-item.active .menu-icon {
+  filter: grayscale(0%);
+  opacity: 1;
 }
 
 .menu-text {

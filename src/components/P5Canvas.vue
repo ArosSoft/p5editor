@@ -63,11 +63,6 @@ function start(userCode: string) {
   }
 
   // Отладка: отправляем URL в родительское окно
-  window.parent.postMessage({
-    type: 'log',
-    message: `[P5Canvas] Using p5 source: ${p5ScriptSrc}`
-  }, '*')
-
   const encodedCode = JSON.stringify(userCode)
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029')

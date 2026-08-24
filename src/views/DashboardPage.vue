@@ -170,6 +170,10 @@ const statusText = (status: string) => {
           <span class="action-icon">🌍</span>
           <span class="action-label">Галерея</span>
         </button>
+        <button @click="navigateTo('/class')" class="action-card">
+          <span class="action-icon">🏫</span>
+          <span class="action-label">Класс</span>
+        </button>
         <button
           v-if="isModerator"
           @click="navigateTo('/admin')"

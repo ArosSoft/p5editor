@@ -1,8 +1,19 @@
 <script setup lang="ts">
-defineProps<{ 
+import { computed } from 'vue';
+
+const props = defineProps<{ 
   messages: string[],
-  theme?: 'dark' | 'light'
+  theme?: 'dark' | 'light',
+  collapsed?: boolean
 }>()
+
+const emit = defineEmits<{
+  (e: 'toggle'): void
+  (e: 'clear'): void
+}>()
+
+// ВРЕМЕННО: показывать только ошибки и вывод console.log (прятать warning/success/системные)
+const SHOW_ONLY_ERRORS_AND_OUTPUT = true;
 
 // Функция для определения типа сообщения
 function getMessageClass(msg: string): string {
@@ -11,31 +22,52 @@ function getMessageClass(msg: string): string {
   if (msg.includes('✅') || msg.includes('Успех')) return 'success';
   return '';
 }
+
+const visibleMessages = computed(() => {
+  if (!SHOW_ONLY_ERRORS_AND_OUTPUT) return props.messages;
+  return props.messages.filter((m) => {
+    const cls = getMessageClass(m);
+    return cls === 'error' || cls === '' || m.startsWith('[P5Canvas]');
+  });
+});
 </script>
 
 <template>
   <div class="console" :class="`theme-${theme}`">
     <div class="console-header">
-      <span class="console-title">
-        <span class="console-icon">📟</span>
-        Консоль вывода
-      </span>
-      <span class="console-stats">
-        {{ messages.length }} {{ messages.length === 1 ? 'сообщение' : 
-           messages.length >= 2 && messages.length <= 4 ? 'сообщения' : 'сообщений' }}
-      </span>
+      <div class="console-header-left">
+        <span class="console-title">
+          <span class="console-icon">📟</span>
+          Консоль вывода
+        </span>
+      </div>
+      <div class="console-actions">
+        <button
+          class="console-toggle-btn"
+          :title="collapsed ? 'Развернуть консоль' : 'Свернуть консоль'"
+          @click="emit('toggle')"
+        >
+          {{ collapsed ? '▴' : '▾' }}
+        </button>
+        <button
+          class="console-toggle-btn console-clear-btn"
+          title="Очистить консоль"
+          @click="emit('clear')"
+        >
+          🗑️
+        </button>
+      </div>
     </div>
-    <div class="console-content">
+    <div class="console-content" v-show="!collapsed">
       <div v-if="messages.length === 0" class="console-empty">
         <span class="empty-icon">📭</span>
         <span class="empty-text">Консоль пуста. Запусти скетч для вывода сообщений...</span>
       </div>
-      <div v-for="(msg, index) in messages" :key="index" 
+      <div v-for="(msg, index) in visibleMessages" :key="index" 
            class="console-line" 
            :class="getMessageClass(msg)">
         <span class="console-prompt">›</span>
         <span class="console-message">{{ msg }}</span>
-        <span class="console-time">{{ new Date().toLocaleTimeString() }}</span>
       </div>
     </div>
   </div>
@@ -69,6 +101,45 @@ function getMessageClass(msg: string): string {
   padding: 8px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+
+.console-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.console-toggle-btn {
+  margin-left: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.console-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.console.theme-light .console-toggle-btn {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.console.theme-light .console-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.console-clear-btn {
   font-size: 12px;
 }
 

@@ -132,6 +132,11 @@ function navigateToProfile() {
   closeDropdown()
 }
 
+function navigateToMyPrograms() {
+  router.push('/my-programs')
+  closeDropdown()
+}
+
 function openReports() {
   showReports.value = true
   closeDropdown()
@@ -213,6 +218,13 @@ function handleClickOutside(event: MouseEvent) {
             <path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
           </svg>
           Личный кабинет
+        </button>
+
+        <button class="dropdown-item" @click="navigateToMyPrograms">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M4 5h16v3H4V5zm0 5h16v3H4v-3zm0 5h10v3H4v-3z"/>
+          </svg>
+          Мои программы
         </button>
 
         <button class="dropdown-item" @click="navigateToProfile">

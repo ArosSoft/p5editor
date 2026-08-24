@@ -11,7 +11,10 @@ const CreateUsersPage = () => import('../views/CreateUsersPage.vue')
 const AdminUsersPage = () => import('../views/AdminUsersPage.vue')
 const ProfilePage = () => import('../views/ProfilePage.vue')
 const DashboardPage = () => import('../views/DashboardPage.vue')
+const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
 const UpdatePasswordPage = () => import('../views/UpdatePasswordPage.vue')
+const ClassPage = () => import('../views/ClassPage.vue')
+const RoomPage = () => import('../views/RoomPage.vue')
 
 const routes = [
   {
@@ -69,10 +72,28 @@ const routes = [
     meta: { title: 'Личный кабинет', requiresAuth: true }
   },
   {
+    path: '/my-programs',
+    name: 'my-programs',
+    component: MyProgramsPage,
+    meta: { title: 'Мои программы', requiresAuth: true }
+  },
+  {
     path: '/update-password',
     name: 'update-password',
     component: UpdatePasswordPage,
     meta: { title: 'Обновление пароля' }
+  },
+  {
+    path: '/class',
+    name: 'class',
+    component: ClassPage,
+    meta: { title: 'Класс', requiresAuth: true }
+  },
+  {
+    path: '/class/:roomId',
+    name: 'room',
+    component: RoomPage,
+    meta: { title: 'Комната', requiresAuth: true }
   }
 ]
 

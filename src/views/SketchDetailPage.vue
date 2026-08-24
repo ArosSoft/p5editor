@@ -7,7 +7,7 @@ import type { SketchWithProfile } from '../types/supabase'
 
 const route = useRoute()
 const router = useRouter()
-const { getSketchById, toggleLike, checkLike, incrementViews, deleteSketch } = useSketches()
+const { getSketchById, getSketchByNumericId, toggleLike, checkLike, incrementViews, deleteSketch } = useSketches()
 const { user, isAuthenticated } = useAuth()
 
 // Состояние
@@ -50,14 +50,19 @@ onMounted(async () => {
     previousRoute.value = ''
   }
 
-  const result = await getSketchById(id)
+  let result = await getSketchById(id)
+
+  // Если не найдено по uuid и это числовой ID — ищем по numeric_sketch_id
+  if (!result.success && /^\d+$/.test(id)) {
+    result = await getSketchByNumericId(id)
+  }
 
   if (result.success && result.data) {
     sketch.value = result.data as SketchWithProfile
     localLikes.value = sketch.value.likes
 
     // Увеличиваем счётчик просмотров
-    await incrementViews(id)
+    await incrementViews((sketch.value as any).id)
 
     // Проверяем, лайкнул ли текущий пользователь
     if (user.value) {

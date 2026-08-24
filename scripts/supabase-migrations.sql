@@ -372,5 +372,452 @@ CREATE TRIGGER on_like_deleted
 -- UPDATE public.profiles SET role = 'admin' WHERE email = 'admin@example.com';
 
 -- ============================================================
+-- 13. Функционал «Класс»: комнаты и присоединение скетчей
+-- ============================================================
+-- Добавлено по loop-реализации страницы «Класс» (docs/CLASS_IMPLEMENTATION_LOOP.md).
+-- Отклонения от ТЗ: вместо owner_id используется user_id -> profiles(id),
+-- как во всём репозитории (sketches.user_id и т.д.).
+
+-- 13.1. Расширение таблицы sketches: numeric_sketch_id + статус 'saved'
+-- (CREATE TABLE выше уже существует, меняем ограничение и добавляем колонку)
+-- Имена констрейнтов ищем динамически, чтобы не зависеть от имён в проде.
+
+-- Добавляем колонку (существующие строки получают NULL — без потери данных)
+ALTER TABLE public.sketches ADD COLUMN IF NOT EXISTS numeric_sketch_id BIGINT;
+
+-- Снимаем любой CHECK-констрейнт на колонке status и ставим расширенный
+DO $$
+DECLARE
+  v_con text;
+BEGIN
+  SELECT c.conname INTO v_con
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+  WHERE c.conrelid = 'public.sketches'::regclass
+    AND c.contype = 'c'
+    AND a.attname = 'status';
+
+  IF v_con IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE public.sketches DROP CONSTRAINT %I', v_con);
+  END IF;
+
+  -- Не добавляем, если уже есть констрейнт с нужным именем (идемпотентность)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'sketches_status_check'
+      AND conrelid = 'public.sketches'::regclass
+  ) THEN
+    ALTER TABLE public.sketches
+      ADD CONSTRAINT sketches_status_check
+      CHECK (status IN ('pending', 'approved', 'rejected', 'draft', 'saved'));
+  END IF;
+END $$;
+
+-- Уникальность цифрового ID (допускаются NULL у старых записей).
+-- Снимаем любой UNIQUE-констрейнт на колонке, затем ставим именованный.
+DO $$
+DECLARE
+  v_con text;
+BEGIN
+  SELECT c.conname INTO v_con
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+  WHERE c.conrelid = 'public.sketches'::regclass
+    AND c.contype = 'u'
+    AND a.attname = 'numeric_sketch_id';
+
+  IF v_con IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE public.sketches DROP CONSTRAINT %I', v_con);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'sketches_numeric_sketch_id_key'
+      AND conrelid = 'public.sketches'::regclass
+  ) THEN
+    ALTER TABLE public.sketches
+      ADD CONSTRAINT sketches_numeric_sketch_id_key UNIQUE (numeric_sketch_id);
+  END IF;
+END $$;
+
+-- 13.2. Таблица class_rooms (комнаты учителя)
+CREATE TABLE IF NOT EXISTS public.class_rooms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  room_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (room_key),
+  CHECK (room_key ~ '^\d{4}$')
+);
+
+-- 13.3. Таблица связи room_sketches
+CREATE TABLE IF NOT EXISTS public.room_sketches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id UUID NOT NULL REFERENCES public.class_rooms(id) ON DELETE CASCADE,
+  sketch_id UUID NOT NULL REFERENCES public.sketches(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (sketch_id),
+  CHECK (rating BETWEEN 0 AND 4)
+);
+
+-- 13.4. Индексы
+CREATE INDEX IF NOT EXISTS idx_class_rooms_user_id ON public.class_rooms(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_sketches_room_id ON public.room_sketches(room_id);
+CREATE INDEX IF NOT EXISTS idx_room_sketches_sketch_id ON public.room_sketches(sketch_id);
+CREATE INDEX IF NOT EXISTS idx_room_sketches_student_id ON public.room_sketches(student_id);
+
+-- 13.5. Триггеры updated_at
+DROP TRIGGER IF EXISTS update_class_rooms_updated_at ON public.class_rooms;
+CREATE TRIGGER update_class_rooms_updated_at
+  BEFORE UPDATE ON public.class_rooms
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_room_sketches_updated_at ON public.room_sketches;
+CREATE TRIGGER update_room_sketches_updated_at
+  BEFORE UPDATE ON public.room_sketches
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- 13.6. Включение RLS
+ALTER TABLE public.class_rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.room_sketches ENABLE ROW LEVEL SECURITY;
+
+-- 13.7. RLS для class_rooms (владелец видит/создаёт/обновляет/удаляет только свои)
+DROP POLICY IF EXISTS "Room owners can view own rooms" ON public.class_rooms;
+CREATE POLICY "Room owners can view own rooms"
+  ON public.class_rooms FOR SELECT
+  USING ((SELECT auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS "Room owners can create own rooms" ON public.class_rooms;
+CREATE POLICY "Room owners can create own rooms"
+  ON public.class_rooms FOR INSERT
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS "Room owners can update own rooms" ON public.class_rooms;
+CREATE POLICY "Room owners can update own rooms"
+  ON public.class_rooms FOR UPDATE
+  USING ((SELECT auth.uid()) = user_id)
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS "Room owners can delete own rooms" ON public.class_rooms;
+CREATE POLICY "Room owners can delete own rooms"
+  ON public.class_rooms FOR DELETE
+  USING ((SELECT auth.uid()) = user_id);
+
+-- 13.8. RLS для room_sketches
+-- Владелец комнаты видит/обновляет/удаляет связи своей комнаты
+DROP POLICY IF EXISTS "Room owners can view room sketches" ON public.room_sketches;
+CREATE POLICY "Room owners can view room sketches"
+  ON public.room_sketches FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.class_rooms cr
+      WHERE cr.id = room_sketches.room_id AND cr.user_id = (SELECT auth.uid())
+    )
+  );
+
+DROP POLICY IF EXISTS "Room owners can update room sketches" ON public.room_sketches;
+CREATE POLICY "Room owners can update room sketches"
+  ON public.room_sketches FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.class_rooms cr
+      WHERE cr.id = room_sketches.room_id AND cr.user_id = (SELECT auth.uid())
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.class_rooms cr
+      WHERE cr.id = room_sketches.room_id AND cr.user_id = (SELECT auth.uid())
+    )
+  );
+
+DROP POLICY IF EXISTS "Room owners can delete room sketches" ON public.room_sketches;
+CREATE POLICY "Room owners can delete room sketches"
+  ON public.room_sketches FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.class_rooms cr
+      WHERE cr.id = room_sketches.room_id AND cr.user_id = (SELECT auth.uid())
+    )
+  );
+
+-- Ученик может создать связь только для своего скетча и под своим id
+DROP POLICY IF EXISTS "Students can link own sketch" ON public.room_sketches;
+CREATE POLICY "Students can link own sketch"
+  ON public.room_sketches FOR INSERT
+  WITH CHECK (
+    student_id = (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.sketches s
+      WHERE s.id = sketch_id AND s.user_id = (SELECT auth.uid())
+    )
+  );
+
+-- 13.9. RLS для sketches: владелец комнаты читает скетчи, привязанные к его комнате
+DROP POLICY IF EXISTS "Room owners can view linked sketches" ON public.sketches;
+CREATE POLICY "Room owners can view linked sketches"
+  ON public.sketches FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.room_sketches rs
+      JOIN public.class_rooms cr ON rs.room_id = cr.id
+      WHERE rs.sketch_id = sketches.id AND cr.user_id = (SELECT auth.uid())
+    )
+  );
+
+-- 13.10. Генерация уникального 4-значного room_key
+CREATE OR REPLACE FUNCTION public.generate_room_key()
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_key text;
+  i int := 0;
+BEGIN
+  LOOP
+    v_key := lpad(floor(random() * 10000)::int::text, 4, '0');
+    IF NOT EXISTS (SELECT 1 FROM public.class_rooms WHERE room_key = v_key) THEN
+      RETURN v_key;
+    END IF;
+    i := i + 1;
+    IF i > 100 THEN
+      RAISE EXCEPTION 'Не удалось сгенерировать уникальный room_key';
+    END IF;
+  END LOOP;
+END;
+$$;
+
+-- 13.11. Генерация уникального numeric_sketch_id (используется при сохранении скетча)
+CREATE OR REPLACE FUNCTION public.generate_numeric_sketch_id()
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id bigint;
+  i int := 0;
+BEGIN
+  LOOP
+    v_id := floor(random() * 9000000000)::bigint + 1000000000; -- 10-значный
+    IF NOT EXISTS (SELECT 1 FROM public.sketches WHERE numeric_sketch_id = v_id) THEN
+      RETURN v_id;
+    END IF;
+    i := i + 1;
+    IF i > 100 THEN
+      RAISE EXCEPTION 'Не удалось сгенерировать уникальный numeric_sketch_id';
+    END IF;
+  END LOOP;
+END;
+$$;
+
+-- 13.12. RPC: создание комнаты
+CREATE OR REPLACE FUNCTION public.create_room(p_title text, p_description text)
+RETURNS public.class_rooms
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  new_room public.class_rooms;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+  INSERT INTO public.class_rooms (user_id, title, description, room_key)
+  VALUES ((SELECT auth.uid()), p_title, p_description, public.generate_room_key())
+  RETURNING * INTO new_room;
+  RETURN new_room;
+END;
+$$;
+
+-- 13.13. RPC: присоединение скетча к комнате по ключу (транзакционно)
+CREATE OR REPLACE FUNCTION public.join_room_by_key(p_room_key text, p_sketch_id uuid)
+RETURNS TABLE(room_id uuid, room_title text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_room public.class_rooms;
+  v_uid uuid := (SELECT auth.uid());
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  SELECT * INTO v_room FROM public.class_rooms WHERE room_key = p_room_key;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'room not found';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.sketches WHERE id = p_sketch_id AND user_id = v_uid
+  ) THEN
+    RAISE EXCEPTION 'sketch does not belong to user';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.room_sketches WHERE sketch_id = p_sketch_id) THEN
+    RAISE EXCEPTION 'sketch already in a room';
+  END IF;
+
+  INSERT INTO public.room_sketches (room_id, sketch_id, student_id, rating)
+  VALUES (v_room.id, p_sketch_id, v_uid, 0);
+
+  RETURN QUERY SELECT v_room.id, v_room.title;
+END;
+$$;
+
+-- 13.13b. RPC: проверка существования комнаты по ключу (до присоединения).
+-- Доступен любому авторизованному пользователю (SECURITY DEFINER), т.к.
+-- напрямую читать class_rooms нельзя из-за RLS (видит только владелец).
+CREATE OR REPLACE FUNCTION public.get_room_info(p_room_key text)
+RETURNS TABLE(room_id uuid, title text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  RETURN QUERY
+    SELECT cr.id, cr.title
+    FROM public.class_rooms cr
+    WHERE cr.room_key = p_room_key;
+END;
+$$;
+
+-- 13.13c. RPC: список скетчей ТЕКУЩЕГО пользователя, связанных с комнатами.
+-- Нужен, т.к. SELECT к room_sketches разрешён только владельцу комнаты (RLS),
+-- а здесь студент должен видеть свои собственные связи.
+CREATE OR REPLACE FUNCTION public.get_my_linked_sketches()
+RETURNS TABLE(
+  room_sketch_id uuid,
+  room_id uuid,
+  room_title text,
+  sketch_id uuid,
+  sketch_title text,
+  numeric_sketch_id bigint,
+  rating int
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  RETURN QUERY
+    SELECT
+      rs.id,
+      rs.room_id,
+      cr.title,
+      s.id,
+      s.title,
+      s.numeric_sketch_id,
+      rs.rating
+    FROM public.room_sketches rs
+    JOIN public.class_rooms cr ON cr.id = rs.room_id
+    JOIN public.sketches s ON s.id = rs.sketch_id
+    WHERE rs.student_id = (SELECT auth.uid())
+    ORDER BY cr.title, s.title;
+END;
+$$;
+
+-- 13.14. RPC: удаление связи скетча с комнатой (только владелец комнаты)
+CREATE OR REPLACE FUNCTION public.remove_sketch_from_room(p_room_sketch_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  deleted int;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  DELETE FROM public.room_sketches rs
+  USING public.class_rooms cr
+  WHERE rs.id = p_room_sketch_id
+    AND rs.room_id = cr.id
+    AND cr.user_id = (SELECT auth.uid());
+
+  GET DIAGNOSTICS deleted = ROW_COUNT;
+  IF deleted = 0 THEN
+    RAISE EXCEPTION 'not allowed';
+  END IF;
+END;
+$$;
+
+-- 13.15. RPC: обновление названия/описания комнаты (только владелец)
+CREATE OR REPLACE FUNCTION public.update_room(p_room_id uuid, p_title text, p_description text)
+RETURNS public.class_rooms
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r public.class_rooms;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  UPDATE public.class_rooms
+  SET title = p_title, description = p_description, updated_at = NOW()
+  WHERE id = p_room_id AND user_id = (SELECT auth.uid())
+  RETURNING * INTO r;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not allowed';
+  END IF;
+  RETURN r;
+END;
+$$;
+
+-- 13.16. RPC: изменение рейтинга скетча в комнате (только владелец комнаты), диапазон 0..4
+CREATE OR REPLACE FUNCTION public.update_room_sketch_rating(p_room_sketch_id uuid, p_delta int)
+RETURNS public.room_sketches
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r public.room_sketches;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  UPDATE public.room_sketches rs
+  SET rating = GREATEST(0, LEAST(4, rs.rating + p_delta))
+  FROM public.class_rooms cr
+  WHERE rs.id = p_room_sketch_id
+    AND rs.room_id = cr.id
+    AND cr.user_id = (SELECT auth.uid())
+  RETURNING rs.* INTO r;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not allowed';
+  END IF;
+  RETURN r;
+END;
+$$;
+
+-- ============================================================
 -- Конец миграций
 -- ============================================================

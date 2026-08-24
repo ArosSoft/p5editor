@@ -152,6 +152,58 @@ export function useSketches() {
     }
   }
 
+  // Генерация уникального цифрового ID скетча (используется при сохранении)
+  async function generateNumericSketchId(): Promise<{ success: boolean; data?: number; error?: string }> {
+    try {
+      const { data, error: rpcError } = await supabase
+        .rpc('generate_numeric_sketch_id')
+        .single()
+
+      if (rpcError) throw rpcError
+      return { success: true, data: data as number }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Ошибка генерации numeric_sketch_id'
+      console.error('Generate numeric sketch id error:', e)
+      return { success: false, error: error.value }
+    }
+  }
+
+  // Получение скетча по цифровому ID (для открытия из комнаты по URL)
+  async function getSketchByNumericId(numericId: number | string) {
+    try {
+      loading.value = true
+      error.value = null
+
+      const { data, error: fetchError } = await withAuthRetry<any>(
+        () => supabase
+          .from('sketches')
+          .select(`
+            *,
+            profiles:user_id (
+              id,
+              display_name,
+              avatar_url
+            )
+          `, { count: 'exact' })
+          .eq('numeric_sketch_id', Number(numericId))
+          .single(),
+        DEFAULT_TIMEOUT,
+        'Ошибка загрузки скетча (таймаут)'
+      )
+
+      if (fetchError) throw fetchError
+
+      sketch.value = data as SketchWithProfile
+      return { success: true, data }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Ошибка загрузки скетча по цифровому ID'
+      console.error('Get sketch by numeric id error:', e)
+      return { success: false, error: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
   // Получение всех скетчей для галереи (только approved)
   async function getGallerySketches({
     page = 1,
@@ -357,6 +409,7 @@ export function useSketches() {
     category?: string | null
     difficulty?: SketchDifficulty | null
     status?: SketchStatus
+    numeric_sketch_id?: number | null
   }) {
     try {
       loading.value = true
@@ -411,6 +464,7 @@ export function useSketches() {
     status?: SketchStatus
     views?: number
     likes?: number
+    numeric_sketch_id?: number | null
   }) {
     try {
       loading.value = true
@@ -837,6 +891,8 @@ export function useSketches() {
     error,
     total,
     getSketchById,
+    getSketchByNumericId,
+    generateNumericSketchId,
     getGallerySketches,
     getUserSketches,
     createSketch,

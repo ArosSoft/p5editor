@@ -8,7 +8,7 @@ export type Json =
 
 export type UserRole = 'user' | 'moderator' | 'admin'
 
-export type SketchStatus = 'pending' | 'approved' | 'rejected' | 'draft'
+export type SketchStatus = 'pending' | 'approved' | 'rejected' | 'draft' | 'saved'
 
 export type SketchDifficulty = 'Лёгкая' | 'Средняя' | 'Тяжёлая'
 
@@ -63,6 +63,7 @@ export interface Database {
           status: SketchStatus
           views: number
           likes: number
+          numeric_sketch_id: number | null
           rejection_reason: string | null
           created_at: string
           updated_at: string
@@ -80,6 +81,7 @@ export interface Database {
           status?: SketchStatus
           views?: number
           likes?: number
+          numeric_sketch_id?: number | null
           rejection_reason?: string | null
           created_at?: string
           updated_at?: string
@@ -97,7 +99,66 @@ export interface Database {
           status?: SketchStatus
           views?: number
           likes?: number
+          numeric_sketch_id?: number | null
           rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      class_rooms: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string
+          room_key: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string
+          room_key: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string
+          room_key?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      room_sketches: {
+        Row: {
+          id: string
+          room_id: string
+          sketch_id: string
+          student_id: string
+          rating: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          sketch_id: string
+          student_id: string
+          rating?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          sketch_id?: string
+          student_id?: string
+          rating?: number
           created_at?: string
           updated_at?: string
         }
@@ -311,4 +372,18 @@ export interface SketchWithProfile extends Sketch {
     moderator_name: string
     created_at: string
   } | null
+}
+
+// Типы для функционала «Класс»
+export type ClassRoom = Database['public']['Tables']['class_rooms']['Row']
+export type ClassRoomInsert = Database['public']['Tables']['class_rooms']['Insert']
+export type ClassRoomUpdate = Database['public']['Tables']['class_rooms']['Update']
+
+export type RoomSketch = Database['public']['Tables']['room_sketches']['Row']
+export type RoomSketchInsert = Database['public']['Tables']['room_sketches']['Insert']
+export type RoomSketchUpdate = Database['public']['Tables']['room_sketches']['Update']
+
+// Комната со счётчиком присоединённых скетчей (для таблицы на странице «Класс»)
+export interface ClassRoomWithCount extends ClassRoom {
+  sketch_count?: number
 }
