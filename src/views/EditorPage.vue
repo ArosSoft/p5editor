@@ -15,6 +15,7 @@ import ConsoleOutput from '../components/ConsoleOutput.vue';
 import AuthModal from '../components/AuthModal.vue';
 import UserProfile from '../components/UserProfile.vue';
 import ReportErrorModal from '../components/ReportErrorModal.vue';
+import NewSketchModal from '../components/NewSketchModal.vue';
 import { useAuth } from '../composables/useAuth';
 import { useSketches } from '../composables/useSketches';
 import { saveAs } from 'file-saver';
@@ -40,6 +41,7 @@ const { createSketch, updateSketch, getSketchById, generateNumericSketchId } = u
 const { hasRoom, loadHasRoom } = useClassRooms();
 const showAuthModal = ref(false);
 const showReportModal = ref(false);
+const showNewSketchModal = ref(false);
 
 // ID текущего скетча (если загружен из БД)
 const currentSketchId = ref<string | null>(null);
@@ -689,6 +691,26 @@ function draw() {
   }
 }
 
+// Применение шаблона, выбранного в модальном окне "Новый скетч"
+function applyTemplate(payload: { code: string; name: string; label: string }) {
+  saveToHistory();
+  // Сбрасываем ID скетча, чтобы не перезаписать сохранённый скетч в облаке
+  currentSketchId.value = null;
+  localStorage.removeItem('p5editor_current_sketch_id');
+  code.value = payload.code;
+  originalCode.value = payload.code;
+  sketchName.value = payload.name;
+  localStorage.setItem('p5editor_current_name', payload.name);
+
+  // Очищаем адресную строку от ID скетча
+  if (route.params.id || route.query.sketch) {
+    router.replace({ path: '/', query: {} });
+  }
+
+  addMessage(`✨ Шаблон «${payload.label}» загружен: ${payload.name}`);
+  startSketch();
+}
+
 function copyToClipboard() {
   navigator.clipboard
     .writeText(code.value)
@@ -872,7 +894,7 @@ function getTooltipText(item: string): string {
     undo: 'Отмена (Ctrl+Z)',
     redo: 'Повтор (Ctrl+Y)',
     copy: 'Копировать код',
-    reset: 'Удалить код и начать с шаблона',
+    reset: 'Создать новый скетч из шаблона',
     'console-clear': 'Очистить консоль',
     'console-toggle': 'Показать/скрыть консоль (Ctrl+`)',
     theme: 'Сменить тему',
@@ -1088,9 +1110,9 @@ const currentP5Version = computed(() => {
         </div>
 
         <button
-          @click="resetToExample"
+          @click="showNewSketchModal = true"
           class="menu-item"
-          title="Удалить код и начать с шаблона"
+          title="Создать новый скетч из шаблона"
           @mouseenter="setActiveMenuItem('reset')"
           @mouseleave="setActiveMenuItem(null)"
         >
@@ -1445,6 +1467,13 @@ const currentP5Version = computed(() => {
 
     <!-- Модальное окно авторизации -->
     <AuthModal v-model="showAuthModal" />
+
+    <!-- Модальное окно выбора шаблона нового скетча -->
+    <NewSketchModal
+      v-model="showNewSketchModal"
+      :theme="theme"
+      @confirm="applyTemplate"
+    />
 
     <ReportErrorModal
       v-if="showReportModal"
