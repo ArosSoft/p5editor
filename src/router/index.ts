@@ -8,6 +8,7 @@ const SketchDetailPage = () => import('../views/SketchDetailPage.vue')
 const SharePage = () => import('../views/SharePage.vue')
 const AdminDashboard = () => import('../views/AdminDashboard.vue')
 const CreateUsersPage = () => import('../views/CreateUsersPage.vue')
+const AdminUsersPage = () => import('../views/AdminUsersPage.vue')
 const ProfilePage = () => import('../views/ProfilePage.vue')
 const DashboardPage = () => import('../views/DashboardPage.vue')
 const UpdatePasswordPage = () => import('../views/UpdatePasswordPage.vue')
@@ -48,6 +49,12 @@ const routes = [
     name: 'create-users',
     component: CreateUsersPage,
     meta: { title: 'Создание пользователей', requiresModerator: true }
+  },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: AdminUsersPage,
+    meta: { title: 'Управление пользователями', requiresAdmin: true }
   },
   {
     path: '/profile',
@@ -112,6 +119,19 @@ router.beforeEach(async (to, from, next) => {
     }
     const { isModerator } = useAuth()
     if (!isModerator.value) {
+      next('/')
+      return
+    }
+  }
+
+  // Проверка доступа к админским разделам управления пользователями
+  if (to.meta.requiresAdmin) {
+    if (!user.value && !session.value) {
+      next('/')
+      return
+    }
+    const { isAdmin } = useAuth()
+    if (!isAdmin.value) {
       next('/')
       return
     }

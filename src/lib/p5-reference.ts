@@ -284,7 +284,7 @@
     },
     {
       name: 'rect(x, y, w, h, [tl, tr, br, bl])',
-      description: 'Рисует прямоугольник',
+      description: 'Рисует прямоугольник\n![пример rect](images/reference/rect.png)',
       section: 'Shape',
     },
     {

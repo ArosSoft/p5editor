@@ -195,12 +195,8 @@ function searchInReference(query: string): string {
 
   // Выводим первые 5 результатов полностью, остальные - кратко
   matchedFunctions.slice(0, 5).forEach((fn, index) => {
-    // Подсвечиваем совпавшие слова в описании
-    let highlightedDesc = fn.description;
-    fn.matchedWords.forEach((word) => {
-      const regex = new RegExp(`(${word})`, 'gi');
-      highlightedDesc = highlightedDesc.replace(regex, '**$1**');
-    });
+    // Подсвечиваем совпавшие слова в описании (защищая markdown-картинки и блоки кода)
+    let highlightedDesc = protectAndHighlight(fn.description, fn.matchedWords);
 
     response += `**${fn.name}** — ${highlightedDesc}\n`;
 
@@ -235,6 +231,30 @@ function searchInReference(query: string): string {
 /**
  * Парсинг Markdown в HTML
  */
+/**
+ * Подсвечивает совпавшие слова, не затрагивая содержимое markdown-картинок
+ * и блоков кода (чтобы не ломать пути к файлам и примеры).
+ */
+function protectAndHighlight(description: string, matchedWords: string[]): string {
+  const protectedParts: string[] = [];
+  let text = description
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, (m) => {
+      protectedParts.push(m);
+      return `@@P${protectedParts.length - 1}@@`;
+    })
+    .replace(/```[\s\S]*?```/g, (m) => {
+      protectedParts.push(m);
+      return `@@P${protectedParts.length - 1}@@`;
+    });
+
+  matchedWords.forEach((word) => {
+    const regex = new RegExp(`(${word})`, 'gi');
+    text = text.replace(regex, '**$1**');
+  });
+
+  return text.replace(/@@P(\d+)@@/g, (_m, i) => protectedParts[Number(i)] ?? _m);
+}
+
 function parseMarkdown(text: string): string {
   let html = text
     // Экранирование HTML

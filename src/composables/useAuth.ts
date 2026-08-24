@@ -118,6 +118,15 @@ export async function initAuth() {
           } catch (e) {
             console.error('[Auth] Ошибка перенаправления:', e)
           }
+          // Удаляем токены восстановления из URL, чтобы они не переполнили
+          // сессию при следующей перезагрузке/навигации.
+          if (typeof window !== 'undefined' && window.location.hash) {
+            try {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search)
+            } catch {
+              /* noop */
+            }
+          }
           return
         }
 
@@ -153,9 +162,11 @@ export function cleanupAuth() {
 
 // Внутренняя функция загрузки профиля
 async function loadProfileInternal(userId: string) {
+  // Если уже идёт загрузка — дожидаемся её, но НЕ прерываем текущий запрос,
+  // иначе при конкурентных вызовах (recovery -> login) профиль нужного
+  // пользователя может не установиться и останется профиль предыдущего.
   if (profileLoadPromise) {
     await profileLoadPromise
-    return
   }
 
   profileLoadPromise = (async () => {
@@ -257,17 +268,20 @@ export function useAuth() {
       globalError.value = null
 
       const { error: logoutError } = await supabase.auth.signOut()
-      if (logoutError) throw logoutError
-
+      if (logoutError) {
+        console.warn('[Auth] signOut вернул ошибку, но локальное состояние очищается:', logoutError)
+      }
+    } catch (e) {
+      console.warn('[Auth] Ошибка signOut, очищаем локально:', e)
+    } finally {
+      // Всегда очищаем локальное состояние, иначе может остаться «осиротевшая»
+      // (например, захваченная recovery) сессия и админ не вернёт панель.
       globalUser.value = null
       globalSession.value = null
       globalProfile.value = null
       localStorage.removeItem('user_role')
       localStorage.removeItem(AUTH_CACHE_KEY)
-    } catch (e) {
-      globalError.value = e instanceof Error ? e.message : 'Ошибка выхода'
-      console.error('Logout error:', e)
-    } finally {
+      passwordRecoveryMode.value = false
       globalLoading.value = false
     }
   }

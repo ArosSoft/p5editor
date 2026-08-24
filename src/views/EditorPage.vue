@@ -13,6 +13,7 @@ import P5Canvas from '../components/P5Canvas.vue';
 import ConsoleOutput from '../components/ConsoleOutput.vue';
 import AuthModal from '../components/AuthModal.vue';
 import UserProfile from '../components/UserProfile.vue';
+import ReportErrorModal from '../components/ReportErrorModal.vue';
 import { useAuth } from '../composables/useAuth';
 import { useSketches } from '../composables/useSketches';
 import { saveAs } from 'file-saver';
@@ -36,6 +37,7 @@ const router = useRouter();
 const { isAuthenticated, user } = useAuth();
 const { updateSketch, getSketchById } = useSketches();
 const showAuthModal = ref(false);
+const showReportModal = ref(false);
 
 // ID текущего скетча (если загружен из БД)
 const currentSketchId = ref<string | null>(null);
@@ -1017,15 +1019,6 @@ const currentP5Version = computed(() => {
         </button>
 
         <button
-          @click="navigateToDashboard"
-          class="top-btn dashboard-btn"
-          title="Личный кабинет"
-        >
-          <span class="btn-icon">📊</span>
-          <span class="btn-text">Личный кабинет</span>
-        </button>
-
-        <button
           @click="navigateToShare"
           class="top-btn share-btn"
           title="Поделиться скетчем"
@@ -1036,6 +1029,15 @@ const currentP5Version = computed(() => {
       </div>
 
       <div class="top-bar-right">
+        <button
+          @click="showReportModal = true"
+          class="top-btn report-btn"
+          title="Сообщить об ошибке"
+        >
+          <span class="btn-icon">⚠</span>
+          <span class="btn-text">Сообщить об ошибке</span>
+        </button>
+
         <template v-if="isAuthenticated">
           <UserProfile :theme="theme" />
         </template>
@@ -1436,6 +1438,12 @@ const currentP5Version = computed(() => {
 
     <!-- Модальное окно авторизации -->
     <AuthModal v-model="showAuthModal" />
+
+    <ReportErrorModal
+      v-if="showReportModal"
+      :theme="theme"
+      @close="showReportModal = false"
+    />
   </div>
 </template>
 

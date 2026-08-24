@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useStorage } from '../composables/useStorage'
+import ErrorReportsModal from './ErrorReportsModal.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -12,11 +13,12 @@ const props = withDefaults(
 )
 
 const router = useRouter()
-const { user, profile, updateProfile, uploadAvatar, logout, loading, isModerator } = useAuth()
+const { user, profile, updateProfile, uploadAvatar, logout, loading, isModerator, isAdmin } = useAuth()
 const { uploadAvatar: uploadAvatarStorage, uploading } = useStorage()
 
 const isEditing = ref(false)
 const showDropdown = ref(false)
+const showReports = ref(false)
 
 const isLoggingOut = ref(false)
 
@@ -115,6 +117,11 @@ function navigateToCreateUsers() {
   closeDropdown()
 }
 
+function navigateToAdminUsers() {
+  router.push('/admin/users')
+  closeDropdown()
+}
+
 function navigateToDashboard() {
   router.push('/dashboard')
   closeDropdown()
@@ -122,6 +129,11 @@ function navigateToDashboard() {
 
 function navigateToProfile() {
   router.push('/profile')
+  closeDropdown()
+}
+
+function openReports() {
+  showReports.value = true
   closeDropdown()
 }
 
@@ -180,6 +192,20 @@ function handleClickOutside(event: MouseEvent) {
             <path fill="currentColor" d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
           </svg>
           Создать пользователей
+        </button>
+
+        <button v-if="isAdmin" class="dropdown-item admin-link" @click="navigateToAdminUsers">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M16.5 12c1.38 0 2.49-1.12 2.49-2.5S17.88 7 16.5 7C15.12 7 14 8.12 14 9.5s1.12 2.5 2.5 2.5zM9 11c1.38 0 2.5-1.12 2.5-2.5S10.38 6 9 6 6.5 7.12 6.5 8.5 7.62 11 9 11zm7.5 1c-1.83 0-5.5.92-5.5 2.75V17h11v-2.25c0-1.83-3.67-2.75-5.5-2.75zM9 13c-2.33 0-7 1.17-7 3.5V19h7v-2.25c0-.85.33-1.65.89-2.32C9.46 14.34 9 13.7 9 13z"/>
+          </svg>
+          Управление пользователями
+        </button>
+
+        <button v-if="isModerator" class="dropdown-item admin-link" @click="openReports">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+          </svg>
+          Сообщения об ошибках
         </button>
 
         <button class="dropdown-item" @click="navigateToDashboard">
@@ -260,6 +286,12 @@ function handleClickOutside(event: MouseEvent) {
         </div>
       </Transition>
     </Teleport>
+
+    <ErrorReportsModal
+      v-if="showReports"
+      :theme="theme"
+      @close="showReports = false"
+    />
   </div>
 </template>
 

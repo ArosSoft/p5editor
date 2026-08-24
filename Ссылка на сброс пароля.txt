@@ -1,0 +1,1 @@
+https://gfupycrmnegbcafuoxdx.supabase.co/auth/v1/verify?token=pkce_4f388fbc5b5e50a02bb2961efb5441a232244edb0ef55ccddae54fd6&type=recovery&redirect_to=https://arossoft.github.io/p5editor/

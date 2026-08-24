@@ -174,6 +174,67 @@ export interface Database {
           updated_at?: string
         }
       }
+      admin_audit_logs: {
+        Row: {
+          id: string
+          admin_id: string | null
+          action: string
+          target_user_id: string | null
+          target_email: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          admin_id?: string | null
+          action: string
+          target_user_id?: string | null
+          target_email?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          admin_id?: string | null
+          action?: string
+          target_user_id?: string | null
+          target_email?: string | null
+          created_at?: string
+        }
+      }
+      error_reports: {
+        Row: {
+          id: string
+          user_id: string | null
+          reporter_email: string | null
+          message: string
+          status: string
+          reply: string | null
+          replied_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          reporter_email?: string | null
+          message: string
+          status?: string
+          reply?: string | null
+          replied_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          reporter_email?: string | null
+          message?: string
+          status?: string
+          reply?: string | null
+          replied_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       gallery_sketches: {
@@ -214,6 +275,10 @@ export type SketchLikeInsert = Database['public']['Tables']['sketch_likes']['Ins
 export type SketchComment = Database['public']['Tables']['sketch_comments']['Row']
 export type SketchCommentInsert = Database['public']['Tables']['sketch_comments']['Insert']
 
+// Типы для аудита админских действий
+export type AdminAuditLog = Database['public']['Tables']['admin_audit_logs']['Row']
+export type AdminAuditLogInsert = Database['public']['Tables']['admin_audit_logs']['Insert']
+
 // Тип для галереи
 export type GallerySketch = Database['public']['Views']['gallery_sketches']['Row']
 
@@ -226,6 +291,11 @@ export type SketchLikesInsert = Database['public']['Tables']['sketch_likes']['In
 // Типы для модерации
 export type SketchModerationLog = Database['public']['Tables']['sketch_moderation_logs']['Row']
 export type SketchModerationLogInsert = Database['public']['Tables']['sketch_moderation_logs']['Insert']
+
+// Типы для сообщений об ошибках
+export type ErrorReport = Database['public']['Tables']['error_reports']['Row']
+export type ErrorReportInsert = Database['public']['Tables']['error_reports']['Insert']
+export type ErrorReportUpdate = Database['public']['Tables']['error_reports']['Update']
 
 // Тип для скетча с данными профиля автора
 export interface SketchWithProfile extends Sketch {
