@@ -346,11 +346,12 @@ export function useAuth() {
 
       if (data.user) {
         globalUser.value = data.user
-        // Обновляем сессию в памяти/кэше. Таймаут запроса теперь всегда
-        // ставится в customFetch, поэтому этот вызов не зависнет навсегда.
-        const { data: sessionData } = await supabase.auth.getSession()
-        globalSession.value = sessionData.session
-        saveAuthCache(sessionData.session)
+        // НЕ вызываем supabase.auth.getSession() после updateUser: в recovery-
+        // сессии этот запрос может надолго зависнуть на локе lock:p5editor-auth,
+        // из-за чего кнопка остаётся в состоянии «Смена...». gotrue сам обновляет
+        // и сохраняет сессию после updateUser, поэтому просто актуализируем
+        // наш локальный кэш текущей сессией.
+        if (globalSession.value) saveAuthCache(globalSession.value)
       }
 
       return { success: true }
