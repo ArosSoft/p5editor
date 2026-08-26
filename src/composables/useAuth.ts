@@ -346,6 +346,8 @@ export function useAuth() {
 
       if (data.user) {
         globalUser.value = data.user
+        // Обновляем сессию в памяти/кэше. Таймаут запроса теперь всегда
+        // ставится в customFetch, поэтому этот вызов не зависнет навсегда.
         const { data: sessionData } = await supabase.auth.getSession()
         globalSession.value = sessionData.session
         saveAuthCache(sessionData.session)

@@ -17,35 +17,35 @@ const isSlowConnection = (() => {
   return effectiveType === 'slow-2g' || effectiveType === '2g' || effectiveType === '3g'
 })()
 
-// Создаем кастомный fetch с адаптивным таймаутом для нестабильных соединений
+// Создаем кастомный fetch с адаптивным таймаутом для нестабильных соединений.
+// ВАЖНО: таймаут ставится ВСЕГДА, даже если Supabase передаёт свой AbortSignal
+// (при updateUser/PKCE-обмене). Иначе зависший запрос (напр. из-за гонки за
+// lock:p5editor-auth) никогда не резолвится и UI «зависает» на disabled-кнопке.
 const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const controller = new AbortController()
   const timeoutMs = isSlowConnection ? 180000 : 60000
-  let timeout: ReturnType<typeof setTimeout> | null = null
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-  if (init?.signal) {
-    const fetchInit: RequestInit = {
-      ...init,
-      signal: init.signal
+  const signals: AbortSignal[] = [controller.signal]
+  if (init?.signal) signals.push(init.signal)
+
+  let combined: AbortSignal
+  if (typeof AbortSignal !== 'undefined' && 'any' in AbortSignal && typeof (AbortSignal as any).any === 'function') {
+    combined = (AbortSignal as any).any(signals)
+  } else {
+    // Fallback: наш таймер всё равно сработает; подпишемся на внешний сигнал
+    if (init?.signal) {
+      init.signal.addEventListener('abort', () => controller.abort(), { once: true })
     }
-
-    return fetch(input, fetchInit)
+    combined = controller.signal
   }
-
-  timeout = setTimeout(() => {
-    controller.abort()
-  }, timeoutMs)
 
   const fetchInit: RequestInit = {
     ...init,
-    signal: controller.signal
+    signal: combined
   }
 
-  return fetch(input, fetchInit).finally(() => {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-  })
+  return fetch(input, fetchInit).finally(() => clearTimeout(timer))
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
