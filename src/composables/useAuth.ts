@@ -110,19 +110,34 @@ export async function initAuth() {
         }
 
         if (eventStr === 'PASSWORD_RECOVERY') {
-          console.log('[Auth] Режим восстановления пароля')
+          console.log('[Auth] Режим восстановления пароля — пользователь авторизован')
           passwordRecoveryMode.value = true
           await hydrateSession(newSession)
+          // По ссылке из письма пользователь просто авторизуется на сайте,
+          // чтобы сменить пароль в личном кабинете (модалка редактирования
+          // профиля), а не на отдельной странице /update-password.
           try {
-            router.push('/update-password')
+            router.push('/')
           } catch (e) {
             console.error('[Auth] Ошибка перенаправления:', e)
           }
-          // Удаляем токены восстановления из URL, чтобы они не переполнили
-          // сессию при следующей перезагрузке/навигации.
-          if (typeof window !== 'undefined' && window.location.hash) {
+          // Убираем параметры авторизации (code/access_token/error/...) из URL,
+          // чтобы они не висели в адресной строке и не мешали при reload.
+          if (typeof window !== 'undefined') {
             try {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search)
+              const url = new URL(window.location.href)
+              const authParams = ['code', 'access_token', 'refresh_token', 'expires_in', 'token_type', 'error', 'error_code', 'error_description', 'type']
+              let changed = false
+              authParams.forEach((p) => {
+                if (url.searchParams.has(p)) {
+                  url.searchParams.delete(p)
+                  changed = true
+                }
+              })
+              if (changed) {
+                const cleaned = url.origin + url.pathname + (url.search || '') + (url.hash || '#/')
+                window.history.replaceState(null, '', cleaned)
+              }
             } catch {
               /* noop */
             }

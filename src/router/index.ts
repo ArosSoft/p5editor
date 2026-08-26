@@ -9,7 +9,6 @@ const SharePage = () => import('../views/SharePage.vue')
 const AdminDashboard = () => import('../views/AdminDashboard.vue')
 const CreateUsersPage = () => import('../views/CreateUsersPage.vue')
 const AdminUsersPage = () => import('../views/AdminUsersPage.vue')
-const UpdatePasswordPage = () => import('../views/UpdatePasswordPage.vue')
 const ClassPage = () => import('../views/ClassPage.vue')
 const RoomPage = () => import('../views/RoomPage.vue')
 const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
@@ -56,12 +55,6 @@ const routes = [
     name: 'admin-users',
     component: AdminUsersPage,
     meta: { title: 'Управление пользователями', requiresAdmin: true }
-  },
-  {
-    path: '/update-password',
-    name: 'update-password',
-    component: UpdatePasswordPage,
-    meta: { title: 'Обновление пароля' }
   },
   {
     path: '/class',

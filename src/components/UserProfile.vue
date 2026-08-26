@@ -13,7 +13,7 @@ const props = withDefaults(
 )
 
 const router = useRouter()
-const { user, profile, updateProfile, uploadAvatar, logout, loading, isModerator, isAdmin } = useAuth()
+const { user, profile, updateProfile, updatePassword, uploadAvatar, logout, loading, isModerator, isAdmin } = useAuth()
 const { uploadAvatar: uploadAvatarStorage, uploading } = useStorage()
 
 const isEditing = ref(false)
@@ -70,10 +70,70 @@ function startEditing() {
   }
   isEditing.value = true
   closeDropdown()
+  // Сбрасываем состояние смены пароля при каждом открытии модалки
+  isChangingPassword.value = false
+  passwordSuccess.value = false
+  passwordError.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
 }
 
 function cancelEditing() {
   isEditing.value = false
+}
+
+// Смена пароля прямо в модалке профиля (без отправки письма)
+const isChangingPassword = ref(false)
+const newPassword = ref('')
+const confirmPassword = ref('')
+const passwordError = ref('')
+const passwordSuccess = ref(false)
+
+function startChangingPassword() {
+  isChangingPassword.value = true
+  passwordError.value = ''
+  passwordSuccess.value = false
+  newPassword.value = ''
+  confirmPassword.value = ''
+}
+
+function cancelChangingPassword() {
+  isChangingPassword.value = false
+  passwordError.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+}
+
+async function handleChangePassword() {
+  passwordError.value = ''
+  passwordSuccess.value = false
+
+  if (!newPassword.value || !confirmPassword.value) {
+    passwordError.value = 'Заполните все поля'
+    return
+  }
+
+  if (newPassword.value.length < 6) {
+    passwordError.value = 'Пароль должен быть не менее 6 символов'
+    return
+  }
+
+  if (newPassword.value !== confirmPassword.value) {
+    passwordError.value = 'Пароли не совпадают'
+    return
+  }
+
+  const result = await updatePassword(newPassword.value)
+
+  if (result.success) {
+    // Скрываем интерфейс смены, оставляем только сообщение об успехе
+    isChangingPassword.value = false
+    passwordSuccess.value = true
+    newPassword.value = ''
+    confirmPassword.value = ''
+  } else {
+    passwordError.value = result.error || 'Ошибка смены пароля'
+  }
 }
 
 async function saveProfile() {
@@ -262,6 +322,64 @@ function handleClickOutside(event: MouseEvent) {
                 rows="4"
                 :disabled="loading"
               ></textarea>
+            </div>
+
+            <!-- Смена пароля без отправки письма -->
+            <div class="password-section">
+              <div class="section-divider"></div>
+              <h3>Смена пароля</h3>
+
+              <div v-if="passwordSuccess" class="success-message">
+                Пароль успешно изменён
+              </div>
+
+              <template v-else>
+                <button
+                  v-if="!isChangingPassword"
+                  class="change-password-btn"
+                  @click="startChangingPassword"
+                  :disabled="loading"
+                >
+                  Сменить пароль
+                </button>
+
+                <template v-else>
+                  <div class="form-group">
+                    <label for="new-password">Новый пароль</label>
+                    <input
+                      id="new-password"
+                      v-model="newPassword"
+                      type="password"
+                      placeholder="Не менее 6 символов"
+                      :disabled="loading"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="confirm-password">Подтверждение пароля</label>
+                    <input
+                      id="confirm-password"
+                      v-model="confirmPassword"
+                      type="password"
+                      placeholder="Повторите пароль"
+                      :disabled="loading"
+                    />
+                  </div>
+
+                  <div v-if="passwordError" class="error-message">
+                    {{ passwordError }}
+                  </div>
+
+                  <div class="form-actions">
+                    <button class="cancel-btn" @click="cancelChangingPassword" :disabled="loading">
+                      Отмена
+                    </button>
+                    <button class="save-btn" @click="handleChangePassword" :disabled="loading">
+                      {{ loading ? 'Смена...' : 'Сменить пароль' }}
+                    </button>
+                  </div>
+                </template>
+              </template>
             </div>
 
             <div class="form-actions">
@@ -605,6 +723,78 @@ function handleClickOutside(event: MouseEvent) {
 .save-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Password section */
+.password-section {
+  margin-top: 28px;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--border-color, #333);
+  margin: 8px 0 20px;
+}
+
+.password-section h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.change-password-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--bg-secondary, #2a2a2a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  color: var(--text-primary, #fff);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.change-password-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary, #333);
+  border-color: var(--accent-color, #42b883);
+}
+
+.change-password-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.theme-light .change-password-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.theme-light .change-password-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: var(--accent-color, #646cff);
+}
+
+.success-message {
+  padding: 14px 16px;
+  background: rgba(66, 184, 131, 0.12);
+  border: 1px solid rgba(66, 184, 131, 0.4);
+  border-radius: 8px;
+  color: #42b883;
+  font-size: 15px;
+  text-align: center;
+}
+
+.error-message {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 14px;
+  text-align: center;
 }
 
 /* Transitions */
