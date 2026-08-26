@@ -149,6 +149,16 @@ export async function initAuth() {
           passwordRecoveryMode.value = false
         }
 
+        if (eventStr === 'USER_UPDATED') {
+          // НЕ блокируем обработчик: gotrue дожидается завершения
+          // onAuthStateChange (await this._notifyAllSubscribers) перед тем,
+          // как резолвнуть промис updateUser(). Тяжёлый запрос профиля внутри
+          // hydrateSession «завесил» бы кнопку смены пароля (она оставалась
+          // в состоянии «Смена...»). Обновляем состояние асинхронно.
+          void hydrateSession(newSession)
+          return
+        }
+
         await hydrateSession(newSession)
       })
 
