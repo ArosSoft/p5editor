@@ -879,6 +879,11 @@ function toggleMenuExpand() {
   isMenuExpanded.value = !isMenuExpanded.value;
 }
 
+function openNewSketchModal() {
+  showNewSketchModal.value = true;
+  showAIChat.value = false;
+}
+
 function setActiveMenuItem(item: string | null) {
   activeMenuItem.value = item;
 }
@@ -1110,7 +1115,7 @@ const currentP5Version = computed(() => {
         </div>
 
         <button
-          @click="showNewSketchModal = true"
+          @click="openNewSketchModal"
           class="menu-item"
           title="Создать новый скетч из шаблона"
           @mouseenter="setActiveMenuItem('reset')"
@@ -1604,7 +1609,7 @@ const currentP5Version = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  z-index: 100;
+  z-index: 10000;
   position: relative;
   flex-shrink: 0;
 }

@@ -192,12 +192,9 @@ function openReports() {
   closeDropdown()
 }
 
-// Закрытие dropdown при клике вне
-function handleClickOutside(event: MouseEvent) {
-  const target = event.target as HTMLElement
-  if (!target.closest('.user-profile-container')) {
-    closeDropdown()
-  }
+// Закрытие dropdown при клике вне (директива уже гарантирует, что клик вне контейнера)
+function handleClickOutside() {
+  closeDropdown()
 }
 </script>
 
