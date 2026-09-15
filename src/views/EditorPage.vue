@@ -1073,6 +1073,15 @@ const currentP5Version = computed(() => {
           <span class="btn-icon">🏫</span>
           <span class="btn-text">Класс</span>
         </button>
+
+        <button
+          @click="router.push('/test')"
+          class="top-btn test-btn"
+          title="Тест на тип личности (MBTI)"
+        >
+          <span class="btn-icon">🐸</span>
+          <span class="btn-text">Тест</span>
+        </button>
       </div>
 
       <div class="top-bar-right">
@@ -1778,6 +1787,14 @@ const currentP5Version = computed(() => {
   background-color: rgba(255, 255, 255, 0.14);
 }
 
+/* Тест — мягкий жёлто-оранжевый */
+.test-btn {
+  background-color: transparent;
+}
+.test-btn:hover {
+  background-color: rgba(240, 178, 50, 0.26);
+}
+
 /* Войти — спокойный контурный серо-синий */
 .auth-btn {
   background-color: transparent;
@@ -1797,6 +1814,7 @@ const currentP5Version = computed(() => {
 .theme-light .explore-btn,
 .theme-light .share-btn,
 .theme-light .class-btn,
+.theme-light .test-btn,
 .theme-light .report-btn,
 .theme-light .format-btn {
   background-color: transparent;
@@ -1804,6 +1822,7 @@ const currentP5Version = computed(() => {
 .theme-light .explore-btn:hover,
 .theme-light .share-btn:hover,
 .theme-light .class-btn:hover,
+.theme-light .test-btn:hover,
 .theme-light .report-btn:hover,
 .theme-light .format-btn:hover {
   background-color: rgba(0, 0, 0, 0.08);

@@ -12,6 +12,7 @@ const AdminUsersPage = () => import('../views/AdminUsersPage.vue')
 const ClassPage = () => import('../views/ClassPage.vue')
 const RoomPage = () => import('../views/RoomPage.vue')
 const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
+const MbtiTestPage = () => import('../views/MbtiTestPage.vue')
 
 const routes = [
   {
@@ -73,6 +74,12 @@ const routes = [
     name: 'my-programs',
     component: MyProgramsPage,
     meta: { title: 'Мои программы', requiresAuth: true }
+  },
+  {
+    path: '/test',
+    name: 'test',
+    component: MbtiTestPage,
+    meta: { title: 'Тест на тип личности' }
   }
 ]
 
