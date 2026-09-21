@@ -13,6 +13,7 @@ const ClassPage = () => import('../views/ClassPage.vue')
 const RoomPage = () => import('../views/RoomPage.vue')
 const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
 const MbtiTestPage = () => import('../views/MbtiTestPage.vue')
+const BelbinPage = () => import('../views/BelbinPage.vue')
 
 const routes = [
   {
@@ -80,6 +81,12 @@ const routes = [
     name: 'test',
     component: MbtiTestPage,
     meta: { title: 'Тест на тип личности' }
+  },
+  {
+    path: '/test-belbin',
+    name: 'test-belbin',
+    component: BelbinPage,
+    meta: { title: 'Тест на командные роли' }
   }
 ]
 

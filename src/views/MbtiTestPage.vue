@@ -474,7 +474,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="rule"><span class="rule-icon">🔍</span> Слева таблица типов: чем честнее отвечаешь, тем быстрее я найду твой самый родной тип.</div>
           <div class="rule"><span class="rule-icon">🧪</span> В конце — твой тип и процент правдивости. Ква-обещаю: без обид.</div>
         </div>
-        <button class="primary-btn" @click="startTest">Начать квакать →</button>
+        <div class="intro-actions">
+          <button class="primary-btn" @click="startTest">Начать квакать →</button>
+          <button class="ghost-btn" @click="router.push('/test-belbin')">🦅 Другой тест — у орлёнка Орлика</button>
+        </div>
       </div>
     </section>
 
@@ -855,6 +858,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 12px;
   text-align: left;
   margin-bottom: 26px;
+}
+
+.intro-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .rule {

@@ -979,6 +979,22 @@ function navigateToDashboard() {
   router.push('/my-programs');
 }
 
+// Выбор теста (выпадающее меню с тестами)
+const testMenuOpen = ref(false);
+
+function toggleTestMenu() {
+  testMenuOpen.value = !testMenuOpen.value;
+}
+
+function closeTestMenu() {
+  testMenuOpen.value = false;
+}
+
+function goTest(path: string) {
+  testMenuOpen.value = false;
+  router.push(path);
+}
+
 // Функции переключения версии p5.js
 function setP5Source(source: P5Source) {
   p5Source.value = source;
@@ -1074,14 +1090,37 @@ const currentP5Version = computed(() => {
           <span class="btn-text">Класс</span>
         </button>
 
-        <button
-          @click="router.push('/test')"
-          class="top-btn test-btn"
-          title="Тест на тип личности (MBTI)"
-        >
-          <span class="btn-icon">🐸</span>
-          <span class="btn-text">Тест</span>
-        </button>
+        <div class="test-menu-wrap" v-click-outside="closeTestMenu">
+          <button
+            @click="toggleTestMenu"
+            class="top-btn test-btn"
+            :class="{ active: testMenuOpen }"
+            title="Выбрать тест"
+          >
+            <span class="btn-icon">🧪</span>
+            <span class="btn-text">Тесты</span>
+            <span class="btn-caret" :class="{ rotated: testMenuOpen }">▾</span>
+          </button>
+          <Transition name="menu-fade">
+            <div v-if="testMenuOpen" class="test-menu">
+              <div class="test-menu-title">Выбери тест</div>
+              <button class="test-menu-item" @click="goTest('/test')">
+                <span class="tmi-icon">🐸</span>
+                <span class="tmi-info">
+                  <b>Лягушонок Ква</b>
+                  <small>Тип личности (MBTI)</small>
+                </span>
+              </button>
+              <button class="test-menu-item" @click="goTest('/test-belbin')">
+                <span class="tmi-icon">🦅</span>
+                <span class="tmi-info">
+                  <b>Орлёнок Орлик</b>
+                  <small>Командные роли Белбина</small>
+                </span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
 
       <div class="top-bar-right">
@@ -1793,6 +1832,99 @@ const currentP5Version = computed(() => {
 }
 .test-btn:hover {
   background-color: rgba(240, 178, 50, 0.26);
+}
+.test-btn.active {
+  border-left: none;
+  background-color: rgba(240, 178, 50, 0.3);
+}
+
+.btn-caret {
+  font-size: 11px;
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+.btn-caret.rotated {
+  transform: rotate(180deg);
+}
+
+.test-menu-wrap {
+  position: relative;
+}
+
+.test-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  z-index: 20000;
+}
+
+.theme-light .test-menu {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.test-menu-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  padding: 6px 10px 8px;
+}
+
+.test-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.test-menu-item:hover {
+  background: var(--bg-secondary);
+}
+
+.tmi-icon {
+  font-size: 26px;
+}
+
+.tmi-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tmi-info b {
+  font-size: 14px;
+}
+
+.tmi-info small {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.menu-fade-enter-active,
+.menu-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.menu-fade-enter-from,
+.menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 /* Войти — спокойный контурный серо-синий */
