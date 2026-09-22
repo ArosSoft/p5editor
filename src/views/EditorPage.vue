@@ -1762,18 +1762,18 @@ const currentP5Version = computed(() => {
 /* Индивидуальные спокойные цвета верхних кнопок (низкая насыщенность) */
 
 /* Старт — мягкий зелёный */
-.top-btn:nth-of-type(1) {
+.top-bar-left > .top-btn:nth-of-type(1) {
   background-color: rgba(46, 160, 67, 0.16);
 }
-.top-btn:nth-of-type(1):hover {
+.top-bar-left > .top-btn:nth-of-type(1):hover {
   background-color: rgba(46, 160, 67, 0.22);
 }
 
 /* Стоп — мягкий красный */
-.top-btn:nth-of-type(2) {
+.top-bar-left > .top-btn:nth-of-type(2) {
   background-color: rgba(212, 76, 64, 0.16);
 }
-.top-btn:nth-of-type(2):hover {
+.top-bar-left > .top-btn:nth-of-type(2):hover {
   background-color: rgba(212, 76, 64, 0.22);
 }
 
