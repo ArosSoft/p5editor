@@ -29,6 +29,7 @@ const activeTab = ref<TabType>('pdf');
 
 // PDF viewer state
 const pdfCanvas = ref<HTMLCanvasElement | null>(null);
+const pdfViewerElement = ref<HTMLElement | null>(null);
 const pdfLoading = ref(false);
 const pdfError = ref('');
 const pdfPageNum = ref(1);
@@ -424,6 +425,12 @@ onUnmounted(() => {
     clearInterval(typingInterval.value);
     typingInterval.value = null;
   }
+  // Снимаем слушатели полноэкранного режима и выходим из него: иначе браузер
+  // остался бы в fullscreen после закрытия справочника
+  detachFullscreenListeners();
+  if (isPdfFullscreen.value) {
+    void exitNativeFullscreen();
+  }
   // Отменяем текущий рендер PDF
   if (currentRenderTask) {
     try {
@@ -549,25 +556,156 @@ function pdfGoToPage() {
   }
 }
 
-async function togglePdfFullscreen() {
-  isPdfFullscreen.value = !isPdfFullscreen.value;
+// --- Полноэкранный режим справочника ---
 
-  // Ждём применения CSS и layout
+type FullscreenElementLike = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+type FullscreenDocumentLike = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+/**
+ * Элемент, который сейчас находится в полноэкранном режиме браузера.
+ * Учитываем webkit-префикс для старых Safari.
+ */
+function nativeFullscreenElement(): Element | null {
+  const doc = document as FullscreenDocumentLike;
+  return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
+/**
+ * Включает настоящий полноэкранный режим браузера — без интерфейса браузера и системы.
+ * @returns true, если режим удалось включить
+ */
+async function requestNativeFullscreen(): Promise<boolean> {
+  const element = pdfViewerElement.value as FullscreenElementLike | null;
+  if (!element || nativeFullscreenElement()) return false;
+
+  try {
+    if (typeof element.requestFullscreen === 'function') {
+      await element.requestFullscreen();
+      return true;
+    }
+    if (typeof element.webkitRequestFullscreen === 'function') {
+      await element.webkitRequestFullscreen();
+      return true;
+    }
+  } catch (error) {
+    // Например, браузер не дал разрешение или запрос ушёл без действия пользователя.
+    // Тогда остаёмся в CSS-режиме на весь viewport — вёрстка та же, без интерфейса браузера.
+    console.warn('[AIChat] Полноэкранный режим браузера недоступен:', error);
+  }
+
+  return false;
+}
+
+async function exitNativeFullscreen() {
+  if (!nativeFullscreenElement()) return;
+
+  const doc = document as FullscreenDocumentLike;
+
+  try {
+    if (typeof doc.exitFullscreen === 'function') {
+      await doc.exitFullscreen();
+    } else if (typeof doc.webkitExitFullscreen === 'function') {
+      await doc.webkitExitFullscreen();
+    }
+  } catch (error) {
+    console.warn('[AIChat] Не удалось выйти из полноэкранного режима:', error);
+  }
+}
+
+function handleFullscreenChange() {
+  if (nativeFullscreenElement()) {
+    // Вошли в полноэкранный режим браузера: интерфейс браузера и системы скрыт,
+    // высота окна стала больше — пересчитываем масштаб страницы
+    if (isPdfFullscreen.value && pdfDoc) {
+      nextTick(async () => {
+        pdfScale.value = await calcPdfScale();
+        renderPDFPage(pdfPageNum.value);
+      });
+    }
+    return;
+  }
+
+  // Вышли из полноэкранного режима (Esc, F11, системная кнопка браузера) —
+  // синхронизируем состояние справочника
+  exitPdfFullscreen();
+}
+
+/**
+ * Esc закрывает полноэкранный режим. В native fullscreen браузер выходит сам
+ * (состояние синхронизирует handleFullscreenChange), а здесь закрывается
+ * CSS-режим для браузеров, где полноэкранное API недоступно.
+ */
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return;
+  exitPdfFullscreen();
+}
+
+function attachFullscreenListeners() {
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  window.addEventListener('keydown', handleFullscreenKeydown);
+}
+
+function detachFullscreenListeners() {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  window.removeEventListener('keydown', handleFullscreenKeydown);
+}
+
+async function togglePdfFullscreen() {
+  if (isPdfFullscreen.value) {
+    await exitPdfFullscreen();
+    return;
+  }
+
+  isPdfFullscreen.value = true;
+  attachFullscreenListeners();
+
+  // Ждём применения CSS и layout: вьюер переезжает в body через Teleport
   await nextTick();
   await new Promise((resolve) => setTimeout(resolve, 50));
 
-  if (isPdfFullscreen.value) {
-    // Вычисляем оптимальный масштаб для полного экрана
-    const newScale = await calcPdfScale();
-    pdfScale.value = newScale;
-  } else {
-    // Возвращаем стандартный масштаб
-    pdfScale.value = 1.5;
-  }
+  // Запрашиваем настоящий fullscreen браузера (без интерфейса браузера и системы)
+  const native = await requestNativeFullscreen();
 
-  // Перерисовываем с новым масштабом
-  renderPDFPage(pdfPageNum.value);
+  if (!native) {
+    // Полноэкранное API недоступно — остаёмся в CSS-режиме:
+    // считаем масштаб и перерисовываем страницу здесь
+    pdfScale.value = await calcPdfScale();
+    renderPDFPage(pdfPageNum.value);
+  }
+  // При native-режиме масштаб пересчитает handleFullscreenChange,
+  // когда окно уже получит размер экрана
 }
+
+/**
+ * Полноэкранный режим держим только пока открыта вкладка PDF и само окно чата:
+ * иначе после закрытия панели PDF оставался бы висеть поверх интерфейса
+ */
+async function exitPdfFullscreen() {
+  if (!isPdfFullscreen.value) return;
+
+  await exitNativeFullscreen();
+  detachFullscreenListeners();
+
+  isPdfFullscreen.value = false;
+  pdfScale.value = 1.5;
+
+  if (props.isVisible && activeTab.value === 'pdf') {
+    nextTick(() => {
+      renderPDFPage(pdfPageNum.value);
+    });
+  }
+}
+
+watch([() => props.isVisible, activeTab], ([isVisible, tab]) => {
+  if (isVisible && tab === 'pdf') return;
+  exitPdfFullscreen();
+});
 
 // Загружаем PDF при переключении на вкладку
 watch(activeTab, (newTab) => {
@@ -689,7 +827,7 @@ watch(
               @click="togglePdfFullscreen"
               :title="
                 isPdfFullscreen
-                  ? 'Выйти из полноэкранного режима'
+                  ? 'Выйти из полноэкранного режима (Esc)'
                   : 'Во весь экран'
               "
             >
@@ -797,50 +935,59 @@ watch(
 
           <!-- Вкладка PDF -->
           <template v-if="activeTab === 'pdf'">
-            <div class="pdf-viewer" :class="{ fullscreen: isPdfFullscreen }">
-              <!-- Боковая панель навигации (видна только в полноэкранном режиме) -->
-              <div v-if="isPdfFullscreen" class="pdf-side-nav">
-                <button
-                  class="side-nav-btn"
-                  @click="pdfPrevPage"
-                  :disabled="pdfPageNum <= 1"
-                  title="Предыдущая страница"
-                >
-                  ◀
-                </button>
-                <input
-                  v-model="pdfPageInput"
-                  @keydown.enter="pdfGoToPage"
-                  @blur="pdfGoToPage"
-                  class="side-page-input"
-                  type="text"
-                  :placeholder="String(pdfPageNum)"
-                  size="3"
-                />
-                <button
-                  class="side-nav-btn"
-                  @click="pdfNextPage"
-                  :disabled="pdfPageNum >= pdfTotalPages"
-                  title="Следующая страница"
-                >
-                  ▶
-                </button>
-                <button
-                  class="side-nav-btn fullscreen-exit-btn"
-                  @click="togglePdfFullscreen"
-                  title="Выйти из полноэкранного режима"
-                >
-                  ⊡
-                </button>
-              </div>
+            <!-- В полноэкранном режиме вьюер выносится прямо в body: внутри окна чата
+                 он заперт в stacking context оверлея (z-index) и не может быть
+                 поверх остальных элементов интерфейса -->
+            <Teleport to="body" :disabled="!isPdfFullscreen">
+              <div
+                ref="pdfViewerElement"
+                class="pdf-viewer"
+                :class="{ fullscreen: isPdfFullscreen }"
+              >
+                <!-- Боковая панель навигации (видна только в полноэкранном режиме) -->
+                <div v-if="isPdfFullscreen" class="pdf-side-nav">
+                  <button
+                    class="side-nav-btn"
+                    @click="pdfPrevPage"
+                    :disabled="pdfPageNum <= 1"
+                    title="Предыдущая страница"
+                  >
+                    ◀
+                  </button>
+                  <input
+                    v-model="pdfPageInput"
+                    @keydown.enter="pdfGoToPage"
+                    @blur="pdfGoToPage"
+                    class="side-page-input"
+                    type="text"
+                    :placeholder="String(pdfPageNum)"
+                    size="3"
+                  />
+                  <button
+                    class="side-nav-btn"
+                    @click="pdfNextPage"
+                    :disabled="pdfPageNum >= pdfTotalPages"
+                    title="Следующая страница"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    class="side-nav-btn fullscreen-exit-btn"
+                    @click="togglePdfFullscreen"
+                    title="Выйти из полноэкранного режима (Esc)"
+                  >
+                    ⊡
+                  </button>
+                </div>
 
-              <!-- Canvas для PDF -->
-              <div class="pdf-canvas-container">
-                <canvas ref="pdfCanvas" class="pdf-canvas"></canvas>
-                <div v-if="pdfLoading" class="pdf-loading">Загрузка PDF...</div>
-                <div v-if="pdfError" class="pdf-error">{{ pdfError }}</div>
+                <!-- Canvas для PDF -->
+                <div class="pdf-canvas-container">
+                  <canvas ref="pdfCanvas" class="pdf-canvas"></canvas>
+                  <div v-if="pdfLoading" class="pdf-loading">Загрузка PDF...</div>
+                  <div v-if="pdfError" class="pdf-error">{{ pdfError }}</div>
+                </div>
               </div>
-            </div>
+            </Teleport>
           </template>
         </template>
       </div>
@@ -893,7 +1040,10 @@ watch(
   animation: pulse-ring 2s infinite;
 }
 
-/* Оверлей чата - БЕЗ РАЗМЫТИЯ */
+/* Оверлей чата - БЕЗ РАЗМЫТИЯ.
+   z-index намеренно ниже модальных окон (1000+) и верхней панели с меню
+   пользователя (10000): в обычном режиме окно не должно их перекрывать,
+   а выше панелей редактора (холст, примеры, палитра - до 100). */
 .ai-chat-overlay {
   position: fixed;
   top: 0;
@@ -905,7 +1055,7 @@ watch(
   align-items: flex-end;
   justify-content: flex-end;
   padding: 20px;
-  z-index: 9999;
+  z-index: 800;
   animation: fadeIn 0.2s ease;
 }
 
@@ -1633,13 +1783,15 @@ watch(
   background: rgba(100, 108, 255, 0.4);
 }
 
+/* Полноэкранный PDF отрисовывается прямо в body (см. Teleport в шаблоне) и должен
+   быть выше любых элементов интерфейса: верхней панели (10000), тест-меню (20000) и т.д. */
 .pdf-viewer.fullscreen {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 10000;
+  z-index: 30000;
   background: v-bind('props.theme === "dark" ? "#0a0a0a" : "#f5f5f5"');
 }
 
