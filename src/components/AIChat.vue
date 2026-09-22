@@ -47,8 +47,17 @@ async function calcPdfScale(): Promise<number> {
   const container = pdfCanvas.value?.parentElement;
   if (!container || !pdfDoc) return 1.5;
 
-  const containerWidth = container.clientWidth - 40; // padding
-  const containerHeight = container.clientHeight - 40;
+  // clientWidth/clientHeight включают padding, поэтому вычитаем его:
+  // в полноэкранном режиме слева есть отступ под панель навигации
+  const styles = window.getComputedStyle(container);
+  const paddingX =
+    parseFloat(styles.paddingLeft || '0') + parseFloat(styles.paddingRight || '0');
+  const paddingY =
+    parseFloat(styles.paddingTop || '0') + parseFloat(styles.paddingBottom || '0');
+
+  // плюс по 20px свободного отступа от краёв области содержимого
+  const containerWidth = container.clientWidth - paddingX - 40;
+  const containerHeight = container.clientHeight - paddingY - 40;
 
   // Получаем размер первой страницы при scale=1
   const page = await pdfDoc.getPage(1);
@@ -1797,7 +1806,9 @@ watch(
 
 .pdf-viewer.fullscreen .pdf-canvas-container {
   height: calc(100vh - 50px);
-  padding: 0;
+  /* Слева оставляем место под панель навигации (20px отступ + ~68px ширина),
+     иначе страница PDF уходит под неё */
+  padding: 0 0 0 100px;
   display: flex;
   justify-content: center;
   align-items: center;
