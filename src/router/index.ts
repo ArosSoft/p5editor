@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { useAuth } from '../composables/useAuth'
+import { useAuth, initAuth } from '../composables/useAuth'
 
 // Lazy loading компонентов
 const EditorPage = () => import('../views/EditorPage.vue')
@@ -109,12 +109,20 @@ router.beforeEach(async (to, from, next) => {
     document.title = `${title} — p5editor`
   }
 
+  // Сессия нужна только маршрутам с проверкой прав доступа
+  const needsAuth = Boolean(
+    to.meta.requiresAuth || to.meta.requiresModerator || to.meta.requiresAdmin
+  )
+
   // Получаем состояние авторизации
-  const { user, session, isReady, readyPromise } = useAuth()
-  
-  // Ждём готовности авторизации перед проверкой прав
-  if (!isReady.value && readyPromise.value) {
-    await readyPromise.value
+  const { user, session, isReady } = useAuth()
+
+  // Ждём готовности авторизации ТОЛЬКО перед проверкой прав. На новом компьютере
+  // supabase.auth.getSession() ходит в сеть и может отвечать ~10 секунд: раньше
+  // этот await выполнялся на каждом маршруте, и первый запуск «висел» без интерфейса.
+  // initAuth() идемпотентна — если фоновая инициализация уже идёт, вернётся тот же промис.
+  if (needsAuth && !isReady.value) {
+    await initAuth()
   }
 
   // Проверка авторизации через восстанавливаемую сессию

@@ -170,7 +170,10 @@ watch(() => props.visible, (newVal) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  /* Выше всех слоёв интерфейса, включая верхнюю панель редактора (.top-bar — 10000),
+     меню тестов (20000) и полноэкранный PDF справочника (30000): заставка должна
+     накрывать их своим полупрозрачным фоном и картинкой. */
+  z-index: 100000;
   backdrop-filter: blur(4px);
 }
 
