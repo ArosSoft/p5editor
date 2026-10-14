@@ -119,6 +119,35 @@ const isCurrentStepDemo = computed(() => {
   return currentStep.value?.title === 'Демо' && currentStep.value?.file === 'sketch.js'
 })
 
+// Подтверждение загрузки демо: код пользователя будет перезаписан
+const showDemoConfirm = ref(false)
+const pendingDemoStep = ref<Step | null>(null)
+
+function isDemoStep(step: Step): boolean {
+  return step.title === 'Демо' && step.file === 'sketch.js'
+}
+
+function handleStepClick(step: Step) {
+  if (isDemoStep(step)) {
+    pendingDemoStep.value = step
+    showDemoConfirm.value = true
+    return
+  }
+  loadStep(step)
+}
+
+function confirmDemoLoad() {
+  const step = pendingDemoStep.value
+  showDemoConfirm.value = false
+  pendingDemoStep.value = null
+  if (step) loadStep(step)
+}
+
+function cancelDemoLoad() {
+  showDemoConfirm.value = false
+  pendingDemoStep.value = null
+}
+
 // Ключи для localStorage
 const STORAGE_KEYS = {
   SELECTED_EXAMPLE: 'p5js_selected_example',
@@ -571,7 +600,7 @@ function goToNextStep() {
         :key="step.file" 
         class="step-row"
         :class="{ 'active-step': currentStep?.file === step.file }"
-        @click="loadStep(step)"
+        @click="handleStepClick(step)"
       >
         <span class="step-num">{{ idx + 1 }}</span>
         <span class="step-title">
@@ -622,6 +651,24 @@ function goToNextStep() {
         <button class="btn" @click="download()">↓ Скачать</button>
       </div>
     </div>
+
+    <Teleport to="body">
+      <Transition name="demo-modal">
+        <div v-if="showDemoConfirm" class="demo-overlay" @click.self="cancelDemoLoad">
+          <div class="demo-modal" :class="theme">
+            <h3 class="demo-modal-title">Загрузить демо?</h3>
+            <p class="demo-modal-text">
+              Весь ваш код будет удалён и заменён на код из демонстрационного примера.
+              Это действие нельзя отменить.
+            </p>
+            <div class="demo-modal-actions">
+              <button class="demo-btn ghost" @click="cancelDemoLoad">Отмена</button>
+              <button class="demo-btn danger" @click="confirmDemoLoad">Удалить и загрузить</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -1316,4 +1363,84 @@ function goToNextStep() {
 
 .fade-enter-active, .fade-leave-active { transition: all 0.25s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+
+/* ==========================================
+   Demo confirmation modal
+   ========================================== */
+.demo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 2000;
+}
+
+.demo-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #2a2a4a;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.demo-modal.light {
+  background: #ffffff;
+  color: #1a1a2e;
+  border-color: #e0e0e0;
+}
+
+.demo-modal-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.demo-modal-text {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b0b0c0;
+}
+.demo-modal.light .demo-modal-text { color: #555; }
+
+.demo-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.demo-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.demo-btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+.demo-btn.ghost:hover { background: rgba(255, 255, 255, 0.12); }
+.demo-modal.light .demo-btn.ghost { background: rgba(0, 0, 0, 0.05); }
+.demo-modal.light .demo-btn.ghost:hover { background: rgba(0, 0, 0, 0.1); }
+
+.demo-btn.danger {
+  background: #e5484d;
+  color: #fff;
+}
+.demo-btn.danger:hover { background: #f2555a; }
+
+.demo-modal-enter-active, .demo-modal-leave-active { transition: opacity 0.2s ease; }
+.demo-modal-enter-active .demo-modal, .demo-modal-leave-active .demo-modal { transition: transform 0.2s ease; }
+.demo-modal-enter-from, .demo-modal-leave-to { opacity: 0; }
+.demo-modal-enter-from .demo-modal, .demo-modal-leave-to .demo-modal { transform: scale(0.95); }
 </style>
