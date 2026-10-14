@@ -4,7 +4,8 @@ import { computed } from 'vue';
 const props = defineProps<{ 
   messages: string[],
   theme?: 'dark' | 'light',
-  collapsed?: boolean
+  collapsed?: boolean,
+  fontSize?: number
 }>()
 
 const emit = defineEmits<{
@@ -33,7 +34,7 @@ const visibleMessages = computed(() => {
 </script>
 
 <template>
-  <div class="console" :class="`theme-${theme}`">
+  <div class="console" :class="`theme-${theme}`" :style="{ '--console-font-size': (fontSize || 16) + 'px' }">
     <div class="console-header">
       <div class="console-header-left">
         <span class="console-title">
@@ -202,7 +203,7 @@ const visibleMessages = computed(() => {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 16px;
+  font-size: var(--console-font-size, 16px);
   line-height: 1.4;
   padding: 4px 8px;
   border-radius: 4px;
@@ -221,7 +222,7 @@ const visibleMessages = computed(() => {
   color: #4caf50;
   font-weight: bold;
   opacity: 0.7;
-  font-size: 14px;
+  font-size: calc(var(--console-font-size, 16px) - 2px);
 }
 
 .console.theme-light .console-prompt {

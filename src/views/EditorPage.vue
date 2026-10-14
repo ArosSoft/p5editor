@@ -74,6 +74,7 @@ const showExamples = ref(false);
 const showPalette = ref(false);
 
 const fontSize = ref(19);
+const consoleFontSize = ref(16);
 const fontFamily = ref('Consolas, Monaco, monospace');
 
 type Theme = 'dark' | 'light';
@@ -84,6 +85,7 @@ const historyIndex = ref(-1);
 
 const consoleHeight = ref(150);
 const isConsoleVisible = ref(true);
+const isCanvasVisible = ref(true);
 const isDragging = ref(false);
 const startY = ref(0);
 const startHeight = ref(150);
@@ -91,7 +93,6 @@ const startHeight = ref(150);
 // Минимальные ширины панелей (в пикселях)
 const MIN_EXAMPLES_WIDTH = 250;
 const MIN_EDITOR_WIDTH = 300;
-const MIN_CANVAS_WIDTH = 450;
 
 // Ширины панелей в пикселях (будут рассчитаны при монтировании)
 const examplesWidth = ref(420);
@@ -137,6 +138,7 @@ const mainRef = ref<HTMLElement | null>(null);
 
 // Добавляем новые переменные для "призрачного" ресайза
 const ghostDividerX = ref<number | null>(null); // позиция призрачной линии
+const ghostDividerY = ref<number | null>(null); // позиция призрачной линии по вертикали
 
 let autoOpenAIChatTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -204,23 +206,34 @@ function startConsoleResize(e: MouseEvent) {
   startHeight.value = consoleHeight.value;
   document.body.style.cursor = 'row-resize';
   document.body.style.userSelect = 'none';
+
+  // Отключаем transition во время перетаскивания
+  document.documentElement.classList.add('resizing-panels');
 }
 
 function onConsoleResize(e: MouseEvent) {
   if (!isDragging.value) return;
-  const deltaY = startY.value - e.clientY;
+  // Вместо обновления реальной высоты — просто двигаем "призрачную линию"
+  ghostDividerY.value = e.clientY;
+}
+
+function stopConsoleResize() {
+  if (!isDragging.value) return;
+
+  // Теперь применяем финальную высоту ОДИН раз
+  const deltaY = startY.value - (ghostDividerY.value ?? startY.value);
   const newHeight = Math.min(
     Math.max(50, startHeight.value + deltaY),
     window.innerHeight * 0.5
   );
   consoleHeight.value = newHeight;
-}
 
-function stopConsoleResize() {
-  if (!isDragging.value) return;
+  // Очищаем состояние
+  ghostDividerY.value = null;
   isDragging.value = false;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
+  document.documentElement.classList.remove('resizing-panels');
 }
 
 // === Обработчики для перетаскивания вертикальных разделителей ===
@@ -269,7 +282,7 @@ function stopDividerDrag() {
     const exW =
       showExamples.value || showPalette.value ? examplesWidth.value : 0;
     const editorWidth = availableWidth - exW - newCanvasWidth;
-    if (newCanvasWidth >= MIN_CANVAS_WIDTH && editorWidth >= MIN_EDITOR_WIDTH) {
+    if (newCanvasWidth > 0 && editorWidth >= MIN_EDITOR_WIDTH) {
       canvasWidth.value = newCanvasWidth;
     }
   }
@@ -284,6 +297,10 @@ function stopDividerDrag() {
 
 function toggleConsole() {
   isConsoleVisible.value = !isConsoleVisible.value;
+}
+
+function toggleCanvas() {
+  isCanvasVisible.value = !isCanvasVisible.value;
 }
 
 // Вычисляемая ширина редактора
@@ -639,12 +656,16 @@ function handleFileUpload(event: Event) {
   }
 }
 
+const MAX_FONT_SIZE = 50;
+
 function increaseFontSize() {
-  fontSize.value = Math.min(40, fontSize.value + 1);
+  fontSize.value = Math.min(MAX_FONT_SIZE, fontSize.value + 1);
+  consoleFontSize.value = Math.min(MAX_FONT_SIZE, consoleFontSize.value + 1);
 }
 
 function decreaseFontSize() {
   fontSize.value = Math.max(8, fontSize.value - 1);
+  consoleFontSize.value = Math.max(8, consoleFontSize.value - 1);
 }
 
 function toggleTheme() {
@@ -1436,18 +1457,17 @@ const currentP5Version = computed(() => {
               class="console-resize-handle"
               v-show="isConsoleVisible"
               @mousedown.prevent="startConsoleResize"
-              :class="{ dragging: isDragging }"
+              :class="{ resizing: isDragging }"
             >
-              <div class="handle-line"></div>
-              <div class="handle-line"></div>
-              <div class="handle-line"></div>
+              <div class="resize-handle-grip"></div>
             </div>
-            <ConsoleOutput :messages="messages" :theme="theme" :collapsed="!isConsoleVisible" @toggle="toggleConsole" @clear="clearConsole" />
+            <ConsoleOutput :messages="messages" :theme="theme" :font-size="consoleFontSize" :collapsed="!isConsoleVisible" @toggle="toggleConsole" @clear="clearConsole" />
           </div>
         </div>
 
         <!-- Разделитель: редактор ↔ холст -->
         <div
+          v-if="isCanvasVisible"
           class="resize-handle-vertical"
           :class="{ resizing: draggingDivider === 'editor-canvas' }"
           @mousedown.prevent="startDividerDrag('editor-canvas', $event)"
@@ -1456,7 +1476,11 @@ const currentP5Version = computed(() => {
         </div>
 
         <!-- Панель холста -->
-        <div class="canvas-panel" :style="{ width: canvasWidth + 'px' }">
+        <div
+          v-show="isCanvasVisible"
+          class="canvas-panel"
+          :style="{ width: canvasWidth + 'px' }"
+        >
           <div class="canvas-container">
             <div class="canvas-header">
               <span class="canvas-title"></span>
@@ -1477,6 +1501,13 @@ const currentP5Version = computed(() => {
                 class="canvas-indicator"
                 :class="'status-' + supabaseStatus"
               ></div>
+              <button
+                @click="toggleCanvas"
+                class="canvas-btn canvas-collapse-btn"
+                title="Свернуть холст"
+              >
+                ▸
+              </button>
             </div>
             <div class="canvas-content">
               <P5Canvas
@@ -1490,6 +1521,18 @@ const currentP5Version = computed(() => {
               />
             </div>
           </div>
+        </div>
+
+        <!-- Свёрнутая панель холста -->
+        <div v-if="!isCanvasVisible" class="canvas-collapsed-bar">
+          <button
+            @click="toggleCanvas"
+            class="canvas-btn canvas-collapse-btn canvas-expand-btn"
+            title="Развернуть холст"
+          >
+            <span class="canvas-collapse-icon">◂</span>
+            <span class="canvas-collapse-label">Развернуть холст</span>
+          </button>
         </div>
 
         <!-- AI чат -->
@@ -1511,6 +1554,13 @@ const currentP5Version = computed(() => {
           v-if="ghostDividerX !== null"
           class="ghost-divider"
           :style="{ left: ghostDividerX + 'px' }"
+        />
+
+        <!-- Призрачная линия при изменении высоты консоли -->
+        <div
+          v-if="ghostDividerY !== null"
+          class="ghost-divider-horizontal"
+          :style="{ top: ghostDividerY + 'px' }"
         />
 
         <!-- Оверлей, чтобы iframe не перехватывал мышь -->
@@ -2235,7 +2285,6 @@ const currentP5Version = computed(() => {
   height: 100%;
   overflow: hidden;
   flex-shrink: 0;
-  min-width: 410px;
 }
 
 /* ============================================
@@ -2355,6 +2404,73 @@ const currentP5Version = computed(() => {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* Кнопка сворачивания холста */
+.canvas-collapse-btn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.canvas-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.app.theme-light .canvas-collapse-btn {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.app.theme-light .canvas-collapse-btn:hover {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+/* Свёрнутая панель холста */
+.canvas-collapsed-bar {
+  width: 32px;
+  height: 100%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 15;
+}
+
+/* В свёрнутом режиме — вертикальная кнопка с подписью */
+.canvas-expand-btn {
+  margin-left: 0;
+  width: auto;
+  height: auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.canvas-collapse-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.canvas-collapse-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+
+.app.theme-light .canvas-collapsed-bar {
+  background: rgba(0, 0, 0, 0.05);
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
 .canvas-indicator {
   width: 6px;
   height: 6px;
@@ -2427,28 +2543,31 @@ const currentP5Version = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   z-index: 20;
   background: transparent;
-  transition: background-color 0.2s;
+  transition: background-color 0.15s;
 }
 
 .console-resize-handle:hover,
-.console-resize-handle.dragging {
-  background: rgba(100, 108, 255, 0.2);
+.console-resize-handle.resizing {
+  background: rgba(100, 108, 255, 0.15);
 }
 
-.handle-line {
-  width: 25px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  transition: background-color 0.2s;
+.console-resize-handle .resize-handle-grip {
+  width: 40px;
+  height: 3px;
 }
 
-.console-resize-handle:hover .handle-line,
-.console-resize-handle.dragging .handle-line {
+.console-resize-handle:hover .resize-handle-grip,
+.console-resize-handle.resizing .resize-handle-grip {
   background: #646cff;
+  width: 60px;
+  height: 4px;
+  box-shadow: 0 0 8px rgba(100, 108, 255, 0.4);
+}
+
+.app.theme-light .console-resize-handle .resize-handle-grip {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* Координаты мыши */
@@ -2551,6 +2670,19 @@ const currentP5Version = computed(() => {
   top: 0;
   bottom: 0;
   width: 2px;
+  background: #646cff;
+  box-shadow: 0 0 8px rgba(100, 108, 255, 0.6);
+  z-index: 10000;
+  pointer-events: none;
+  transition: none;
+}
+
+/* Призрачная линия при изменении высоты консоли */
+.ghost-divider-horizontal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: #646cff;
   box-shadow: 0 0 8px rgba(100, 108, 255, 0.6);
   z-index: 10000;
