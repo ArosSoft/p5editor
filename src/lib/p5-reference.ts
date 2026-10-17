@@ -268,7 +268,7 @@
     { name: 'circle(x, y, d)', description: 'Рисует круг', section: 'Shape' },
     {
       name: 'ellipse(x, y, w, [h])',
-      description: 'Рисует эллипс',
+      description: 'Рисует эллипс (овал)',
       section: 'Shape',
     },
     {
