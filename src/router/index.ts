@@ -14,6 +14,9 @@ const RoomPage = () => import('../views/RoomPage.vue')
 const MyProgramsPage = () => import('../views/MyProgramsPage.vue')
 const MbtiTestPage = () => import('../views/MbtiTestPage.vue')
 const BelbinPage = () => import('../views/BelbinPage.vue')
+const ImagesPage = () => import('../views/ImagesPage.vue')
+const StorageChoicePage = () => import('../views/StorageChoicePage.vue')
+const YandexImagesPage = () => import('../views/YandexImagesPage.vue')
 
 const routes = [
   {
@@ -77,6 +80,24 @@ const routes = [
     meta: { title: 'Мои программы', requiresAuth: true }
   },
   {
+    path: '/images',
+    name: 'my-images',
+    component: StorageChoicePage,
+    meta: { title: 'Мои изображения', requiresAuth: true }
+  },
+  {
+    path: '/images/cloudinary',
+    name: 'my-images-cloudinary',
+    component: ImagesPage,
+    meta: { title: 'Мои изображения', requiresAuth: true }
+  },
+  {
+    path: '/images/yandex',
+    name: 'my-images-yandex',
+    component: YandexImagesPage,
+    meta: { title: 'Мои изображения', requiresAuth: true }
+  },
+  {
     path: '/test',
     name: 'test',
     component: MbtiTestPage,
@@ -114,6 +135,10 @@ router.beforeEach(async (to, from, next) => {
     to.meta.requiresAuth || to.meta.requiresModerator || to.meta.requiresAdmin
   )
 
+  // В разработке демо изображений открывается без входа (?demo=1)
+  const isImagesDemo =
+    import.meta.env.DEV && to.query.demo === '1' && to.path.startsWith('/images')
+
   // Получаем состояние авторизации
   const { user, session, isReady } = useAuth()
 
@@ -121,12 +146,12 @@ router.beforeEach(async (to, from, next) => {
   // supabase.auth.getSession() ходит в сеть и может отвечать ~10 секунд: раньше
   // этот await выполнялся на каждом маршруте, и первый запуск «висел» без интерфейса.
   // initAuth() идемпотентна — если фоновая инициализация уже идёт, вернётся тот же промис.
-  if (needsAuth && !isReady.value) {
+  if (needsAuth && !isImagesDemo && !isReady.value) {
     await initAuth()
   }
 
   // Проверка авторизации через восстанавливаемую сессию
-  if (to.meta.requiresAuth) {
+  if (to.meta.requiresAuth && !isImagesDemo) {
     if (!user.value && !session.value) {
       next({ path: '/', query: { auth: 'required' } })
       return

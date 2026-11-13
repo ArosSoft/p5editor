@@ -187,6 +187,11 @@ function navigateToMyPrograms() {
   closeDropdown()
 }
 
+function navigateToMyImages() {
+  router.push('/images')
+  closeDropdown()
+}
+
 function openReports() {
   showReports.value = true
   closeDropdown()
@@ -265,6 +270,13 @@ function handleClickOutside() {
             <path fill="currentColor" d="M4 5h16v3H4V5zm0 5h16v3H4v-3zm0 5h10v3H4v-3z"/>
           </svg>
           Мои программы
+        </button>
+
+        <button class="dropdown-item" @click="navigateToMyImages">
+          <svg class="dropdown-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+          </svg>
+          Мои изображения
         </button>
 
         <button class="dropdown-item" @click="startEditing">

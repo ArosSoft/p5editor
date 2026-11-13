@@ -296,6 +296,38 @@ export interface Database {
           updated_at?: string
         }
       }
+      cloudinary_accounts: {
+        Row: {
+          user_id: string
+          cloud_name: string
+          api_key: string
+          api_secret_encrypted: string
+          cloudinary_email: string | null
+          verified: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          cloud_name: string
+          api_key: string
+          api_secret_encrypted: string
+          cloudinary_email?: string | null
+          verified?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          cloud_name?: string
+          api_key?: string
+          api_secret_encrypted?: string
+          cloudinary_email?: string | null
+          verified?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       gallery_sketches: {
@@ -312,6 +344,17 @@ export interface Database {
           likes: number
           views: number
           created_at: string
+        }
+      }
+      cloudinary_accounts_safe: {
+        Row: {
+          user_id: string
+          cloud_name: string
+          api_key: string
+          cloudinary_email: string | null
+          verified: boolean
+          created_at: string
+          updated_at: string
         }
       }
     }
@@ -386,4 +429,39 @@ export type RoomSketchUpdate = Database['public']['Tables']['room_sketches']['Up
 // Комната со счётчиком присоединённых скетчей (для таблицы на странице «Класс»)
 export interface ClassRoomWithCount extends ClassRoom {
   sketch_count?: number
+}
+
+// Типы для хранилища изображений Cloudinary
+// Привязка аккаунта (безопасный view: секрет не входит)
+export type CloudinaryAccountSafe = Database['public']['Views']['cloudinary_accounts_safe']['Row']
+
+// Картинка из Cloudinary (ответ Edge Function cloudinary-proxy)
+export interface CloudinaryImage {
+  public_id: string
+  format: string
+  bytes: number
+  width: number
+  height: number
+  created_at: string
+  secure_url: string
+  display_name: string | null
+  folder: string | null
+  cloud_name: string
+}
+
+// Страница списка картинок из Edge Function
+export interface CloudinaryImagesPage {
+  images: CloudinaryImage[]
+  total_count: number | null
+  next_cursor: string | null
+}
+
+// План Cloudinary (GET /usage через прокси)
+export interface CloudinaryUsage {
+  plan: string | null
+  credits: {
+    usage: number
+    limit: number | null
+    used_percent: number | null
+  } | null
 }

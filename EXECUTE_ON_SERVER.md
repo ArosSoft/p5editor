@@ -1,5 +1,12 @@
 # Выполнение миграции на сервере 192.168.1.211
 
+> **Актуализация (11.11.2026):** прямое подключение к боевой базе теперь
+> доступно только по IPv6, а JWT из примеров ниже **больше не принимается как
+> пароль**. Для подключения с IPv4 используйте shared pooler (session mode):
+> `postgresql://postgres.gfupycrmnegbcafuoxdx:<ПАРОЛЬ_БАЗЫ>@aws-1-eu-central-1.pooler.supabase.com:5432/postgres`
+> (пароль базы: Dashboard → Settings → Database). Подробности — в
+> `DEPLOY_CLOUDINARY.md`.
+
 ## Вариант А: Через Supabase CLI (рекомендуется)
 
 ```bash
