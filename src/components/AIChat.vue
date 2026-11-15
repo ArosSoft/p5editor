@@ -70,18 +70,148 @@ async function calcPdfScale(): Promise<number> {
   );
 }
 
-const messages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>(
-  []
-);
+// Блок результата поиска: сигнатура команды, описание и пример/картинка в markdown
+type ReferenceBlock = {
+  // Сигнатура команды, например "floor(n)"
+  name: string;
+  // Имя без параметров, например "floor" — подставляется в запрос по клику
+  command: string;
+  // Описание в markdown (с подсветкой совпавших слов)
+  description: string;
+  // Пример кода и изображение в markdown
+  markdown: string;
+};
+
+// Кратко выведенная команда из списка остальных совпадений
+type ReferenceCommand = {
+  name: string;
+  command: string;
+};
+
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+  // Блоки результатов справочника, которые можно убирать из вывода
+  results?: ReferenceBlock[];
+  // Краткий список остальных совпадений
+  remaining?: ReferenceCommand[];
+  // Ответ на запрос целиком можно убрать отдельной кнопкой в конце
+  removable?: boolean;
+};
+
+const messages = ref<ChatMessage[]>([]);
 const inputMessage = ref('');
 const isTyping = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
+// Поле ввода запроса — нужно, чтобы вернуть в него фокус после клика по команде
+const chatInput = ref<HTMLTextAreaElement | null>(null);
+
+// Позиция прокрутки чата. Контейнер сообщений удаляется из DOM при сворачивании
+// окна (v-if) и при переключении вкладок, поэтому scrollTop сбрасывается.
+// Запоминаем позицию и возвращаем её, когда контейнер появляется снова.
+const chatScrollTop = ref(0);
+
+function onChatScroll() {
+  if (chatContainer.value) {
+    chatScrollTop.value = chatContainer.value.scrollTop;
+  }
+}
+
+// Контейнер сообщений пересоздаётся при разворачивании и смене вкладки —
+// восстанавливаем сохранённую позицию прокрутки.
+watch(chatContainer, (el) => {
+  if (!el) return;
+  nextTick(() => {
+    el.scrollTop = chatScrollTop.value;
+    // Окно разворачивается с анимацией высоты (0.3s): возвращаем позицию
+    // ещё раз после неё, чтобы прокрутка не «прыгнула» на начало.
+    window.setTimeout(() => {
+      if (chatContainer.value === el) {
+        el.scrollTop = chatScrollTop.value;
+      }
+    }, 320);
+  });
+});
+
 const isDragging = ref(false);
 const startY = ref(0);
 const startHeight = ref(560);
 const chatHeight = ref(560);
 const isMinimized = ref(false);
 const typingInterval = ref<number | null>(null);
+
+// Размер шрифта вывода справочника (меняется Ctrl + колесо мыши)
+const MIN_CHAT_FONT_SIZE = 12;
+const MAX_CHAT_FONT_SIZE = 36;
+const chatFontSize = ref(20);
+
+// Просмотр изображения из ответа в модальном окне
+const previewImage = ref<{ src: string; alt: string } | null>(null);
+
+/**
+ * Ctrl + колесо над окном справочника меняет размер шрифта вывода.
+ * Обычное колесо не перехватываем — им по-прежнему прокручиваются результаты.
+ */
+function onChatWheel(event: WheelEvent) {
+  if (!event.ctrlKey && !event.metaKey) return;
+  if (activeTab.value !== 'chat') return;
+
+  // Браузер по умолчанию зумит страницу — отменяем это
+  event.preventDefault();
+
+  const delta = event.deltaY < 0 ? 1 : -1;
+  chatFontSize.value = Math.min(
+    MAX_CHAT_FONT_SIZE,
+    Math.max(MIN_CHAT_FONT_SIZE, chatFontSize.value + delta)
+  );
+}
+
+/**
+ * Уменьшает картинку из ответа в 1,5 раза относительно её исходного размера.
+ * Вызывается после загрузки изображения (naturalWidth уже известен).
+ */
+function scaleReferenceImage(img: HTMLImageElement) {
+  if (!img.naturalWidth) return;
+  img.style.width = `${Math.round(img.naturalWidth / 1.5)}px`;
+}
+
+/**
+ * Ловит загрузку картинок внутри ответа (событие load не всплывает,
+ * поэтому слушатель висит на контейнере в фазе перехвата).
+ */
+function onMessageImageLoad(event: Event) {
+  const img = event.target as HTMLImageElement | null;
+  if (!img || !img.classList.contains('reference-image')) return;
+  scaleReferenceImage(img);
+}
+
+/**
+ * Клик по картинке в ответе открывает её в модальном окне.
+ */
+function onMessageClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  const img = target?.closest(
+    'img.reference-image'
+  ) as HTMLImageElement | null;
+  if (!img) return;
+  openImagePreview(img.src, img.alt);
+}
+
+function openImagePreview(src: string, alt: string) {
+  previewImage.value = { src, alt };
+  window.addEventListener('keydown', onPreviewKeydown);
+}
+
+function closeImagePreview() {
+  previewImage.value = null;
+  window.removeEventListener('keydown', onPreviewKeydown);
+}
+
+function onPreviewKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeImagePreview();
+  }
+}
 
 // Orientation state: 'landscape' (16:9) or 'portrait' (9:16)
 type OrientationType = 'landscape' | 'portrait';
@@ -119,6 +249,11 @@ function closeChat() {
 }
 
 function toggleMinimize() {
+  // Запоминаем позицию прокрутки, пока тело чата ещё в DOM
+  if (!isMinimized.value) {
+    onChatScroll();
+  }
+
   isMinimized.value = !isMinimized.value;
 
   // Перерисовываем PDF при разворачивании
@@ -146,11 +281,30 @@ function toggleOrientation() {
 }
 
 /**
+ * Сколько результатов показывать полностью (с примером и картинкой).
+ * Остальные найденные команды выводятся кратко одной строкой.
+ */
+const FULL_RESULTS_COUNT = 2;
+
+/**
+ * Результат поиска по справочнику: либо обычный текст (ничего не найдено),
+ * либо шапка + отдельные блоки совпадений + краткий список остальных.
+ */
+type ReferenceResponse =
+  | { kind: 'text'; content: string }
+  | {
+      kind: 'results';
+      header: string;
+      results: ReferenceBlock[];
+      remaining: ReferenceCommand[] | null;
+    };
+
+/**
  * Поиск информации в справочнике p5.js
  * @param query - любой текст для поиска
  * @returns найденная информация или сообщение об отсутствии результатов
  */
-function searchInReference(query: string): string {
+function searchInReference(query: string): ReferenceResponse {
   const normalizedQuery = query.toLowerCase().trim();
 
   // Разбиваем запрос на отдельные слова для поиска
@@ -196,46 +350,106 @@ function searchInReference(query: string): string {
     .sort((a, b) => b.relevanceScore - a.relevanceScore); // Сортируем по релевантности
 
   if (matchedFunctions.length === 0) {
-    return `❌ По запросу "${query}" ничего не найдено.\n\nПопробуйте ввести любой текст, и я найду команды p5.js, в описании которых он встречается (например, "цвет", "рисует", "случайное", "вектор" и т.д.)`;
+    return {
+      kind: 'text',
+      content: `❌ По запросу "${query}" ничего не найдено.\n\nПопробуйте ввести любой текст, и я найду команды p5.js, в описании которых он встречается (например, "цвет", "рисует", "случайное", "вектор" и т.д.)`,
+    };
   }
 
-  // Формирование ответа
-  let response = `📚 **Найдено упоминаний: ${matchedFunctions.length}**\n`;
-  response += `🔍 **Запрос:** "${query}"\n---\n`;
+  // Формирование шапки ответа
+  const header =
+    `📚 **Найдено упоминаний: ${matchedFunctions.length}**\n` +
+    `🔍 **Запрос:** "${query}"`;
 
-  // Выводим первые 5 результатов полностью, остальные - кратко
-  matchedFunctions.slice(0, 5).forEach((fn, index) => {
-    // Подсвечиваем совпавшие слова в описании (защищая markdown-картинки и блоки кода)
-    let highlightedDesc = protectAndHighlight(fn.description, fn.matchedWords);
+  // Первые FULL_RESULTS_COUNT результатов выводим полностью, каждый отдельным блоком
+  // (чтобы у каждого была своя кнопка «убрать»)
+  const results: ReferenceBlock[] = matchedFunctions
+    .slice(0, FULL_RESULTS_COUNT)
+    .map((fn) => {
+      const fnNameClean = fn.name.split('(')[0] || '';
 
-    response += `**${fn.name}** — ${highlightedDesc}\n`;
+      // Описание с подсветкой совпавших слов (защищая markdown-картинки и блоки кода)
+      const description = protectAndHighlight(fn.description, fn.matchedWords);
 
-    // Добавляем пример использования, если он есть
-    const fnNameClean = fn.name.split('(')[0] || '';
-    const example = P5_EXAMPLES[fnNameClean as keyof typeof P5_EXAMPLES];
-    if (example) {
-      response += `\`\`\`javascript\n${example}\n\`\`\`\n`;
-    }
-    // Добавляем изображение, если оно есть для этой функции
-    const imageName = P5_EXAMPLES_IMAGES[fnNameClean as keyof typeof P5_EXAMPLES_IMAGES];
-    if (imageName) {
-      response += `![${fnNameClean}](images/${imageName})\n`;
-    }
+      // Пример и изображение выводим отдельно от имени команды: имя — кликабельная
+      // кнопка, которая подставляет команду в запрос
+      let markdown = '';
+      const example = P5_EXAMPLES[fnNameClean as keyof typeof P5_EXAMPLES];
+      if (example) {
+        markdown += `\`\`\`javascript\n${example}\n\`\`\`\n`;
+      }
+      const imageName =
+        P5_EXAMPLES_IMAGES[fnNameClean as keyof typeof P5_EXAMPLES_IMAGES];
+      if (imageName) {
+        markdown += `![${fnNameClean}](images/${imageName})\n`;
+      }
 
-    // Добавляем тонкую горизонтальную черту между функциями (но не после последней полной)
-    if (index < Math.min(5, matchedFunctions.length) - 1) {
-      response += `---\n`;
-    }
+      return {
+        name: fn.name,
+        command: fnNameClean,
+        description,
+        markdown,
+      };
+    });
+
+  // Остальные результаты - кратко: имя каждой команды тоже кликабельно
+  const remaining: ReferenceCommand[] | null =
+    matchedFunctions.length > FULL_RESULTS_COUNT
+      ? matchedFunctions.slice(FULL_RESULTS_COUNT).map((fn) => ({
+          name: fn.name,
+          command: fn.name.split('(')[0] || '',
+        }))
+      : null;
+
+  return { kind: 'results', header, results, remaining };
+}
+
+/**
+ * Убирает блок результата из вывода сообщения.
+ * @param message - сообщение ассистента с результатами
+ * @param index - индекс блока в массиве results
+ */
+function removeResult(message: ChatMessage, index: number) {
+  message.results?.splice(index, 1);
+}
+
+/**
+ * Убирает из вывода весь ответ на запрос (всё сообщение ассистента).
+ * @param message - сообщение, которое нужно убрать
+ */
+function removeMessage(message: ChatMessage) {
+  const index = messages.value.indexOf(message);
+  if (index !== -1) {
+    messages.value.splice(index, 1);
+  }
+}
+
+/**
+ * Подставляет команду в поле запроса при клике по её имени в результатах поиска.
+ * Если в поле уже что-то введено, команда добавляется через пробел (без дублей).
+ * @param command - имя команды без параметров, например "floor"
+ */
+function insertCommand(command: string) {
+  const name = (command.split('(')[0] ?? '').trim();
+  if (!name) return;
+
+  const current = inputMessage.value.trim();
+  const words = current ? current.split(/\s+/) : [];
+  const alreadyAdded = words.some(
+    (word) => word.toLowerCase() === name.toLowerCase()
+  );
+
+  if (!alreadyAdded) {
+    inputMessage.value = current ? `${current} ${name}` : name;
+  }
+
+  // Возвращаем фокус в поле и ставим курсор в конец
+  nextTick(() => {
+    if (!chatInput.value) return;
+    chatInput.value.focus();
+    const end = chatInput.value.value.length;
+    chatInput.value.setSelectionRange(end, end);
   });
-
-  // Остальные результаты - кратко одной строкой
-  if (matchedFunctions.length > 5) {
-    response += `---\n`;
-    const remaining = matchedFunctions.slice(5);
-    response += `**И ещё ${remaining.length}:** ${remaining.map(fn => fn.name).join(', ')}\n`;
-  }
-
-  return response;
 }
 
 /**
@@ -295,8 +509,11 @@ function parseMarkdown(text: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Курсив
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Изображения
-    .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" style="max-width:100%;margin:8px 0;">')
+    // Изображения (класс нужен для масштабирования и клика по картинке)
+    .replace(
+      /!\[(.*?)\]\((.*?)\)/g,
+      '<img class="reference-image" src="$2" alt="$1">'
+    )
     // Заголовки
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -375,10 +592,25 @@ async function sendMessage() {
     messages.value.push({
       role: 'assistant',
       content: '',
+      // Ответ на запрос целиком можно убрать
+      removable: true,
     });
 
-    // Запускаем эффект печатающей машинки
-    await typeWriterEffect(response, assistantMessageIndex, 8);
+    if (response.kind === 'text') {
+      // Запускаем эффект печатающей машинки
+      await typeWriterEffect(response.content, assistantMessageIndex, 8);
+    } else {
+      // Печатаем шапку, затем добавляем блоки результатов с кнопками «убрать»
+      await typeWriterEffect(response.header, assistantMessageIndex, 8);
+
+      const assistantMessage = messages.value[assistantMessageIndex];
+      if (assistantMessage) {
+        assistantMessage.results = response.results;
+        if (response.remaining) {
+          assistantMessage.remaining = response.remaining;
+        }
+      }
+    }
 
     emit('sendMessage', userMessage);
   } catch (error) {
@@ -429,6 +661,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('mousemove', onResize);
   window.removeEventListener('mouseup', stopResize);
+  window.removeEventListener('keydown', onPreviewKeydown);
   // Очищаем интервал печатающей машинки
   if (typingInterval.value) {
     clearInterval(typingInterval.value);
@@ -768,6 +1001,7 @@ watch(
       <div
         class="ai-chat-window"
         :class="{ minimized: isMinimized }"
+        @wheel="onChatWheel"
         :style="{
           width:
             orientation === 'landscape'
@@ -890,7 +1124,13 @@ watch(
           <!-- Вкладка чата -->
           <template v-if="activeTab === 'chat'">
             <!-- Сообщения -->
-            <div class="chat-messages" ref="chatContainer">
+            <div
+              class="chat-messages"
+              ref="chatContainer"
+              @scroll="onChatScroll"
+              @click="onMessageClick"
+              @load.capture="onMessageImageLoad"
+            >
               <div
                 v-for="(msg, index) in messages"
                 :key="index"
@@ -901,10 +1141,78 @@ watch(
                   {{ msg.role === 'user' ? '👤' : '🤖' }}
                 </div>
                 <div class="message-content">
-                  <div
-                    class="message-text"
-                    v-html="parseMarkdown(msg.content)"
-                  ></div>
+                  <div class="message-text">
+                    <div v-html="parseMarkdown(msg.content)"></div>
+
+                    <!-- Блоки результатов справочника: у каждого своя кнопка «убрать» -->
+                    <div
+                      v-for="(result, resultIndex) in msg.results || []"
+                      :key="resultIndex"
+                      class="reference-result"
+                    >
+                      <div class="reference-result-summary">
+                        <button
+                          type="button"
+                          class="command-link"
+                          :title="`Подставить «${result.command}» в запрос`"
+                          @click="insertCommand(result.command)"
+                        >
+                          {{ result.name }}
+                        </button>
+                        <span class="reference-result-dash">—</span>
+                        <span
+                          class="reference-result-description"
+                          v-html="parseMarkdown(result.description)"
+                        ></span>
+                      </div>
+                      <div
+                        v-if="result.markdown"
+                        v-html="parseMarkdown(result.markdown)"
+                      ></div>
+                      <button
+                        type="button"
+                        class="remove-result-btn"
+                        title="Убрать этот блок из вывода"
+                        @click="removeResult(msg, resultIndex)"
+                      >
+                        убрать
+                      </button>
+                    </div>
+
+                    <!-- Краткий список остальных совпадений: имена тоже кликабельны -->
+                    <div
+                      v-if="msg.remaining?.length"
+                      class="reference-remaining"
+                    >
+                      <strong>И ещё {{ msg.remaining.length }}:&nbsp;</strong>
+                      <template
+                        v-for="(cmd, cmdIndex) in msg.remaining"
+                        :key="cmd.name"
+                      >
+                        <button
+                          type="button"
+                          class="command-link command-link-inline"
+                          :title="`Подставить «${cmd.command}» в запрос`"
+                          @click="insertCommand(cmd.command)"
+                        >
+                          {{ cmd.name }}</button
+                        ><span v-if="cmdIndex < msg.remaining.length - 1"
+                          >,
+                        </span>
+                      </template>
+                    </div>
+
+                    <!-- Убрать весь ответ на запрос -->
+                    <button
+                      v-if="msg.removable"
+                      type="button"
+                      class="remove-result-btn remove-message-btn"
+                      title="Убрать весь ответ на запрос"
+                      @click="removeMessage(msg)"
+                    >
+                      убрать
+                    </button>
+                  </div>
                   <div class="message-time">
                     {{ new Date().toLocaleTimeString() }}
                   </div>
@@ -927,6 +1235,7 @@ watch(
             <!-- Поле ввода (без кнопок под ним) -->
             <div class="chat-input-area" @dragover.prevent @drop="onDrop">
               <textarea
+                ref="chatInput"
                 v-model="inputMessage"
                 @keydown="handleKeyDown"
                 placeholder="Введите любое слово (например, circle, rect, цвет)"
@@ -999,6 +1308,25 @@ watch(
             </Teleport>
           </template>
         </template>
+      </div>
+    </div>
+
+    <!-- Модальное окно просмотра изображения из ответа -->
+    <div
+      v-if="previewImage"
+      class="image-preview-overlay"
+      @click.self="closeImagePreview"
+    >
+      <div class="image-preview-window">
+        <button
+          type="button"
+          class="image-preview-close"
+          title="Закрыть (Esc)"
+          @click="closeImagePreview"
+        >
+          ✕
+        </button>
+        <img :src="previewImage.src" :alt="previewImage.alt" />
       </div>
     </div>
   </Teleport>
@@ -1376,7 +1704,7 @@ watch(
     'props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"'
   );
   border-radius: 18px;
-  font-size: 22px;
+  font-size: v-bind(chatFontSize + 'px');
   line-height: 1.6;
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
 }
@@ -1465,7 +1793,7 @@ watch(
     'props.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)"'
   );
   border-radius: 18px;
-  font-size: 22px;
+  font-size: v-bind(chatFontSize + 'px');
   line-height: 1.6;
   color: v-bind('props.theme === "dark" ? "white" : "#333"');
   word-wrap: break-word;
@@ -1511,6 +1839,167 @@ watch(
 
 .message.user .message-text {
   background: rgba(100, 108, 255, 0.3);
+}
+
+/* Блок результата справочника с кнопкой «убрать» */
+.reference-result {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 2px solid rgba(100, 108, 255, 0.3);
+  animation: slideIn 0.3s ease;
+}
+
+/* Строка с именем команды и описанием */
+.reference-result-summary {
+  margin-bottom: 4px;
+}
+
+.reference-result-dash {
+  margin: 0 4px;
+  opacity: 0.7;
+}
+
+/* Кликабельное имя команды: клик подставляет её в поле запроса */
+.command-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #646cff;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  line-height: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.command-link:hover {
+  color: #9aa0ff;
+  text-decoration: underline;
+}
+
+/* Команды из краткого списка «И ещё N» */
+.command-link-inline {
+  font-weight: 500;
+  text-decoration-thickness: 1px;
+}
+
+.remove-result-btn {
+  display: block;
+  margin: 10px 0 0 auto;
+  padding: 4px 14px;
+  border: 1px solid rgba(100, 108, 255, 0.5);
+  border-radius: 6px;
+  background: transparent;
+  color: #646cff;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.remove-result-btn:hover {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+.reference-remaining {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 2px solid rgba(100, 108, 255, 0.3);
+}
+
+/* Общая кнопка «убрать» в конце ответа на запрос */
+.remove-message-btn {
+  margin-top: 18px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Картинки в ответе: клик открывает их в модальном окне */
+.message-text :deep(img.reference-image) {
+  display: block;
+  margin: 12px auto;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  cursor: zoom-in;
+}
+
+/* Модальное окно просмотра изображения — 80% экрана */
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  animation: fadeIn 0.2s ease;
+}
+
+.image-preview-window {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Высота фиксирована, а ширина подстраивается под изображение */
+  height: 80vh;
+  width: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  background: v-bind('props.theme === "dark" ? "#0a0a0a" : "#ffffff"');
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* Тянем по высоте, ширина считается из пропорций картинки */
+.image-preview-window img {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.image-preview-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: rgba(100, 108, 255, 0.15);
+  color: v-bind('props.theme === "dark" ? "white" : "#333"');
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.image-preview-close:hover {
+  background: #ff5f56;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .image-preview-window {
+    height: 60vh;
+    max-width: 95vw;
+  }
 }
 
 .message-time {
