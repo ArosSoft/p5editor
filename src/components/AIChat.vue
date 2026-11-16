@@ -1864,7 +1864,7 @@ watch(
   padding: 0;
   border: none;
   background: transparent;
-  color: #646cff;
+  color: v-bind('props.theme === "dark" ? "#7dc8ff" : "#0f4c75"');
   font-family: inherit;
   font-size: inherit;
   font-weight: 700;
@@ -1877,7 +1877,7 @@ watch(
 }
 
 .command-link:hover {
-  color: #9aa0ff;
+  color: v-bind('props.theme === "dark" ? "#a8ddff" : "#083a59"');
   text-decoration: underline;
 }
 

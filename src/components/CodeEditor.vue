@@ -262,7 +262,6 @@ function p5KeywordsHighlight() {
             decorations.push(
               Decoration.mark({
                 class: 'cm-p5-keyword',
-                attributes: { style: 'color: #61afef; font-weight: bold;' },
               }).range(node.from, node.to)
             );
           }
@@ -291,7 +290,6 @@ function p5KeywordsHighlight() {
             decorations.push(
               Decoration.mark({
                 class: 'cm-p5-function',
-                attributes: { style: 'color: #e5c07b; font-weight: bold;' },
               }).range(node.from, node.to)
             );
           }
@@ -693,18 +691,18 @@ onMounted(() => {
 }
 
 /* p5.js подсветка */
-.cm-p5-keyword {
-  color: #61afef !important;
-  font-weight: bold !important;
-}
-
+.cm-p5-keyword,
 .cm-p5-function {
-  color: #e5c07b !important;
   font-weight: bold !important;
 }
 
 .theme-dark .cm-p5-keyword,
 .theme-dark .cm-p5-function {
-  color: inherit !important;
+  color: #7dc8ff !important;
+}
+
+.theme-light .cm-p5-keyword,
+.theme-light .cm-p5-function {
+  color: #0f4c75 !important;
 }
 </style>
