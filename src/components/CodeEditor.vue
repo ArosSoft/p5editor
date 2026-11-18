@@ -35,6 +35,8 @@ import {
   closeBracketsKeymap,
   autocompletion,
   completionKeymap,
+  type CompletionContext,
+  type CompletionResult,
 } from '@codemirror/autocomplete';
 import { UNIQUE_P5_KEYWORDS } from '../lib/p5-keywords';
 import { setSearchQuery, SearchQuery } from '@codemirror/search';
@@ -234,6 +236,45 @@ function handleSearchKeydown(e: KeyboardEvent) {
 }
 
 // === Подсветка p5.js ===
+// Подсказки замены русских слов на команды/ключевые слова
+const ruToEnMap: Record<string, string> = {
+  круг: 'circle',
+  эллипс: 'ellipse',
+  прямоугольник: 'rect',
+  квадрат: 'square',
+  линия: 'line',
+  точка: 'point',
+  треугольник: 'triangle',
+  фон: 'background',
+  заливка: 'fill',
+  обводка: 'stroke',
+  очистить: 'clear',
+  если: 'if',
+  функция: 'function',
+  вернуть: 'return',
+  пока: 'while',
+  повтори: 'for (let i = 0; i < 10; i++) {\n  \n}',
+  пусть: 'let',
+  константа: 'const',
+  истина: 'true',
+  ложь: 'false',
+};
+
+function russianKeywordsCompletion(
+  context: CompletionContext
+): CompletionResult | null {
+  const word = context.matchBefore(/[А-Яа-яЁё]+/);
+  if (!word) return null;
+  const lower = word.text.toLowerCase();
+  const en = ruToEnMap[lower];
+  if (!en) return null;
+  return {
+    from: word.from,
+    options: [{ label: en, apply: en }],
+    filter: false,
+  };
+}
+
 function p5KeywordsHighlight() {
   const keywordSet = new Set(UNIQUE_P5_KEYWORDS);
 
@@ -377,7 +418,7 @@ const extensions = computed(() => {
     indentOnInput(),
     bracketMatching(),
     closeBrackets(),
-    autocompletion(),
+    autocompletion({ override: [russianKeywordsCompletion] }),
     javascript(),
     isDark ? oneDark : syntaxHighlighting(defaultHighlightStyle),
     isDark
